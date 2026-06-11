@@ -1228,8 +1228,8 @@
     }
 
     .game-stage {
-      width: min(1100px, 100%);
-      max-height: calc(100vh - 34px);
+      width: min(1380px, 100%);
+      max-height: calc(100vh - 20px);
       display: grid;
       grid-template-rows: auto minmax(0, 1fr);
       gap: 12px;
@@ -2804,6 +2804,7 @@
       max: 230
     };
     const keys = new Set();
+    const justPressedKeys = new Set(); // tecla pressionada SÓ no primeiro frame
     const game = {
       running: false,
       overtime: false,
@@ -2982,32 +2983,25 @@
     }
 
     function startGame() {
-      if (state.betCredits < 5) {
-        showToast("Você não tem créditos de aposta suficientes.");
-        return;
-      }
-
       keys.clear();
       unlockGameAudio();
-      const wager = Math.min(Math.max(5, Number(wagerInput.value) || 10), state.betCredits);
-      const teams = getCollectibleStickers();
+      const teams    = getCollectibleStickers();
       const playerId = Number(teamSelect.value || teams[0].id);
-      game.playerSticker = stickers.find((sticker) => sticker.id === playerId) || teams[0];
-      const opponents = teams.filter((sticker) => sticker.id !== game.playerSticker.id);
-      game.cpuSticker = opponents[Math.floor(Math.random() * opponents.length)];
+      game.playerSticker = stickers.find(s => s.id === playerId) || teams[0];
+      const opponents    = teams.filter(s => s.id !== game.playerSticker.id);
+      game.cpuSticker    = opponents[Math.floor(Math.random() * opponents.length)];
       game.playerImage.src = game.playerSticker.image;
-      game.cpuImage.src = game.cpuSticker.image;
-      game.wager = wager;
+      game.cpuImage.src    = game.cpuSticker.image;
+      game.wager       = 0;          // treino offline: sem aposta
       game.playerScore = 0;
-      game.cpuScore = 0;
-      game.remaining = 180;
-      game.overtime = false;
-      game.running = true;
-      state.betCredits -= wager;
+      game.cpuScore    = 0;
+      game.remaining   = 180;
+      game.overtime    = false;
+      game.running     = true;
       state.betMatches += 1;
       playerTeamName.textContent = game.playerSticker.country;
-      cpuTeamName.textContent = game.cpuSticker.country;
-      gameMessage.textContent = `Valendo ${wager * 2} créditos. Primeiro a 3 gols ou melhor placar em 3 minutos.`;
+      cpuTeamName.textContent    = "CPU (treino)";
+      gameMessage.textContent    = "Modo treino — sem créditos. Jogue Online para apostar.";
       renderBetPanel();
       resetGameObjects();
       updateGameHud();
@@ -3021,14 +3015,13 @@
       keys.clear();
       cancelAnimationFrame(game.animationId);
 
+      // Offline = treino, sem créditos
       if (result === "player") {
-        state.betCredits += game.wager * 2;
-        gameMessage.textContent = `Você venceu e levou ${game.wager * 2} créditos de aposta.`;
+        gameMessage.textContent = "Treino encerrado: você venceu! Jogue Online para ganhar créditos.";
       } else if (result === "cpu") {
-        gameMessage.textContent = `Você perdeu a aposta de ${game.wager} créditos.`;
+        gameMessage.textContent = "Treino encerrado: CPU venceu. Pratique e desafie um jogador online!";
       } else {
-        state.betCredits += game.wager;
-        gameMessage.textContent = "Empate sem desempate. Aposta devolvida.";
+        gameMessage.textContent = "Treino encerrado: empate. Jogue Online para apostar créditos.";
       }
 
       renderBetPanel();
@@ -3581,7 +3574,9 @@
         ball.vx *= -0.76;
       }
 
-      collideBallWithPlayer(game.player, keys.has(" ") || keys.has("Space"));
+      // Chute: só no primeiro frame do pressionamento (evita "puxar" a bola)
+      const playerKick = justPressedKeys.has(" ") || justPressedKeys.has("Space");
+      collideBallWithPlayer(game.player, playerKick);
       // No modo online (host), o "cpu" é o guest — usa o input de kick dele
       const cpuIsKicking = (game.isOnlineGame && game.onlineRole === "host")
         ? (typeof mp !== "undefined" && mp.guestInputs?.kick)
@@ -3606,6 +3601,7 @@
       updatePlayer(game.player, playerControls, dt);
       updateCpu(dt);
       updateBall(dt);
+      justPressedKeys.clear(); // limpa após processar o frame
 
       if (game.running && game.remaining <= 0) {
         if (!game.overtime && game.playerScore === game.cpuScore) {
@@ -4068,8 +4064,14 @@
       }, 2600);
     }
 
+    let screenKickFired = false; // garante que o toque mobile chuta só 1 frame
     function pressScreenKick() {
       unlockGameAudio();
+      if (!screenKickFired) {
+        justPressedKeys.add(" ");
+        justPressedKeys.add("Space");
+        screenKickFired = true;
+      }
       keys.add(" ");
       keys.add("Space");
       screenKick.classList.add("is-pressed");
@@ -4078,6 +4080,7 @@
     function releaseScreenKick() {
       keys.delete(" ");
       keys.delete("Space");
+      screenKickFired = false; // reseta para o próximo toque
       screenKick.classList.remove("is-pressed");
     }
 
@@ -4149,6 +4152,13 @@
       if (gameModal.classList.contains("is-open")) {
         if (["ArrowLeft", "ArrowRight", "ArrowUp", " ", "Space"].includes(event.key) || ["Space", "ArrowLeft", "ArrowRight", "ArrowUp"].includes(event.code)) {
           event.preventDefault();
+        }
+
+        // justPressedKeys: registra apenas o primeiro frame da tecla (sem repeat)
+        if (!event.repeat) {
+          justPressedKeys.add(event.key);
+          justPressedKeys.add(event.key.toLowerCase());
+          justPressedKeys.add(event.code);
         }
 
         keys.add(event.key);
@@ -4815,8 +4825,8 @@
           _lastNetworkTime = now;
         }
 
-        // Envia kick do host junto com os inputs (volatile também)
-        const kicking = keys.has(" ") || keys.has("Space");
+        // Envia kick do host (apenas no primeiro frame do pressionamento)
+        const kicking = justPressedKeys.has(" ") || justPressedKeys.has("Space");
         if (mp.socket?.connected) {
           mp.socket.volatile.emit("game:input", {
             left: false, right: false, jump: false, kick: kicking
@@ -4825,7 +4835,7 @@
 
       } else {
         // Guest: roda física local para controle responsivo
-        const kick = keys.has(" ") || keys.has("Space");
+        const kick = justPressedKeys.has(" ") || justPressedKeys.has("Space");
         const guestControls = {
           left:  keys.has("ArrowLeft")  || keys.has("a"),
           right: keys.has("ArrowRight") || keys.has("d"),
@@ -4850,6 +4860,8 @@
           game.cpu.y  += game.cpu.vy  * dt;
         }
       }
+
+      justPressedKeys.clear(); // limpa após processar o frame online
 
       // Verifica fim de jogo (apenas host)
       if (mp.role === "host") {

@@ -4654,17 +4654,35 @@
     }
 
     // Aplica estado remoto (apenas para o guest)
+    // Interpolação linear entre dois valores
+    function lerp(a, b, t) { return a + (b - a) * t; }
+
     function applyRemoteGameState(s) {
       if (!game.ball || !game.player || !game.cpu) return;
-      game.ball.x  = s.bx;  game.ball.y  = s.by;
-      game.ball.vx = s.bvx; game.ball.vy = s.bvy;
 
-      // No guest: host é "cpu" visualmente (lado esquerdo = host = oponente)
-      game.cpu.x  = s.p1x; game.cpu.y  = s.p1y;
-      game.cpu.vx = s.p1vx; game.cpu.vy = s.p1vy; game.cpu.kickTimer = s.p1k;
+      // Bola: interpolação suave — evita saltos bruscos
+      game.ball.x  = lerp(game.ball.x,  s.bx,  0.35);
+      game.ball.y  = lerp(game.ball.y,  s.by,  0.35);
+      game.ball.vx = s.bvx;
+      game.ball.vy = s.bvy;
 
-      game.player.x  = s.p2x; game.player.y  = s.p2y;
-      game.player.vx = s.p2vx; game.player.vy = s.p2vy; game.player.kickTimer = s.p2k;
+      // Oponente (host aparece como "cpu" para o guest)
+      game.cpu.x  = lerp(game.cpu.x,  s.p1x, 0.40);
+      game.cpu.y  = lerp(game.cpu.y,  s.p1y, 0.40);
+      game.cpu.vx = s.p1vx; game.cpu.vy = s.p1vy;
+      game.cpu.kickTimer = s.p1k;
+
+      // Próprio jogador do guest: só corrige se o drift for grande (>40px)
+      // Assim o controle parece responsivo mesmo com latência
+      const dx = Math.abs(game.player.x - s.p2x);
+      const dy = Math.abs(game.player.y - s.p2y);
+      if (dx > 40 || dy > 40) {
+        game.player.x = lerp(game.player.x, s.p2x, 0.20);
+        game.player.y = lerp(game.player.y, s.p2y, 0.20);
+      }
+      game.player.vx = lerp(game.player.vx, s.p2vx, 0.30);
+      game.player.vy = lerp(game.player.vy, s.p2vy, 0.30);
+      game.player.kickTimer = s.p2k;
 
       game.playerScore = s.gs2;
       game.cpuScore    = s.gs1;
@@ -4791,40 +4809,45 @@
         updatePlayer(game.cpu,    cpuControls,    dt);
         updateBall(dt);
 
-        // Envia estado ao guest a ~30fps
-        if (now - _lastNetworkTime > 33 && mp.socket?.connected) {
-          mp.socket.emit("game:state", serializeGameState());
+        // Envia estado ao guest a 60fps com volatile (descarta se atrasado)
+        if (now - _lastNetworkTime > 16 && mp.socket?.connected) {
+          mp.socket.volatile.emit("game:state", serializeGameState());
           _lastNetworkTime = now;
         }
 
-        // Envia kick do host
+        // Envia kick do host junto com os inputs (volatile também)
         const kicking = keys.has(" ") || keys.has("Space");
         if (mp.socket?.connected) {
-          mp.socket.emit("game:input", {
+          mp.socket.volatile.emit("game:input", {
             left: false, right: false, jump: false, kick: kicking
           });
         }
 
       } else {
-        // Guest: envia inputs e extrapola posições entre pacotes para suavizar
+        // Guest: roda física local para controle responsivo
         const kick = keys.has(" ") || keys.has("Space");
+        const guestControls = {
+          left:  keys.has("ArrowLeft")  || keys.has("a"),
+          right: keys.has("ArrowRight") || keys.has("d"),
+          jump:  keys.has("ArrowUp")    || keys.has("w")
+        };
+        // Atualiza o próprio jogador localmente (prediction)
+        updatePlayer(game.player, guestControls, dt);
+
+        // Envia inputs ao host a 60fps
         if (mp.socket?.connected && now - _lastNetworkTime > 16) {
-          mp.socket.emit("game:input", {
-            left:  keys.has("ArrowLeft")  || keys.has("a"),
-            right: keys.has("ArrowRight") || keys.has("d"),
-            jump:  keys.has("ArrowUp")    || keys.has("w"),
-            kick
+          mp.socket.volatile.emit("game:input", {
+            ...guestControls, kick
           });
           _lastNetworkTime = now;
         }
-        // Extrapolação leve: aplica velocidade para suavizar movimento entre pacotes
+
+        // Extrapola bola e oponente entre pacotes para suavizar
         if (game.ball && dt < 0.05) {
           game.ball.x += game.ball.vx * dt;
           game.ball.y += game.ball.vy * dt;
-          game.player.x += game.player.vx * dt;
-          game.player.y += game.player.vy * dt;
-          game.cpu.x    += game.cpu.vx    * dt;
-          game.cpu.y    += game.cpu.vy    * dt;
+          game.cpu.x  += game.cpu.vx  * dt;
+          game.cpu.y  += game.cpu.vy  * dt;
         }
       }
 

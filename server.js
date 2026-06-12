@@ -19,7 +19,7 @@ const JWT_SECRET  = process.env.JWT_SECRET || "albumcopa_secret_mude_em_producao
 const SALT_ROUNDS = 10;
 const DB_FILE     = path.join(__dirname, "db.json");
 const DAILY_ALBUM_CREDITS = 30;
-const INITIAL_BET_CREDITS = 350;
+const INITIAL_BET_CREDITS = 550;
 const PACK_COST = 15;
 const PACK_SIZE = 3;
 const MAX_STICKER_ID = 62;
@@ -699,17 +699,31 @@ app.post("/api/market/buy", authMiddleware, (req, res) => {
 
     saveDb(data);
 
+    const buyerNotice = {
+      username: data.users[buyerIndex]?.username || "?",
+      avatar: data.users[buyerIndex]?.avatar || ""
+    };
+    const sellerNotice = {
+      username: data.users[sellerIndex]?.username || "?",
+      avatar: data.users[sellerIndex]?.avatar || ""
+    };
     const updatedSeller = safeUser(db.findUser("id", listing.seller_id));
     for (const [, player] of onlinePlayers) {
       if (player.userId === listing.seller_id) {
         io.to(player.socketId).emit("market:sold", {
           listing,
+          buyer: buyerNotice,
           updatedUser: updatedSeller
         });
       }
     }
 
-    res.json({ ok: true, user: safeUser(db.findUser("id", req.userId)) });
+    res.json({
+      ok: true,
+      listing,
+      seller: sellerNotice,
+      user: safeUser(db.findUser("id", req.userId))
+    });
   } catch (err) {
     console.error("[market:buy] erro:", err);
     res.status(500).json({ error: err.message });
@@ -736,6 +750,7 @@ const onlinePlayers      = new Map();   // socketId → info
 const pendingChallenges  = new Map();   // challengeId → detalhes
 const activeRooms        = new Map();   // roomId → detalhes da sala
 const blackjackRooms     = new Map();   // roomId -> mesa de 21
+const buttonSoccerRooms  = new Map();   // roomId -> futebol de botao
 
 io.use((socket, next) => {
   const token   = socket.handshake.auth.token;
@@ -932,6 +947,476 @@ function findBlackjackRoomBySocket(socketId) {
   return null;
 }
 
+const BUTTON_SOCCER_FIELD = {
+  width: 1180,
+  height: 680,
+  goalWidth: 190,
+  buttonRadius: 25,
+  ballRadius: 12,
+  padding: 42
+};
+const BUTTON_SOCCER_MAX_PLAYERS = 8;
+const BUTTON_SOCCER_TURN_MS = 10000;
+const BUTTON_SOCCER_GAME_MS = 180000;
+const BUTTON_SOCCER_COLORS = ["#d84545", "#f6f0df", "#c73552", "#ffffff", "#e4572e", "#d7f7ff", "#b52f48", "#f7f7d7"];
+
+function clampNumber(value, min, max) {
+  return Math.max(min, Math.min(max, Number(value) || 0));
+}
+
+function buttonTeamName(team) {
+  return team === "red" ? "Vermelhos" : "Brancos";
+}
+
+function buttonGoalYRange() {
+  const middle = BUTTON_SOCCER_FIELD.height / 2;
+  return {
+    top: middle - BUTTON_SOCCER_FIELD.goalWidth / 2,
+    bottom: middle + BUTTON_SOCCER_FIELD.goalWidth / 2
+  };
+}
+
+function distributeButtonY(index, total) {
+  const margin = 118;
+  if (total <= 1) return BUTTON_SOCCER_FIELD.height / 2;
+  return margin + ((BUTTON_SOCCER_FIELD.height - margin * 2) * index) / (total - 1);
+}
+
+function resetButtonSoccerPositions(room) {
+  const reds = room.players.filter(player => player.team === "red");
+  const whites = room.players.filter(player => player.team === "white");
+
+  reds.forEach((player, index) => {
+    player.x = 260 + (index % 2) * 82;
+    player.y = distributeButtonY(index, reds.length);
+    player.vx = 0;
+    player.vy = 0;
+  });
+  whites.forEach((player, index) => {
+    player.x = BUTTON_SOCCER_FIELD.width - 260 - (index % 2) * 82;
+    player.y = distributeButtonY(index, whites.length);
+    player.vx = 0;
+    player.vy = 0;
+  });
+
+  room.ball = {
+    x: BUTTON_SOCCER_FIELD.width / 2,
+    y: BUTTON_SOCCER_FIELD.height / 2,
+    vx: 0,
+    vy: 0
+  };
+}
+
+function makeButtonSoccerPlayer(socket, index, bet) {
+  return {
+    socketId: socket.id,
+    userId: socket.userId,
+    username: socket.username,
+    avatar: socket.avatar || "",
+    team: index % 2 === 0 ? "red" : "white",
+    color: BUTTON_SOCCER_COLORS[index % BUTTON_SOCCER_COLORS.length],
+    bet,
+    x: 0,
+    y: 0,
+    vx: 0,
+    vy: 0,
+    ready: false,
+    voteBet: bet,
+    joinedAt: Date.now()
+  };
+}
+
+function serializeButtonSoccerRoom(room, viewerSocketId) {
+  const now = Date.now();
+  return {
+    roomId: room.roomId,
+    hostSocketId: room.hostSocketId,
+    hostUsername: room.hostUsername,
+    bet: room.bet,
+    status: room.status,
+    message: room.message,
+    field: BUTTON_SOCCER_FIELD,
+    scores: room.scores,
+    ball: room.ball,
+    turnSocketId: room.turnSocketId || null,
+    turnEndsAt: room.turnEndsAt || null,
+    turnLeftMs: room.status === "playing" ? Math.max(0, (room.turnEndsAt || now) - now) : 0,
+    gameEndsAt: room.gameEndsAt || null,
+    gameLeftMs: room.status === "playing" ? Math.max(0, (room.gameEndsAt || now) - now) : 0,
+    winnerTeam: room.winnerTeam || null,
+    lastGoal: room.lastGoal || null,
+    lastShot: room.lastShot || null,
+    players: room.players.map((player, index) => ({
+      socketId: player.socketId,
+      username: player.username,
+      avatar: player.avatar || "",
+      team: player.team,
+      teamName: buttonTeamName(player.team),
+      color: player.color,
+      x: player.x,
+      y: player.y,
+      ready: Boolean(player.ready),
+      voteBet: player.voteBet,
+      isHost: player.socketId === room.hostSocketId,
+      isMe: player.socketId === viewerSocketId,
+      isTurn: player.socketId === room.turnSocketId,
+      order: index
+    }))
+  };
+}
+
+function emitButtonSoccerUpdate(room) {
+  room.players.forEach(player => {
+    io.to(player.socketId).emit("button:update", serializeButtonSoccerRoom(room, player.socketId));
+  });
+}
+
+function scheduleButtonTurnTimeout(room) {
+  clearTimeout(room.turnTimer);
+  if (room.status !== "playing") return;
+  room.turnTimer = setTimeout(() => {
+    if (!buttonSoccerRooms.has(room.roomId) || room.status !== "playing") return;
+    const current = room.players.find(player => player.socketId === room.turnSocketId);
+    room.message = `${current?.username || "Jogador"} perdeu o turno.`;
+    advanceButtonTurn(room);
+    emitButtonSoccerUpdate(room);
+  }, BUTTON_SOCCER_TURN_MS + 250);
+}
+
+function setButtonTurn(room, nextIndex = 0) {
+  if (!room.players.length) return;
+  room.turnIndex = ((nextIndex % room.players.length) + room.players.length) % room.players.length;
+  room.turnSocketId = room.players[room.turnIndex].socketId;
+  room.turnEndsAt = Date.now() + BUTTON_SOCCER_TURN_MS;
+  scheduleButtonTurnTimeout(room);
+}
+
+function advanceButtonTurn(room) {
+  if (room.status !== "playing") return;
+  if (Date.now() >= room.gameEndsAt) {
+    finishButtonSoccerRoom(room, "Tempo encerrado.");
+    return;
+  }
+  setButtonTurn(room, (room.turnIndex || 0) + 1);
+}
+
+function pickButtonReplayBet(room) {
+  const votes = room.players
+    .map(player => clampNumber(player.voteBet || room.bet, 5, 50))
+    .sort((a, b) => a - b);
+  const counts = votes.reduce((map, bet) => {
+    map[bet] = (map[bet] || 0) + 1;
+    return map;
+  }, {});
+  return Number(Object.keys(counts).sort((a, b) => {
+    if (counts[b] !== counts[a]) return counts[b] - counts[a];
+    return Number(a) - Number(b);
+  })[0] || room.bet);
+}
+
+function startButtonSoccerRound(room, requestedBet = room.bet) {
+  const tableBet = clampNumber(requestedBet, 5, 50);
+  if (room.players.length < 2) {
+    room.message = "Precisa de pelo menos 2 jogadores para iniciar.";
+    emitButtonSoccerUpdate(room);
+    return false;
+  }
+
+  for (const player of room.players) {
+    const user = db.findUser("id", player.userId);
+    if (!user || Number(user.bet_credits || 0) < tableBet) {
+      room.message = `${player.username} nao tem creditos para ${tableBet}.`;
+      emitButtonSoccerUpdate(room);
+      return false;
+    }
+  }
+
+  room.players.forEach(player => {
+    const user = db.findUser("id", player.userId);
+    db.updateUser(player.userId, {
+      bet_credits: Math.max(0, Number(user.bet_credits || 0) - tableBet)
+    });
+    player.bet = tableBet;
+    player.ready = false;
+    player.voteBet = tableBet;
+  });
+
+  room.bet = tableBet;
+  room.status = "playing";
+  room.scores = { red: 0, white: 0 };
+  room.winnerTeam = null;
+  room.startedAt = Date.now();
+  room.gameEndsAt = room.startedAt + BUTTON_SOCCER_GAME_MS;
+  room.lastGoal = null;
+  room.lastShot = null;
+  room.shotSeq = 0;
+  room.goalSeq = 0;
+  room.message = "Partida iniciada. Cada jogador tem 10 segundos por tacada.";
+  resetButtonSoccerPositions(room);
+  setButtonTurn(room, 0);
+
+  clearTimeout(room.gameTimer);
+  room.gameTimer = setTimeout(() => {
+    if (!buttonSoccerRooms.has(room.roomId) || room.status !== "playing") return;
+    finishButtonSoccerRoom(room, "Tempo encerrado.");
+  }, BUTTON_SOCCER_GAME_MS + 300);
+
+  emitButtonSoccerUpdate(room);
+  broadcastOnlineList();
+  return true;
+}
+
+function finishButtonSoccerRoom(room, reason = "") {
+  if (!room || room.status === "finished") return;
+
+  clearTimeout(room.turnTimer);
+  clearTimeout(room.gameTimer);
+
+  room.status = "finished";
+  room.turnSocketId = null;
+  room.turnEndsAt = null;
+  room.gameEndsAt = null;
+  room.players.forEach(player => { player.ready = false; player.voteBet = room.bet; });
+
+  let winnerTeam = null;
+  if (room.scores.red > room.scores.white) winnerTeam = "red";
+  if (room.scores.white > room.scores.red) winnerTeam = "white";
+  room.winnerTeam = winnerTeam;
+
+  const totalPot = room.players.reduce((sum, player) => sum + Number(player.bet || room.bet || 0), 0);
+  if (winnerTeam) {
+    const winners = room.players.filter(player => player.team === winnerTeam);
+    const share = winners.length ? Math.floor(totalPot / winners.length) : 0;
+    winners.forEach(player => {
+      const user = db.findUser("id", player.userId);
+      if (user) {
+        db.updateUser(player.userId, {
+          bet_credits: Number(user.bet_credits || 0) + share
+        });
+        addExchangeWin(player.userId);
+      }
+    });
+    room.message = `${reason ? `${reason} ` : ""}${buttonTeamName(winnerTeam)} venceram por ${room.scores.red} x ${room.scores.white}.`;
+  } else {
+    room.players.forEach(player => {
+      const user = db.findUser("id", player.userId);
+      if (user) {
+        db.updateUser(player.userId, {
+          bet_credits: Number(user.bet_credits || 0) + Number(player.bet || room.bet || 0)
+        });
+      }
+    });
+    room.message = `${reason ? `${reason} ` : ""}Empate em ${room.scores.red} x ${room.scores.white}. Apostas devolvidas.`;
+  }
+
+  room.players.forEach(player => {
+    io.to(player.socketId).emit("button:finished", {
+      room: serializeButtonSoccerRoom(room, player.socketId),
+      updatedUser: safeUser(db.findUser("id", player.userId))
+    });
+  });
+  broadcastOnlineList();
+}
+
+function cancelButtonSoccerRoom(room, reason = "Mesa de futebol de botao cancelada.") {
+  if (!room) return;
+
+  clearTimeout(room.turnTimer);
+  clearTimeout(room.gameTimer);
+
+  if (room.status === "playing") {
+    room.players.forEach(player => {
+      const user = db.findUser("id", player.userId);
+      if (user) {
+        db.updateUser(player.userId, {
+          bet_credits: Number(user.bet_credits || 0) + Number(player.bet || room.bet || 0)
+        });
+      }
+    });
+  }
+
+  room.players.forEach(player => {
+    io.to(player.socketId).emit("button:cancelled", { message: reason });
+    const online = onlinePlayers.get(player.socketId);
+    if (online) { online.inGame = false; online.roomId = null; }
+  });
+  buttonSoccerRooms.delete(room.roomId);
+  broadcastOnlineList();
+}
+
+function removeButtonSoccerPlayer(room, socketId, reason = "") {
+  const player = room.players.find(item => item.socketId === socketId);
+  if (!player) return;
+
+  if (room.status === "playing") {
+    cancelButtonSoccerRoom(room, reason || `${player.username} saiu da partida.`);
+    return;
+  }
+
+  room.players = room.players.filter(item => item.socketId !== socketId);
+  const online = onlinePlayers.get(socketId);
+  if (online) { online.inGame = false; online.roomId = null; }
+
+  if (!room.players.length) {
+    buttonSoccerRooms.delete(room.roomId);
+    broadcastOnlineList();
+    return;
+  }
+
+  if (room.hostSocketId === socketId) {
+    room.hostSocketId = room.players[0].socketId;
+    room.hostUsername = room.players[0].username;
+  }
+  room.players.forEach((item, index) => {
+    item.team = index % 2 === 0 ? "red" : "white";
+    item.color = BUTTON_SOCCER_COLORS[index % BUTTON_SOCCER_COLORS.length];
+  });
+  resetButtonSoccerPositions(room);
+  room.message = reason || `${player.username} saiu da mesa.`;
+  emitButtonSoccerUpdate(room);
+  broadcastOnlineList();
+}
+
+function findButtonSoccerRoomBySocket(socketId) {
+  for (const room of buttonSoccerRooms.values()) {
+    if (room.players.some(player => player.socketId === socketId)) return room;
+  }
+  return null;
+}
+
+function checkButtonGoal(ball) {
+  const goal = buttonGoalYRange();
+  const inGoalY = ball.y >= goal.top && ball.y <= goal.bottom;
+  if (ball.x <= -BUTTON_SOCCER_FIELD.ballRadius && inGoalY) return "white";
+  if (ball.x >= BUTTON_SOCCER_FIELD.width + BUTTON_SOCCER_FIELD.ballRadius && inGoalY) return "red";
+  return null;
+}
+
+function resolveButtonBounds(obj, radius, allowGoalExit = false) {
+  const goal = buttonGoalYRange();
+  const inGoalY = allowGoalExit && obj.y >= goal.top && obj.y <= goal.bottom;
+  if (obj.y < radius) { obj.y = radius; obj.vy = Math.abs(obj.vy) * 0.78; }
+  if (obj.y > BUTTON_SOCCER_FIELD.height - radius) {
+    obj.y = BUTTON_SOCCER_FIELD.height - radius;
+    obj.vy = -Math.abs(obj.vy) * 0.78;
+  }
+  if (obj.x < radius && !inGoalY) { obj.x = radius; obj.vx = Math.abs(obj.vx) * 0.78; }
+  if (obj.x > BUTTON_SOCCER_FIELD.width - radius && !inGoalY) {
+    obj.x = BUTTON_SOCCER_FIELD.width - radius;
+    obj.vx = -Math.abs(obj.vx) * 0.78;
+  }
+}
+
+function simulateButtonSoccerShot(room, player, angle, power) {
+  const maxPower = clampNumber(power, 0.05, 1);
+  const shotAngle = Number.isFinite(Number(angle)) ? Number(angle) : 0;
+  const active = {
+    x: player.x,
+    y: player.y,
+    vx: Math.cos(shotAngle) * (520 + maxPower * 1520),
+    vy: Math.sin(shotAngle) * (520 + maxPower * 1520)
+  };
+  const ball = { ...room.ball };
+  const path = [];
+  let goalTeam = null;
+
+  for (let step = 0; step < 420; step += 1) {
+    active.x += active.vx / 60;
+    active.y += active.vy / 60;
+    ball.x += ball.vx / 60;
+    ball.y += ball.vy / 60;
+
+    resolveButtonBounds(active, BUTTON_SOCCER_FIELD.buttonRadius, false);
+    resolveButtonBounds(ball, BUTTON_SOCCER_FIELD.ballRadius, true);
+
+    room.players.forEach(other => {
+      if (other.socketId === player.socketId) return;
+      const dx = active.x - other.x;
+      const dy = active.y - other.y;
+      const dist = Math.hypot(dx, dy) || 1;
+      const minDist = BUTTON_SOCCER_FIELD.buttonRadius * 2;
+      if (dist < minDist) {
+        const nx = dx / dist;
+        const ny = dy / dist;
+        active.x = other.x + nx * minDist;
+        active.y = other.y + ny * minDist;
+        const dot = active.vx * nx + active.vy * ny;
+        active.vx = (active.vx - 1.65 * dot * nx) * 0.62;
+        active.vy = (active.vy - 1.65 * dot * ny) * 0.62;
+        other.x = clampNumber(other.x - nx * 3, BUTTON_SOCCER_FIELD.buttonRadius, BUTTON_SOCCER_FIELD.width - BUTTON_SOCCER_FIELD.buttonRadius);
+        other.y = clampNumber(other.y - ny * 3, BUTTON_SOCCER_FIELD.buttonRadius, BUTTON_SOCCER_FIELD.height - BUTTON_SOCCER_FIELD.buttonRadius);
+      }
+    });
+
+    const dx = ball.x - active.x;
+    const dy = ball.y - active.y;
+    const dist = Math.hypot(dx, dy) || 1;
+    const minDist = BUTTON_SOCCER_FIELD.buttonRadius + BUTTON_SOCCER_FIELD.ballRadius;
+    if (dist < minDist) {
+      const nx = dx / dist;
+      const ny = dy / dist;
+      ball.x = active.x + nx * minDist;
+      ball.y = active.y + ny * minDist;
+      const impact = Math.max(260, Math.hypot(active.vx, active.vy) * (0.72 + maxPower * 0.35));
+      ball.vx = nx * impact + active.vx * 0.18;
+      ball.vy = ny * impact + active.vy * 0.18;
+      active.vx *= 0.58;
+      active.vy *= 0.58;
+    }
+
+    active.vx *= 0.982;
+    active.vy *= 0.982;
+    ball.vx *= 0.989;
+    ball.vy *= 0.989;
+
+    if (step % 4 === 0) {
+      path.push({
+        button: { x: Math.round(active.x), y: Math.round(active.y) },
+        ball: { x: Math.round(ball.x), y: Math.round(ball.y) }
+      });
+    }
+
+    goalTeam = checkButtonGoal(ball);
+    if (goalTeam) break;
+
+    if (step > 80 && Math.hypot(active.vx, active.vy) < 14 && Math.hypot(ball.vx, ball.vy) < 18) break;
+  }
+
+  player.x = clampNumber(active.x, BUTTON_SOCCER_FIELD.buttonRadius, BUTTON_SOCCER_FIELD.width - BUTTON_SOCCER_FIELD.buttonRadius);
+  player.y = clampNumber(active.y, BUTTON_SOCCER_FIELD.buttonRadius, BUTTON_SOCCER_FIELD.height - BUTTON_SOCCER_FIELD.buttonRadius);
+  room.ball = {
+    x: clampNumber(ball.x, -BUTTON_SOCCER_FIELD.ballRadius, BUTTON_SOCCER_FIELD.width + BUTTON_SOCCER_FIELD.ballRadius),
+    y: clampNumber(ball.y, BUTTON_SOCCER_FIELD.ballRadius, BUTTON_SOCCER_FIELD.height - BUTTON_SOCCER_FIELD.ballRadius),
+    vx: 0,
+    vy: 0
+  };
+
+  room.shotSeq = (room.shotSeq || 0) + 1;
+  room.lastShot = {
+    id: room.shotSeq,
+    playerSocketId: player.socketId,
+    path
+  };
+
+  if (goalTeam) {
+    room.scores[goalTeam] += 1;
+    room.goalSeq = (room.goalSeq || 0) + 1;
+    room.lastGoal = {
+      id: room.goalSeq,
+      team: goalTeam,
+      teamName: buttonTeamName(goalTeam),
+      scorer: player.username,
+      at: Date.now()
+    };
+    room.message = `Gol dos ${buttonTeamName(goalTeam)}!`;
+    resetButtonSoccerPositions(room);
+  } else {
+    room.message = `${player.username} bateu na bola.`;
+  }
+
+  return goalTeam;
+}
+
 io.on("connection", (socket) => {
   console.log(`[+] ${socket.username} conectado`);
   const connectedUser = normalizeUserProgress(db.findUser("id", socket.userId));
@@ -1038,9 +1523,19 @@ io.on("connection", (socket) => {
   });
 
   // ── Emoji Taunts ───────────────────────────────────────────────────────
-  socket.on("game:taunt", ({ emoji }) => {
+  socket.on("game:taunt", ({ emoji, x, y, game }) => {
     const p = onlinePlayers.get(socket.id);
-    if (p?.roomId) socket.to(p.roomId).emit("game:taunt", { emoji, from: socket.username });
+    const cleanEmoji = String(emoji || "").slice(0, 12);
+    if (p?.roomId && cleanEmoji) {
+      socket.to(p.roomId).emit("game:taunt", {
+        emoji: cleanEmoji,
+        from: socket.username,
+        fromSocketId: socket.id,
+        game: String(game || ""),
+        x: Number.isFinite(Number(x)) ? Number(x) : null,
+        y: Number.isFinite(Number(y)) ? Number(y) : null
+      });
+    }
   });
 
   // ── Jogo em tempo real ─────────────────────────────────────────────────
@@ -1269,6 +1764,144 @@ io.on("connection", (socket) => {
     if (allBlackjackPlayersDone(room)) finishBlackjackRoom(room);
   });
 
+  // Futebol de Botao
+  socket.on("button:create", ({ bet }) => {
+    const tableBet = clampNumber(bet || 10, 5, 50);
+    const user = db.findUser("id", socket.userId);
+    const player = onlinePlayers.get(socket.id);
+    if (!user || Number(user.bet_credits || 0) < tableBet)
+      return socket.emit("button:error", "Creditos de aposta insuficientes.");
+    if (player?.inGame)
+      return socket.emit("button:error", "Voce ja esta em uma partida.");
+
+    const roomId = `button-${Date.now()}-${socket.id}`;
+    const room = {
+      roomId,
+      hostSocketId: socket.id,
+      hostUsername: socket.username,
+      bet: tableBet,
+      status: "waiting",
+      scores: { red: 0, white: 0 },
+      ball: { x: BUTTON_SOCCER_FIELD.width / 2, y: BUTTON_SOCCER_FIELD.height / 2, vx: 0, vy: 0 },
+      turnIndex: 0,
+      turnSocketId: null,
+      turnEndsAt: null,
+      gameEndsAt: null,
+      winnerTeam: null,
+      lastGoal: null,
+      lastShot: null,
+      shotSeq: 0,
+      goalSeq: 0,
+      message: "Mesa aberta. Jogadores entram como botoes alternando times.",
+      players: [makeButtonSoccerPlayer(socket, 0, tableBet)]
+    };
+    resetButtonSoccerPositions(room);
+    buttonSoccerRooms.set(roomId, room);
+    socket.join(roomId);
+    if (player) { player.inGame = true; player.roomId = roomId; }
+
+    for (const [, target] of onlinePlayers) {
+      if (target.socketId !== socket.id && !target.inGame) {
+        io.to(target.socketId).emit("button:invite", { roomId, fromUsername: socket.username, bet: tableBet });
+      }
+    }
+
+    emitButtonSoccerUpdate(room);
+    broadcastOnlineList();
+  });
+
+  socket.on("button:join", ({ roomId }) => {
+    const room = buttonSoccerRooms.get(roomId);
+    if (!room || room.status !== "waiting")
+      return socket.emit("button:error", "Mesa indisponivel.");
+    if (room.players.some(player => player.socketId === socket.id))
+      return emitButtonSoccerUpdate(room);
+    if (room.players.length >= BUTTON_SOCCER_MAX_PLAYERS)
+      return socket.emit("button:error", `Mesa cheia (max. ${BUTTON_SOCCER_MAX_PLAYERS} jogadores).`);
+
+    const user = db.findUser("id", socket.userId);
+    const player = onlinePlayers.get(socket.id);
+    if (!user || Number(user.bet_credits || 0) < room.bet)
+      return socket.emit("button:error", "Creditos de aposta insuficientes.");
+    if (player?.inGame)
+      return socket.emit("button:error", "Voce ja esta em uma partida.");
+
+    room.players.push(makeButtonSoccerPlayer(socket, room.players.length, room.bet));
+    resetButtonSoccerPositions(room);
+    room.message = `${socket.username} entrou como botao.`;
+    socket.join(roomId);
+    if (player) { player.inGame = true; player.roomId = roomId; }
+    emitButtonSoccerUpdate(room);
+    broadcastOnlineList();
+  });
+
+  socket.on("button:start", ({ roomId }) => {
+    const room = buttonSoccerRooms.get(roomId);
+    if (!room || room.status !== "waiting") return;
+    if (room.hostSocketId !== socket.id)
+      return socket.emit("button:error", "So o dono da mesa pode iniciar.");
+    startButtonSoccerRound(room, room.bet);
+  });
+
+  socket.on("button:shoot", ({ roomId, angle, power }) => {
+    const room = buttonSoccerRooms.get(roomId);
+    if (!room || room.status !== "playing") return;
+    if (room.turnSocketId !== socket.id)
+      return socket.emit("button:error", "Aguarde sua vez.");
+
+    if (Date.now() > Number(room.turnEndsAt || 0)) {
+      const current = room.players.find(player => player.socketId === socket.id);
+      room.message = `${current?.username || "Jogador"} perdeu o turno.`;
+      advanceButtonTurn(room);
+      emitButtonSoccerUpdate(room);
+      return;
+    }
+
+    const player = room.players.find(item => item.socketId === socket.id);
+    if (!player) return;
+    clearTimeout(room.turnTimer);
+
+    const goalTeam = simulateButtonSoccerShot(room, player, angle, power);
+    if (goalTeam && room.scores[goalTeam] >= 3) {
+      finishButtonSoccerRoom(room, "Placar maximo atingido.");
+      return;
+    }
+
+    if (Date.now() >= room.gameEndsAt) {
+      finishButtonSoccerRoom(room, "Tempo encerrado.");
+      return;
+    }
+
+    advanceButtonTurn(room);
+    if (room.status === "playing") emitButtonSoccerUpdate(room);
+  });
+
+  socket.on("button:ready", ({ roomId, bet }) => {
+    const room = buttonSoccerRooms.get(roomId);
+    if (!room || room.status !== "finished") return;
+    const player = room.players.find(item => item.socketId === socket.id);
+    if (!player) return;
+
+    player.ready = true;
+    player.voteBet = clampNumber(bet || room.bet, 5, 50);
+    room.message = `${socket.username} esta pronto para revanche.`;
+
+    if (room.players.length >= 2 && room.players.every(item => item.ready)) {
+      const nextBet = pickButtonReplayBet(room);
+      startButtonSoccerRound(room, nextBet);
+      return;
+    }
+
+    emitButtonSoccerUpdate(room);
+  });
+
+  socket.on("button:leave", ({ roomId }) => {
+    const room = buttonSoccerRooms.get(roomId);
+    if (!room) return;
+    removeButtonSoccerPlayer(room, socket.id, `${socket.username} saiu da mesa.`);
+    socket.leave(roomId);
+  });
+
   // ── Corrida de Cavalos ─────────────────────────────────────────────────
   socket.on("horse:create", ({ bet }) => {
     const tableBet = Math.max(5, Math.min(50, Number(bet) || 10));
@@ -1438,6 +2071,11 @@ io.on("connection", (socket) => {
         if (online) { online.inGame = false; online.roomId = null; }
       });
       horseRooms.delete(horseRoom.roomId);
+    }
+
+    const buttonRoom = findButtonSoccerRoomBySocket(socket.id);
+    if (buttonRoom) {
+      removeButtonSoccerPlayer(buttonRoom, socket.id, `${socket.username} desconectou.`);
     }
 
     const blackjackRoom = findBlackjackRoomBySocket(socket.id);

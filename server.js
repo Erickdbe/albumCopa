@@ -262,13 +262,15 @@ app.get("/api/me", authMiddleware, (req, res) => {
 // ─── REST: Salvar progresso ────────────────────────────────────────────────
 app.post("/api/save", authMiddleware, (req, res) => {
   try {
-    const { credits, bet_credits, stickers, pending_stickers } = req.body || {};
-    db.updateUser(req.userId, {
+    const { credits, bet_credits, bj_wins, stickers, pending_stickers } = req.body || {};
+    const fields = {
       credits:          Number(credits)     || 0,
       bet_credits:      Number(bet_credits) || 0,
       stickers:         Array.isArray(stickers)         ? stickers         : [],
       pending_stickers: Array.isArray(pending_stickers) ? pending_stickers : []
-    });
+    };
+    if (bj_wins !== undefined) fields.bj_wins = Math.max(0, Number(bj_wins) || 0);
+    db.updateUser(req.userId, fields);
     res.json({ ok: true });
   } catch (err) {
     console.error("[save] erro:", err);
@@ -307,17 +309,19 @@ io.use((socket, next) => {
   next();
 });
 
-function makeDeck() {
+function makeDeck(numDecks = 6) {
+  // Usa múltiplos baralhos (padrão de cassino) para distribuição mais aleatória
   const suits = ["S", "H", "D", "C"];
   const ranks = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"];
   const deck = [];
-  suits.forEach(suit => ranks.forEach(rank => deck.push({ rank, suit })));
-
-  for (let i = deck.length - 1; i > 0; i -= 1) {
+  for (let d = 0; d < numDecks; d++) {
+    suits.forEach(suit => ranks.forEach(rank => deck.push({ rank, suit })));
+  }
+  // Fisher-Yates shuffle
+  for (let i = deck.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [deck[i], deck[j]] = [deck[j], deck[i]];
   }
-
   return deck;
 }
 

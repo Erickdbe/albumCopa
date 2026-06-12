@@ -296,6 +296,7 @@ app.use((err, req, res, next) => {
 const onlinePlayers      = new Map();   // socketId → info
 const pendingChallenges  = new Map();   // challengeId → detalhes
 const activeRooms        = new Map();   // roomId → detalhes da sala
+const blackjackRooms     = new Map();   // roomId -> mesa de 21
 
 io.use((socket, next) => {
   const token   = socket.handshake.auth.token;
@@ -305,6 +306,164 @@ io.use((socket, next) => {
   socket.username = payload.username;
   next();
 });
+
+function makeDeck() {
+  const suits = ["S", "H", "D", "C"];
+  const ranks = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"];
+  const deck = [];
+  suits.forEach(suit => ranks.forEach(rank => deck.push({ rank, suit })));
+
+  for (let i = deck.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [deck[i], deck[j]] = [deck[j], deck[i]];
+  }
+
+  return deck;
+}
+
+function cardValue(card) {
+  if (!card) return 0;
+  if (card.rank === "A") return 11;
+  if (["J", "Q", "K"].includes(card.rank)) return 10;
+  return Number(card.rank);
+}
+
+function handTotal(cards) {
+  let total = cards.reduce((sum, card) => sum + cardValue(card), 0);
+  let aces = cards.filter(card => card.rank === "A").length;
+  while (total > 21 && aces > 0) {
+    total -= 10;
+    aces -= 1;
+  }
+  return total;
+}
+
+function drawBlackjackCard(room) {
+  if (!room.deck.length) room.deck = makeDeck();
+  return room.deck.pop();
+}
+
+function serializeBlackjackRoom(room, viewerSocketId) {
+  const revealDealer = room.status === "finished";
+  const dealerCards = revealDealer ? room.dealerCards : room.dealerCards.map((card, index) => index === 0 ? card : null);
+  return {
+    roomId: room.roomId,
+    hostSocketId: room.hostSocketId,
+    hostUsername: room.hostUsername,
+    bet: room.bet,
+    status: room.status,
+    message: room.message,
+    winnerSocketId: room.winnerSocketId || null,
+    houseWon: Boolean(room.houseWon),
+    dealerCards,
+    dealerTotal: revealDealer ? handTotal(room.dealerCards) : null,
+    players: room.players.map((player, index) => {
+      const total = handTotal(player.cards);
+      return {
+        socketId: player.socketId,
+        username: player.username,
+        cards: player.cards,
+        total,
+        status: player.status,
+        busted: total > 21,
+        isHost: player.socketId === room.hostSocketId,
+        isMe: player.socketId === viewerSocketId,
+        order: index
+      };
+    })
+  };
+}
+
+function emitBlackjackUpdate(room) {
+  room.players.forEach(player => {
+    io.to(player.socketId).emit("blackjack:update", serializeBlackjackRoom(room, player.socketId));
+  });
+}
+
+function allBlackjackPlayersDone(room) {
+  return room.players.every(player => player.status === "stand" || player.status === "bust");
+}
+
+function finishBlackjackRoom(room) {
+  if (!room || room.status === "finished") return;
+
+  room.status = "finished";
+  room.players.forEach(player => {
+    const total = handTotal(player.cards);
+    if (total > 21) player.status = "bust";
+    else if (player.status !== "bust") player.status = "stand";
+  });
+
+  const hasLivePlayer = room.players.some(player => handTotal(player.cards) <= 21);
+  if (hasLivePlayer) {
+    while (handTotal(room.dealerCards) < 17) {
+      room.dealerCards.push(drawBlackjackCard(room));
+    }
+  }
+
+  const dealerTotal = handTotal(room.dealerCards);
+  const dealerBust = dealerTotal > 21;
+  const eligible = room.players
+    .map((player, index) => ({ player, index, total: handTotal(player.cards) }))
+    .filter(item => item.total <= 21 && (dealerBust || item.total > dealerTotal))
+    .sort((a, b) => {
+      if (b.total !== a.total) return b.total - a.total;
+      if (a.player.cards.length !== b.player.cards.length) return a.player.cards.length - b.player.cards.length;
+      return a.index - b.index;
+    });
+
+  const winner = eligible[0]?.player || null;
+  room.winnerSocketId = winner?.socketId || null;
+  room.houseWon = !winner;
+  room.message = winner
+    ? `${winner.username} venceu a mesa com ${handTotal(winner.cards)} pontos.`
+    : `A casa venceu com ${dealerBust ? "estouro dos jogadores" : `${dealerTotal} pontos`}.`;
+
+  const totalPot = room.players.reduce((sum, player) => sum + player.bet, 0);
+  room.players.forEach(player => {
+    const user = db.findUser("id", player.userId);
+    if (!user) return;
+
+    const delta = winner && winner.userId === player.userId
+      ? totalPot - player.bet
+      : -player.bet;
+    db.updateUser(player.userId, {
+      bet_credits: Math.max(0, Number(user.bet_credits || 0) + delta)
+    });
+  });
+
+  room.players.forEach(player => {
+    const updated = db.findUser("id", player.userId);
+    io.to(player.socketId).emit("blackjack:finished", {
+      table: serializeBlackjackRoom(room, player.socketId),
+      updatedUser: safeUser(updated)
+    });
+
+    const online = onlinePlayers.get(player.socketId);
+    if (online) { online.inGame = false; online.roomId = null; }
+  });
+
+  blackjackRooms.delete(room.roomId);
+  broadcastOnlineList();
+}
+
+function cancelBlackjackRoom(room, reason = "Mesa de 21 cancelada.") {
+  if (!room) return;
+  room.players.forEach(player => {
+    io.to(player.socketId).emit("blackjack:cancelled", { message: reason });
+    const online = onlinePlayers.get(player.socketId);
+    if (online) { online.inGame = false; online.roomId = null; }
+  });
+  blackjackRooms.delete(room.roomId);
+  broadcastOnlineList();
+}
+
+function findBlackjackRoomBySocket(socketId) {
+  for (const room of blackjackRooms.values()) {
+    if (room.players.some(player => player.socketId === socketId)) return room;
+  }
+  return null;
+}
 
 io.on("connection", (socket) => {
   console.log(`[+] ${socket.username} conectado`);
@@ -476,6 +635,152 @@ io.on("connection", (socket) => {
   });
 
   // ── Desconexão ─────────────────────────────────────────────────────────
+  socket.on("blackjack:create", ({ bet }) => {
+    const tableBet = Math.max(5, Number(bet) || 10);
+    const user = db.findUser("id", socket.userId);
+    const player = onlinePlayers.get(socket.id);
+    if (!user || user.bet_credits < tableBet)
+      return socket.emit("blackjack:error", "Créditos de aposta insuficientes.");
+    if (player?.inGame)
+      return socket.emit("blackjack:error", "Você já está em uma partida.");
+
+    const roomId = `bj-${Date.now()}-${socket.id}`;
+    const room = {
+      roomId,
+      hostSocketId: socket.id,
+      hostUsername: socket.username,
+      bet: tableBet,
+      status: "waiting",
+      deck: [],
+      dealerCards: [],
+      winnerSocketId: null,
+      houseWon: false,
+      message: "Mesa aberta. Aguarde jogadores entrarem ou comece contra a casa.",
+      players: [{
+        socketId: socket.id,
+        userId: socket.userId,
+        username: socket.username,
+        bet: tableBet,
+        cards: [],
+        status: "waiting",
+        joinedAt: Date.now()
+      }]
+    };
+
+    blackjackRooms.set(roomId, room);
+    socket.join(roomId);
+    if (player) { player.inGame = true; player.roomId = roomId; }
+
+    for (const [, target] of onlinePlayers) {
+      if (target.socketId !== socket.id && !target.inGame) {
+        io.to(target.socketId).emit("blackjack:invite", {
+          roomId,
+          fromUsername: socket.username,
+          bet: tableBet
+        });
+      }
+    }
+
+    emitBlackjackUpdate(room);
+    broadcastOnlineList();
+  });
+
+  socket.on("blackjack:join", ({ roomId }) => {
+    const room = blackjackRooms.get(roomId);
+    if (!room || room.status !== "waiting")
+      return socket.emit("blackjack:error", "Mesa indisponível.");
+    if (room.players.some(player => player.socketId === socket.id))
+      return emitBlackjackUpdate(room);
+
+    const user = db.findUser("id", socket.userId);
+    const player = onlinePlayers.get(socket.id);
+    if (!user || user.bet_credits < room.bet)
+      return socket.emit("blackjack:error", "Créditos de aposta insuficientes.");
+    if (player?.inGame)
+      return socket.emit("blackjack:error", "Você já está em uma partida.");
+
+    room.players.push({
+      socketId: socket.id,
+      userId: socket.userId,
+      username: socket.username,
+      bet: room.bet,
+      cards: [],
+      status: "waiting",
+      joinedAt: Date.now()
+    });
+    socket.join(roomId);
+    if (player) { player.inGame = true; player.roomId = roomId; }
+
+    room.message = `${socket.username} entrou na mesa.`;
+    emitBlackjackUpdate(room);
+    broadcastOnlineList();
+  });
+
+  socket.on("blackjack:leave", ({ roomId }) => {
+    const room = blackjackRooms.get(roomId);
+    if (!room || room.status !== "waiting") return;
+    if (room.hostSocketId === socket.id) {
+      cancelBlackjackRoom(room, "O dono da mesa cancelou o 21.");
+      return;
+    }
+
+    room.players = room.players.filter(player => player.socketId !== socket.id);
+    socket.leave(roomId);
+    const online = onlinePlayers.get(socket.id);
+    if (online) { online.inGame = false; online.roomId = null; }
+    room.message = `${socket.username} saiu da mesa.`;
+    emitBlackjackUpdate(room);
+    broadcastOnlineList();
+  });
+
+  socket.on("blackjack:start", ({ roomId }) => {
+    const room = blackjackRooms.get(roomId);
+    if (!room || room.status !== "waiting") return;
+    if (room.hostSocketId !== socket.id)
+      return socket.emit("blackjack:error", "Só o dono da mesa pode começar.");
+
+    room.status = "playing";
+    room.deck = makeDeck();
+    room.dealerCards = [drawBlackjackCard(room), drawBlackjackCard(room)];
+    room.message = "Mesa em andamento. Peça carta ou pare.";
+    room.players.forEach(player => {
+      player.cards = [drawBlackjackCard(room), drawBlackjackCard(room)];
+      player.status = handTotal(player.cards) === 21 ? "stand" : "playing";
+    });
+
+    emitBlackjackUpdate(room);
+    if (allBlackjackPlayersDone(room)) finishBlackjackRoom(room);
+  });
+
+  socket.on("blackjack:hit", ({ roomId }) => {
+    const room = blackjackRooms.get(roomId);
+    if (!room || room.status !== "playing") return;
+    const player = room.players.find(item => item.socketId === socket.id);
+    if (!player || player.status !== "playing") return;
+
+    player.cards.push(drawBlackjackCard(room));
+    const total = handTotal(player.cards);
+    if (total > 21) player.status = "bust";
+    if (total === 21) player.status = "stand";
+    room.message = `${player.username} pediu carta.`;
+
+    emitBlackjackUpdate(room);
+    if (allBlackjackPlayersDone(room)) finishBlackjackRoom(room);
+  });
+
+  socket.on("blackjack:stand", ({ roomId }) => {
+    const room = blackjackRooms.get(roomId);
+    if (!room || room.status !== "playing") return;
+    const player = room.players.find(item => item.socketId === socket.id);
+    if (!player || player.status !== "playing") return;
+
+    player.status = "stand";
+    room.message = `${player.username} parou.`;
+
+    emitBlackjackUpdate(room);
+    if (allBlackjackPlayersDone(room)) finishBlackjackRoom(room);
+  });
+
   socket.on("disconnect", () => {
     console.log(`[-] ${socket.username} desconectado`);
     const player = onlinePlayers.get(socket.id);
@@ -491,6 +796,19 @@ io.on("connection", (socket) => {
         const other = onlinePlayers.get(otherSid);
         if (other) { other.inGame = false; other.roomId = null; }
         activeRooms.delete(player.roomId);
+      }
+    }
+
+    const blackjackRoom = findBlackjackRoomBySocket(socket.id);
+    if (blackjackRoom) {
+      const participant = blackjackRoom.players.find(item => item.socketId === socket.id);
+      if (blackjackRoom.status === "waiting" || blackjackRoom.hostSocketId === socket.id) {
+        cancelBlackjackRoom(blackjackRoom, `${socket.username} saiu da mesa de 21.`);
+      } else if (participant) {
+        participant.status = "bust";
+        blackjackRoom.message = `${socket.username} desconectou e perdeu a rodada.`;
+        if (allBlackjackPlayersDone(blackjackRoom)) finishBlackjackRoom(blackjackRoom);
+        else emitBlackjackUpdate(blackjackRoom);
       }
     }
 

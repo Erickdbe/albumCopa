@@ -1526,15 +1526,46 @@ io.on("connection", (socket) => {
   socket.on("game:taunt", ({ emoji, x, y, game }) => {
     const p = onlinePlayers.get(socket.id);
     const cleanEmoji = String(emoji || "").slice(0, 12);
-    if (p?.roomId && cleanEmoji) {
-      socket.to(p.roomId).emit("game:taunt", {
-        emoji: cleanEmoji,
-        from: socket.username,
-        fromSocketId: socket.id,
-        game: String(game || ""),
-        x: Number.isFinite(Number(x)) ? Number(x) : null,
-        y: Number.isFinite(Number(y)) ? Number(y) : null
-      });
+    if (!cleanEmoji) return;
+
+    const payload = {
+      emoji: cleanEmoji,
+      from: socket.username,
+      fromSocketId: socket.id,
+      game: String(game || ""),
+      x: Number.isFinite(Number(x)) ? Number(x) : null,
+      y: Number.isFinite(Number(y)) ? Number(y) : null
+    };
+    const targets = new Set();
+
+    const buttonRoom = findButtonSoccerRoomBySocket(socket.id);
+    if (buttonRoom) {
+      buttonRoom.players.forEach(player => targets.add(player.socketId));
+    }
+
+    const blackjackRoom = findBlackjackRoomBySocket(socket.id);
+    if (blackjackRoom) {
+      blackjackRoom.players.forEach(player => targets.add(player.socketId));
+    }
+
+    const horseRoom = findHorseRoomBySocket(socket.id);
+    if (horseRoom) {
+      horseRoom.players.forEach(player => targets.add(player.socketId));
+    }
+
+    if (p?.roomId) {
+      const activeRoom = activeRooms.get(p.roomId);
+      if (activeRoom) {
+        targets.add(activeRoom.player1SocketId);
+        targets.add(activeRoom.player2SocketId);
+      }
+    }
+
+    targets.delete(socket.id);
+    if (targets.size) {
+      targets.forEach(targetSocketId => io.to(targetSocketId).emit("game:taunt", payload));
+    } else if (p?.roomId) {
+      socket.to(p.roomId).emit("game:taunt", payload);
     }
   });
 

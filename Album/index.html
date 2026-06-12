@@ -2695,6 +2695,203 @@
     .online-avatar { width:32px; height:32px; border-radius:50%; background:#2d4a3e; border:1px solid rgba(255,255,255,0.2); overflow:hidden; flex-shrink:0; }
     .online-avatar img { width:100%; height:100%; object-fit:cover; }
 
+    .online-board {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      gap: 12px;
+      align-items: center;
+      padding: 10px 12px;
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      border-radius: var(--radius);
+      color: #fff9e8;
+      background: rgba(255, 248, 232, 0.12);
+      backdrop-filter: blur(14px);
+      box-shadow: 0 16px 34px rgba(0, 0, 0, 0.14);
+    }
+    .online-board-title {
+      display: grid;
+      gap: 2px;
+      min-width: 92px;
+    }
+    .online-board-title strong {
+      font-size: .82rem;
+      text-transform: uppercase;
+    }
+    .online-board-title span {
+      color: rgba(255, 249, 232, 0.72);
+      font-size: .72rem;
+      font-weight: 800;
+    }
+    .online-board-list {
+      min-width: 0;
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      padding: 2px;
+    }
+    .online-pill {
+      min-width: 122px;
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
+      gap: 8px;
+      align-items: center;
+      padding: 7px 9px;
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      border-radius: 999px;
+      background: rgba(0, 0, 0, 0.14);
+    }
+    .online-pill.is-self {
+      border-color: rgba(216, 173, 63, 0.55);
+      background: rgba(216, 173, 63, 0.16);
+    }
+    .online-pill .online-avatar {
+      width: 34px;
+      height: 34px;
+      border-color: rgba(255, 249, 232, 0.36);
+      background: #25312d;
+    }
+    .online-pill strong,
+    .online-pill small {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .online-pill strong {
+      display: block;
+      font-size: .78rem;
+      line-height: 1.05;
+    }
+    .online-pill small {
+      display: block;
+      margin-top: 2px;
+      color: rgba(255, 249, 232, 0.68);
+      font-size: .66rem;
+      font-weight: 900;
+      text-transform: uppercase;
+    }
+    .online-board-action,
+    .market-button {
+      min-height: 38px;
+      border: 0;
+      border-radius: var(--radius);
+      color: #fff9e8;
+      background: #25312d;
+      cursor: pointer;
+      font-weight: 950;
+    }
+    .online-board-action {
+      padding: 0 14px;
+      white-space: nowrap;
+    }
+    .market-button {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      min-height: 58px;
+      padding: 12px;
+      margin-top: 8px;
+      background: linear-gradient(135deg, #25312d, #16689f);
+      text-align: left;
+    }
+    .market-button small {
+      color: rgba(255, 249, 232, 0.76);
+      font-size: .72rem;
+      font-weight: 900;
+    }
+
+    .market-card {
+      width: min(860px, 96vw);
+      max-height: calc(100vh - 32px);
+      overflow: auto;
+    }
+    .market-grid {
+      display: grid;
+      grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
+      gap: 14px;
+      align-items: start;
+    }
+    .market-panel {
+      display: grid;
+      gap: 10px;
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: rgba(13, 90, 63, 0.07);
+    }
+    .market-panel h4 {
+      margin: 0;
+      color: var(--grass);
+      font-size: .9rem;
+      text-transform: uppercase;
+    }
+    .market-panel select {
+      min-height: 40px;
+      padding: 0 10px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: #fff;
+      font: inherit;
+      font-weight: 800;
+    }
+    .market-hint {
+      margin: 0;
+      color: var(--muted);
+      font-size: .78rem;
+      font-weight: 800;
+    }
+    .market-list {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+      gap: 10px;
+    }
+    .market-listing {
+      display: grid;
+      gap: 8px;
+      padding: 10px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: rgba(255, 255, 255, 0.64);
+    }
+    .market-listing img {
+      width: 100%;
+      aspect-ratio: .72;
+      object-fit: contain;
+      border-radius: 6px;
+      background: #16231f;
+    }
+    .market-seller {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+      color: var(--muted);
+      font-size: .75rem;
+      font-weight: 850;
+    }
+    .market-seller .online-avatar {
+      width: 26px;
+      height: 26px;
+      background: #25312d;
+    }
+    .market-listing strong,
+    .market-seller span {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .market-price {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      align-items: center;
+      font-size: .82rem;
+      font-weight: 950;
+    }
+
     /* ── Horse Racing ──────────────────────────────────────────────────────── */
     .horse-overlay {
       position: fixed;
@@ -2837,6 +3034,49 @@
       0%   { transform: scale(0.5); opacity: 0; }
       100% { transform: scale(1);   opacity: 1; }
     }
+    @media (max-width: 760px) {
+      .online-board {
+        grid-template-columns: 1fr;
+      }
+      .online-board-action {
+        width: 100%;
+      }
+      .market-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+    .legendary-splash {
+      position: fixed;
+      inset: 0;
+      z-index: 10020;
+      display: grid;
+      place-items: center;
+      pointer-events: none;
+      background: radial-gradient(circle at 50% 44%, rgba(255, 238, 132, .28), transparent 24rem);
+      animation: legendarySplashFade 1900ms ease both;
+    }
+    .legendary-splash strong {
+      padding: 18px 28px;
+      border: 2px solid rgba(255, 248, 232, .78);
+      border-radius: 999px;
+      color: #fff8e8;
+      background: linear-gradient(135deg, rgba(95, 63, 0, .94), rgba(216, 173, 63, .96), rgba(168, 41, 63, .94));
+      box-shadow: 0 0 48px rgba(255, 229, 96, .8);
+      font-size: clamp(1.3rem, 4vw, 3rem);
+      font-weight: 1000;
+      text-transform: uppercase;
+      animation: legendarySplashPop 900ms cubic-bezier(.22, 1, .36, 1) both;
+    }
+    @keyframes legendarySplashFade {
+      0% { opacity: 0; }
+      14%, 78% { opacity: 1; }
+      100% { opacity: 0; }
+    }
+    @keyframes legendarySplashPop {
+      0% { transform: scale(.62) rotate(-4deg); filter: brightness(1.8); }
+      58% { transform: scale(1.08) rotate(1deg); }
+      100% { transform: scale(1) rotate(0); filter: brightness(1); }
+    }
   </style>
 </head>
 <body>
@@ -2871,6 +3111,17 @@
       </section>
     </header>
 
+    <section class="online-board" aria-label="Jogadores online">
+      <div class="online-board-title">
+        <strong>Online</strong>
+        <span id="onlineCountLabel">Offline</span>
+      </div>
+      <div class="online-board-list" id="onlineStripList">
+        <span style="color:rgba(255,249,232,.72);font-size:.78rem;font-weight:800">Entre para ver jogadores online.</span>
+      </div>
+      <button class="online-board-action" id="openLobbyFromBoard" type="button">Lobby</button>
+    </section>
+
     <section class="workspace">
       <aside class="sidebar" aria-label="Painel do álbum">
         <div>
@@ -2901,9 +3152,9 @@
             </span>
           </div>
           <div class="rarity-odds" aria-label="Chances por raridade">
-            <span class="odd-chip common">Comum 70%</span>
+            <span class="odd-chip common">Comum 73,7%</span>
             <span class="odd-chip rare">Rara 24%</span>
-            <span class="odd-chip legendary">Lendária 6%</span>
+            <span class="odd-chip legendary">Lendária 2,3%</span>
           </div>
           <button class="pack-button" id="openPack" type="button">
             <span id="packButtonText">Comprar pacote</span>
@@ -2920,6 +3171,10 @@
           <button class="blackjack-side-button" id="openBlackjackGame" type="button">
             <span>Mesa 21</span>
             <small>Cartas online</small>
+          </button>
+          <button class="market-button" id="openMarket" type="button">
+            <span>Loja de repetidas</span>
+            <small>1 venda por dia</small>
           </button>
         </div>
 
@@ -3037,6 +3292,27 @@
   </div>
 
   <!-- ── Toast: desafio recebido ─────────────────────────────────────────── -->
+  <div class="mp-overlay hidden" id="marketOverlay">
+    <div class="mp-card market-card">
+      <div class="lobby-header">
+        <h3>Loja de figurinhas</h3>
+        <button class="mp-btn" style="width:auto;padding:7px 18px;font-size:.82rem" id="closeMarket" type="button">Fechar</button>
+      </div>
+      <div class="market-grid">
+        <section class="market-panel">
+          <h4>Anunciar repetida</h4>
+          <select id="marketStickerSelect"></select>
+          <button class="mp-btn" id="marketListButton" type="button">Anunciar</button>
+          <p class="market-hint" id="marketSellHint">Comum 10, rara 20, lendaria 30 creditos. Uma venda por dia.</p>
+        </section>
+        <section class="market-panel">
+          <h4>Cartas a venda</h4>
+          <div class="market-list" id="marketListings"></div>
+        </section>
+      </div>
+    </div>
+  </div>
+
   <div class="challenge-toast hidden" id="challengeToast">
     <h4>⚽ Você foi desafiado!</h4>
     <p id="challengeToastMsg"></p>
@@ -3205,7 +3481,7 @@
             </div>
             <div class="game-stat">
               <strong id="betMatchesLabel">0/2</strong>
-              <span>Vitórias 21</span>
+              <span>Vitórias troca</span>
             </div>
           </div>
 
@@ -3267,7 +3543,7 @@
       { title: "Europa", kicker: "Camisas" },
       { title: "Lendas", kicker: "História" },
       { title: "Estádios", kicker: "Palcos" },
-      { title: "Extras", kicker: "Especial", size: 1 }
+      { title: "Extras", kicker: "Especial", size: 8 }
     ];
 
     const palette = [
@@ -3342,7 +3618,14 @@
       { id: 52, name: "Pablito DZ", country: "Argélia" },
       { id: 53, name: "Pablito Ukraina", country: "Ucrânia" },
       { id: 54, name: "Pablito Čech", country: "Tchéquia" },
-      { id: 55, name: "Pablito Fazendinha", country: "Especial", image: "assets/album-copa/figurinhas/figurinha-55-placeholder.png" }
+      { id: 55, name: "Fabinho Cocorico", country: "Especial", image: "assets/album-copa/figurinhas/fabinho%20cocorico.png" },
+      { id: 56, name: "Juiz", country: "Especial", image: "assets/album-copa/figurinhas/Juiz.png", rarity: "rare" },
+      { id: 57, name: "Cascao Lendaria", country: "Especial", image: "assets/album-copa/figurinhas/Casc%C3%A3o%20lend%C3%A1ria.png", rarity: "legendary" },
+      { id: 58, name: "Pablo Gaucho", country: "Especial", image: "assets/album-copa/figurinhas/Pablo%20Gaucho%20lend%C3%A1ria.png", rarity: "legendary" },
+      { id: 59, name: "Pablo Jackson", country: "Especial", image: "assets/album-copa/figurinhas/Pablo%20Jackson%20Lend%C3%A1ria.png", rarity: "legendary" },
+      { id: 60, name: "Pablo Neymar", country: "Especial", image: "assets/album-copa/figurinhas/Pablo%20neymar%20lend%C3%A1ria.png", rarity: "legendary" },
+      { id: 61, name: "Pablo Tiro Certo", country: "Especial", image: "assets/album-copa/figurinhas/Pablo%20tiro%20certo.png", rarity: "rare" },
+      { id: 62, name: "Pablo Vitar", country: "Especial", image: "assets/album-copa/figurinhas/Pablo%20Vitar%20lend%C3%A1ria.png", rarity: "legendary" }
     ].map((sticker) => [
       sticker.id,
       {
@@ -3357,7 +3640,7 @@
     const raritySettings = {
       common: {
         label: "Comum",
-        chance: 70,
+        chance: 73.7,
         duplicateChance: 0.46
       },
       rare: {
@@ -3367,7 +3650,7 @@
       },
       legendary: {
         label: "Lendária",
-        chance: 6,
+        chance: 2.3,
         duplicateChance: 0.10
       }
     };
@@ -3393,8 +3676,8 @@
       return Array.from({ length: chapter.size || 9 }, (_, itemIndex) => {
         const number = chapterIndex * 9 + itemIndex + 1;
         const colors = palette[(chapterIndex + itemIndex) % palette.length];
-        const rarity = getStickerRarity(itemIndex);
         const imageSticker = imageStickerMap[number];
+        const rarity = imageSticker?.rarity || getStickerRarity(itemIndex);
         return {
           id: number,
           code: imageSticker ? `FIG-${String(number).padStart(2, "0")}` : `${chapter.title.slice(0, 3).toUpperCase()}-${String(itemIndex + 1).padStart(2, "0")}`,
@@ -3419,9 +3702,14 @@
       credits: initialCredits,
       openingPack: false,
       pendingPackItems: [],
+      duplicates: {},
       betCredits: 350,
       betMatches: 0,
-      bjWins: 0   // vitórias no blackjack online (a cada 2 libera troca de créditos)
+      exchangeWins: 0,
+      marketListings: [],
+      marketToday: "",
+      marketCanListToday: true,
+      onlinePlayers: []
     };
 
     const pagesPerSpread = 2;
@@ -3454,6 +3742,16 @@
     const gameModal = document.getElementById("gameModal");
     const openBetGame = document.getElementById("openBetGame");
     const openBlackjackGame = document.getElementById("openBlackjackGame");
+    const openMarket = document.getElementById("openMarket");
+    const marketOverlay = document.getElementById("marketOverlay");
+    const closeMarket = document.getElementById("closeMarket");
+    const marketStickerSelect = document.getElementById("marketStickerSelect");
+    const marketListButton = document.getElementById("marketListButton");
+    const marketListings = document.getElementById("marketListings");
+    const marketSellHint = document.getElementById("marketSellHint");
+    const onlineStripList = document.getElementById("onlineStripList");
+    const onlineCountLabel = document.getElementById("onlineCountLabel");
+    const openLobbyFromBoard = document.getElementById("openLobbyFromBoard");
     const closeGameModal = document.getElementById("closeGameModal");
     const teamSelect = document.getElementById("teamSelect");
     const wagerInput = document.getElementById("wagerInput");
@@ -3478,6 +3776,11 @@
       goalTop: 190,
       goalBottom: 570,
       goalWidth: 98
+    };
+    const marketPrices = {
+      common: 10,
+      rare: 20,
+      legendary: 30
     };
     const gameSounds = {
       hit: new Audio("hitboll.mp3"),
@@ -3542,10 +3845,10 @@
 
     function renderBetPanel() {
       betCreditsLabel.textContent = state.betCredits;
-      betMatchesLabel.textContent = `${state.bjWins % 2}/2`;
+      betMatchesLabel.textContent = `${Math.min(state.exchangeWins, 2)}/2`;
       wagerInput.max = Math.max(5, state.betCredits);
       // Troca liberada a cada 2 vitórias no blackjack
-      const canExchange = state.bjWins > 0 && state.bjWins % 2 === 0 && state.betCredits >= 10;
+      const canExchange = state.exchangeWins >= 2 && state.betCredits >= 10;
       exchangeBetCredits.disabled = !canExchange || game.running;
       startMatch.disabled = game.running || state.betCredits < 5;
     }
@@ -3632,7 +3935,44 @@
       document.getElementById("tauntBar").style.display = "none";
     }
 
-    function exchangeCredits() {
+    async function exchangeCredits() {
+      if (!mp.token) {
+        showToast("Faca login para trocar creditos.");
+        document.getElementById("authOverlay").classList.remove("hidden");
+        return;
+      }
+
+      if (state.exchangeWins < 2) {
+        showToast("Ganhe 2 partidas em qualquer jogo para liberar a troca.");
+        return;
+      }
+
+      if (state.betCredits < 10) {
+        showToast("Voce precisa de pelo menos 10 creditos de aposta para trocar.");
+        return;
+      }
+
+      exchangeBetCredits.disabled = true;
+      try {
+        const res = await fetch(`${SERVER_URL}/api/exchange-credits`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${mp.token}`
+          }
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Nao foi possivel trocar.");
+        applyServerData(data.user);
+        updateLobbyHeader();
+        showToast("10 creditos de aposta viraram creditos do album.");
+      } catch (err) {
+        showToast(err.message);
+      } finally {
+        renderBetPanel();
+      }
+      return;
+
       if (state.bjWins === 0 || state.bjWins % 2 !== 0) {
         showToast("Ganhe 2 partidas de 21 para liberar a troca de créditos.");
         return;
@@ -4782,6 +5122,9 @@
         if (!item.isDuplicate) {
           item.sticker.unlocked = true;
           item.sticker.justRevealed = true;
+        } else {
+          const id = String(item.sticker.id);
+          state.duplicates[id] = (Number(state.duplicates[id]) || 0) + 1;
         }
       });
 
@@ -4793,6 +5136,9 @@
       packTitle.textContent = getPackTitle(packItems);
       carouselTotal = packItems.length;
       carouselIndex = 0;
+      if (packItems.some((item) => item.sticker.rarity === "legendary")) {
+        showLegendarySplash();
+      }
 
       // Monta o carrossel
       const track = document.getElementById("packCarouselTrack");
@@ -4867,6 +5213,17 @@
       }, 2600);
     }
 
+    function showLegendarySplash() {
+      const oldSplash = document.querySelector(".legendary-splash");
+      if (oldSplash) oldSplash.remove();
+
+      const splash = document.createElement("div");
+      splash.className = "legendary-splash";
+      splash.innerHTML = "<strong>Lendaria!</strong>";
+      document.body.appendChild(splash);
+      window.setTimeout(() => splash.remove(), 1950);
+    }
+
     let screenKickFired = false; // garante que o toque mobile chuta só 1 frame
     function pressScreenKick() {
       unlockGameAudio();
@@ -4892,6 +5249,15 @@
     packButton.addEventListener("click", openPack);
     openBetGame.addEventListener("click", openGame);
     openBlackjackGame.addEventListener("click", openBlackjackFromSidebar);
+    openMarket.addEventListener("click", openMarketplace);
+    closeMarket.addEventListener("click", closeMarketplace);
+    marketListButton.addEventListener("click", announceDuplicate);
+    openLobbyFromBoard.addEventListener("click", openLobby);
+    marketOverlay.addEventListener("click", (event) => {
+      if (event.target === marketOverlay) {
+        closeMarketplace();
+      }
+    });
     closeGameModal.addEventListener("click", closeGame);
     startMatch.addEventListener("click", startGame);
     exchangeBetCredits.addEventListener("click", exchangeCredits);
@@ -5061,8 +5427,8 @@
           body: JSON.stringify({
             credits:          state.credits,
             bet_credits:      state.betCredits,
-            bj_wins:          state.bjWins,
             stickers:         stickers.map(s => ({ id: s.id, unlocked: s.unlocked })),
+            duplicates:       state.duplicates,
             pending_stickers: state.pendingPackItems
           })
         });
@@ -5141,7 +5507,9 @@
       if (!user) return;
       state.credits    = user.credits    ?? state.credits;
       state.betCredits = user.bet_credits ?? state.betCredits;
-      state.bjWins     = user.bj_wins    ?? state.bjWins;
+      state.exchangeWins = user.exchange_wins ?? user.bj_wins ?? state.exchangeWins;
+      state.duplicates = user.duplicates && typeof user.duplicates === "object" ? user.duplicates : state.duplicates;
+      state.marketCanListToday = !user.last_sale_day || user.last_sale_day !== state.marketToday;
       // Restaura figurinhas coletadas
       if (Array.isArray(user.stickers) && user.stickers.length > 0) {
         user.stickers.forEach(sv => {
@@ -5158,6 +5526,9 @@
       }
       renderBetPanel && renderBetPanel();
       renderSpread && renderSpread();
+      if (marketOverlay && !marketOverlay.classList.contains("hidden")) {
+        renderMarketplace();
+      }
     }
 
     function playOffline() {
@@ -5370,25 +5741,29 @@
       });
 
       mp.socket.on("blackjack:finished", ({ table, updatedUser }) => {
+        const previousExchangeWins = state.exchangeWins;
         if (updatedUser) {
-          state.betCredits = updatedUser.bet_credits ?? state.betCredits;
-          state.credits    = updatedUser.credits    ?? state.credits;
-          mp.user = updatedUser;
+          applyServerData(updatedUser);
         }
 
         // Conta vitória no blackjack (para liberar troca de créditos a cada 2)
         const mySocketId = mp.socket?.id;
-        if (table.winnerSocketId && table.winnerSocketId === mySocketId) {
+        if (false && table.winnerSocketId && table.winnerSocketId === mySocketId) {
           state.bjWins = (state.bjWins || 0) + 1;
           if (state.bjWins % 2 === 0) {
             showToast(`🏆 ${state.bjWins} vitórias no 21! Troca de créditos liberada.`);
           }
         }
 
+        const iWon = table.winnerSocketId && table.winnerSocketId === mySocketId;
+        if (iWon && state.exchangeWins >= 2 && previousExchangeWins < 2) {
+          showToast("Duas vitorias acumuladas! Troca de creditos liberada.");
+        }
+
         renderBlackjackTable(table);
         renderBetPanel();
         updateLobbyHeader();
-        if (!(table.winnerSocketId && table.winnerSocketId === mySocketId)) {
+        if (!iWon) {
           showToast(table.message || "Mesa de 21 encerrada.");
         }
       });
@@ -5407,6 +5782,17 @@
       });
 
       // ── Emoji Taunts ────────────────────────────────────────────────────
+      mp.socket.on("market:sold", ({ updatedUser }) => {
+        if (updatedUser) {
+          applyServerData(updatedUser);
+          updateLobbyHeader();
+        }
+        if (!marketOverlay.classList.contains("hidden")) {
+          refreshMarketplace().catch(() => {});
+        }
+        showToast("Uma figurinha sua foi vendida.");
+      });
+
       mp.socket.on("game:taunt", ({ emoji }) => {
         showTauntDisplay(emoji);
       });
@@ -5418,9 +5804,7 @@
 
       mp.socket.on("horse:finished", ({ room, updatedUser }) => {
         if (updatedUser) {
-          state.betCredits = updatedUser.bet_credits ?? state.betCredits;
-          state.credits    = updatedUser.credits    ?? state.credits;
-          mp.user = updatedUser;
+          applyServerData(updatedUser);
         }
         // Cancel current animation and start final animation showing correct winner
         if (horseRaceAnim) { cancelAnimationFrame(horseRaceAnim); horseRaceAnim = null; }
@@ -5472,7 +5856,41 @@
       document.getElementById("betAvail").textContent         = `(você tem ${state.betCredits})`;
     }
 
+    function renderAvatar(avatar, label = "") {
+      return `<div class="online-avatar">${avatar ? `<img src="${escHtml(avatar)}" alt="${escHtml(label)}">` : ""}</div>`;
+    }
+
+    function renderOnlineStrip(list) {
+      state.onlinePlayers = Array.isArray(list) ? list : [];
+      if (!onlineStripList || !onlineCountLabel) return;
+
+      const total = state.onlinePlayers.length;
+      onlineCountLabel.textContent = mp.isOnline ? `${total} conectado${total === 1 ? "" : "s"}` : "Offline";
+
+      if (!mp.isOnline) {
+        onlineStripList.innerHTML = `<span style="color:rgba(255,249,232,.72);font-size:.78rem;font-weight:800">Entre para ver jogadores online.</span>`;
+        return;
+      }
+
+      if (!total) {
+        onlineStripList.innerHTML = `<span style="color:rgba(255,249,232,.72);font-size:.78rem;font-weight:800">Nenhum jogador online agora.</span>`;
+        return;
+      }
+
+      const self = mp.socket?.id;
+      onlineStripList.innerHTML = state.onlinePlayers.map((player) => `
+        <div class="online-pill${player.socketId === self ? " is-self" : ""}" title="${escHtml(player.username)}">
+          ${renderAvatar(player.avatar, player.username)}
+          <span>
+            <strong>${escHtml(player.username)}${player.socketId === self ? " (voce)" : ""}</strong>
+            <small>${player.inGame ? "Em jogo" : "Disponivel"}</small>
+          </span>
+        </div>
+      `).join("");
+    }
+
     function renderOnlineList(list) {
+      renderOnlineStrip(list);
       const ul = document.getElementById("onlineList");
       const self = mp.socket?.id;
       const others = list.filter(p => p.socketId !== self);
@@ -5484,7 +5902,7 @@
 
       ul.innerHTML = others.map(p => `
         <li>
-          <div class="online-avatar">${p.avatar ? `<img src="${escHtml(p.avatar)}" alt="">` : ""}</div>
+          ${renderAvatar(p.avatar, p.username)}
           <span class="player-name">${escHtml(p.username)}</span>
           <span class="status-badge ${p.inGame ? "in-game" : "available"}">
             ${p.inGame ? "Em jogo" : "Disponível"}
@@ -5497,6 +5915,153 @@
       `).join("");
     }
 
+    function getDuplicateCount(stickerId) {
+      return Math.max(0, Number(state.duplicates[String(stickerId)] || state.duplicates[stickerId] || 0) || 0);
+    }
+
+    function getStickerMarketPrice(sticker) {
+      return marketPrices[sticker.rarity] || 0;
+    }
+
+    function renderMarketplace() {
+      const duplicateStickers = getCollectibleStickers()
+        .filter((sticker) => getDuplicateCount(sticker.id) > 0)
+        .sort((a, b) => a.id - b.id);
+
+      if (!duplicateStickers.length) {
+        marketStickerSelect.innerHTML = `<option value="">Sem repetidas para vender</option>`;
+        marketListButton.disabled = true;
+      } else {
+        marketStickerSelect.innerHTML = duplicateStickers.map((sticker) => {
+          const price = getStickerMarketPrice(sticker);
+          const count = getDuplicateCount(sticker.id);
+          return `<option value="${sticker.id}">${sticker.code} - ${sticker.name} (${count}x) - ${price} creditos</option>`;
+        }).join("");
+        marketListButton.disabled = !state.marketCanListToday;
+      }
+
+      if (!state.marketCanListToday) {
+        marketSellHint.textContent = "Voce ja anunciou uma figurinha hoje. Volte amanha para vender outra.";
+      } else {
+        marketSellHint.textContent = "Comum 10, rara 20, lendaria 30 creditos. Uma venda por dia.";
+      }
+
+      if (!state.marketListings.length) {
+        marketListings.innerHTML = `<p class="market-hint">Nenhuma figurinha anunciada agora.</p>`;
+        return;
+      }
+
+      marketListings.innerHTML = state.marketListings.map((listing) => {
+        const isMine = listing.seller_id === mp.user?.id;
+        const canBuy = !isMine && state.credits >= listing.price;
+        return `
+          <article class="market-listing">
+            ${listing.image ? `<img src="${escHtml(listing.image)}" alt="${escHtml(listing.name)}">` : ""}
+            <strong>${escHtml(listing.code)} - ${escHtml(listing.name)}</strong>
+            <div class="market-seller">
+              ${renderAvatar(listing.seller_avatar, listing.seller_username)}
+              <span>${escHtml(listing.seller_username)}${isMine ? " (voce)" : ""}</span>
+            </div>
+            <div class="market-price">
+              <span>${escHtml(getRarityLabel(listing.rarity))}</span>
+              <span>${listing.price} creditos</span>
+            </div>
+            <button class="mp-btn" type="button" ${canBuy ? "" : "disabled"} onclick="buyMarketListing(${listing.id})">
+              ${isMine ? "Seu anuncio" : state.credits < listing.price ? "Sem creditos" : "Comprar"}
+            </button>
+          </article>
+        `;
+      }).join("");
+    }
+
+    async function refreshMarketplace() {
+      if (!mp.token) return;
+      const res = await fetch(`${SERVER_URL}/api/market`, {
+        headers: { "Authorization": `Bearer ${mp.token}` }
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Nao foi possivel carregar a loja.");
+      state.marketListings = Array.isArray(data.listings) ? data.listings : [];
+      state.marketToday = data.today || "";
+      state.marketCanListToday = Boolean(data.canListToday);
+      renderMarketplace();
+    }
+
+    async function openMarketplace() {
+      if (!mp.token) {
+        showToast("Faca login para acessar a loja.");
+        document.getElementById("authOverlay").classList.remove("hidden");
+        return;
+      }
+
+      marketOverlay.classList.remove("hidden");
+      renderMarketplace();
+      try {
+        await refreshMarketplace();
+      } catch (err) {
+        showToast(err.message);
+      }
+    }
+
+    function closeMarketplace() {
+      marketOverlay.classList.add("hidden");
+    }
+
+    async function announceDuplicate() {
+      const sticker = stickers.find((item) => item.id === Number(marketStickerSelect.value));
+      if (!sticker) {
+        showToast("Escolha uma figurinha repetida.");
+        return;
+      }
+
+      marketListButton.disabled = true;
+      try {
+        const res = await fetch(`${SERVER_URL}/api/market/list`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${mp.token}`
+          },
+          body: JSON.stringify({
+            stickerId: sticker.id,
+            rarity: sticker.rarity,
+            code: sticker.code,
+            name: sticker.name,
+            image: sticker.image
+          })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Nao foi possivel anunciar.");
+        applyServerData(data.user);
+        await refreshMarketplace();
+        showToast("Figurinha anunciada na loja.");
+      } catch (err) {
+        showToast(err.message);
+        renderMarketplace();
+      }
+    }
+
+    async function buyMarketListing(listingId) {
+      try {
+        const res = await fetch(`${SERVER_URL}/api/market/buy`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${mp.token}`
+          },
+          body: JSON.stringify({ listingId })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Nao foi possivel comprar.");
+        applyServerData(data.user);
+        await refreshMarketplace();
+        renderProgress();
+        showToast("Figurinha comprada e adicionada ao album.");
+      } catch (err) {
+        showToast(err.message);
+      }
+    }
+
     function escHtml(s) {
       return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
     }
@@ -5506,6 +6071,7 @@
       const label = document.getElementById("onlineBtnLabel");
       if (dot)   { dot.classList.toggle("offline", !online); }
       if (label) { label.textContent = online ? "Online" : "Jogar Online"; }
+      renderOnlineStrip(state.onlinePlayers);
     }
 
     // ── Desafios ──────────────────────────────────────────────────────────
@@ -5585,7 +6151,10 @@
         return `
           <article class="blackjack-player ${player.isMe ? "is-me" : ""}">
             <strong>
-              <span>${escHtml(player.username)}${player.isHost ? " ★" : ""}</span>
+              <span style="display:flex;align-items:center;gap:7px;min-width:0">
+                ${renderAvatar(player.avatar, player.username)}
+                <span>${escHtml(player.username)}${player.isHost ? " ★" : ""}</span>
+              </span>
               <span>${player.total || 0}</span>
             </strong>
             <div class="blackjack-cards">${(player.cards || []).map(renderCard).join("") || "<span>Aguardando</span>"}</div>
@@ -5787,9 +6356,7 @@
       }
 
       if (updatedUser) {
-        state.betCredits = updatedUser.bet_credits ?? state.betCredits;
-        state.credits    = updatedUser.credits     ?? state.credits;
-        mp.user          = updatedUser;
+        applyServerData(updatedUser);
       }
 
       // Para o guest, p1=host, p2=guest. Para o host, p1=host, p2=guest.

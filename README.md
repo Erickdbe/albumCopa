@@ -1,2 +1,0 @@
-# albumCopa
-copa

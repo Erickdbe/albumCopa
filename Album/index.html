@@ -2942,6 +2942,7 @@
       state.credits += 10;
       renderBetPanel();
       renderProgress();
+      syncStateToServer();
       showToast("10 créditos de aposta viraram créditos do álbum.");
     }
 
@@ -3992,6 +3993,7 @@
       packModal.setAttribute("aria-hidden", "false");
       setPackDrag(0);
       renderProgress();
+      syncStateToServer();
       packPullTab.focus();
     }
 
@@ -4021,6 +4023,7 @@
       state.pendingPackItems = [];
 
       renderSpread();
+      syncStateToServer();
       finishPack.focus();
     }
 
@@ -4035,6 +4038,7 @@
       state.pendingPackItems = [];
       setPackDrag(0);
       renderSpread();
+      syncStateToServer();
       showToast("Figurinhas coladas no álbum.");
     }
 
@@ -4234,7 +4238,7 @@
           body: JSON.stringify({
             credits:          state.credits,
             bet_credits:      state.betCredits,
-            stickers:         stickers.map(s => ({ id: s.id, collected: s.collected })),
+            stickers:         stickers.map(s => ({ id: s.id, unlocked: s.unlocked })),
             pending_stickers: state.pendingPackItems
           })
         });
@@ -4317,7 +4321,7 @@
       if (Array.isArray(user.stickers) && user.stickers.length > 0) {
         user.stickers.forEach(sv => {
           const s = stickers.find(x => x.id === sv.id);
-          if (s && sv.collected) s.collected = true;
+          if (s && (sv.unlocked || sv.collected)) s.unlocked = true;
         });
       }
       if (Array.isArray(user.pending_stickers)) {

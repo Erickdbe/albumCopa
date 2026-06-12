@@ -4403,7 +4403,8 @@
       state.pendingPackItems = packItems;
 
       packTitle.textContent = "Pacote comprado";
-      packResults.innerHTML = "";
+      // Não limpa packResults aqui — o carrossel (track/nav) precisa permanecer no DOM
+      document.getElementById("packCarouselTrack").innerHTML = "";
       packModal.classList.remove("is-dragging", "is-opening", "is-opened");
       packModal.classList.add("is-open", "is-ready");
       packModal.setAttribute("aria-hidden", "false");

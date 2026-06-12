@@ -39,9 +39,10 @@
       background:
         radial-gradient(circle at 14% 18%, rgba(216, 173, 63, 0.22), transparent 24rem),
         radial-gradient(circle at 84% 10%, rgba(22, 104, 159, 0.26), transparent 22rem),
-        linear-gradient(125deg, rgba(168, 41, 63, 0.20), transparent 34%),
-        repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.035) 0 2px, transparent 2px 110px),
-        linear-gradient(145deg, #0c6546, var(--grass-dark) 68%);
+        linear-gradient(125deg, rgba(168, 41, 63, 0.24), transparent 34%),
+        linear-gradient(145deg, rgba(12, 101, 70, 0.72), rgba(6, 51, 38, 0.86) 68%),
+        url("assets/album-copa/fundo-cifrao.jpg") center / cover fixed;
+      background-color: var(--grass-dark);
       overflow-x: hidden;
     }
 
@@ -7080,6 +7081,13 @@
     // Futebol de Botao
     let buttonTicker = null;
     let buttonShotAnim = null;
+    const buttonCharge = {
+      active: false,
+      pointerId: null,
+      startedAt: 0,
+      frameId: 0,
+      maxMs: 1450
+    };
 
     function openButtonSoccerFromSidebar() {
       if (!mp.isOnline) {
@@ -7139,6 +7147,7 @@
       document.getElementById("buttonSoccerInviteToast").classList.add("hidden");
       if (buttonTicker) { clearInterval(buttonTicker); buttonTicker = null; }
       if (buttonShotAnim) { cancelAnimationFrame(buttonShotAnim); buttonShotAnim = null; }
+      cancelButtonCharge();
       mp.buttonInviteRoomId = null;
       mp.buttonRoomId = null;
       mp.buttonRoom = null;
@@ -7185,8 +7194,16 @@
     function renderButtonSoccerRoom(room) {
       const previousGoalId = mp.buttonLastGoalId;
       const previousShotId = mp.buttonLastShotId;
+      const previousTurnSocketId = mp.buttonRoom?.turnSocketId;
       mp.buttonRoom = room;
       mp.buttonRoomId = room.roomId;
+
+      if (buttonCharge.active && (room.status !== "playing" || room.turnSocketId !== mp.socket?.id)) {
+        cancelButtonCharge();
+      }
+      if (!buttonCharge.active && room.status === "playing" && room.turnSocketId === mp.socket?.id && previousTurnSocketId !== room.turnSocketId) {
+        setButtonPower(0.1);
+      }
 
       document.getElementById("buttonSoccerOverlay").classList.remove("hidden");
       document.getElementById("buttonSoccerBetLabel").textContent = `Aposta: ${room.bet} creditos`;
@@ -7230,10 +7247,90 @@
       const isFinished = room.status === "finished";
       const isHost = room.hostSocketId === mp.socket?.id;
       const me = getButtonSoccerMe();
-      document.getElementById("buttonShootBtn").disabled = !(isPlaying && room.turnSocketId === mp.socket?.id) || mp.buttonShotAnimating;
+      const isMyTurn = isPlaying && room.turnSocketId === mp.socket?.id && me;
+      const shootBtn = document.getElementById("buttonShootBtn");
+      shootBtn.disabled = !isMyTurn || mp.buttonShotAnimating || buttonCharge.active;
+      shootBtn.textContent = buttonCharge.active ? "Carregando" : "Bater";
       document.getElementById("buttonStartBtn").disabled = !(isWaiting && isHost && (room.players?.length || 0) >= 2);
       document.getElementById("buttonReadyBtn").disabled = !(isFinished && me && !me.ready);
       document.getElementById("buttonReplayBet").disabled = !isFinished;
+      buttonPower.disabled = !isMyTurn || mp.buttonShotAnimating || buttonCharge.active;
+    }
+
+    function isButtonSoccerMyTurn(room = mp.buttonRoom) {
+      return Boolean(room && room.status === "playing" && room.turnSocketId === mp.socket?.id && getButtonSoccerMe());
+    }
+
+    function currentButtonPower() {
+      return Math.max(0.1, Math.min(1, Number(buttonPower.value || 10) / 100));
+    }
+
+    function setButtonPower(power) {
+      const percent = Math.max(10, Math.min(100, Math.round(Number(power || 0) * 100)));
+      buttonPower.value = percent;
+      buttonPowerValue.textContent = `${percent}%`;
+    }
+
+    function stopButtonChargeLoop() {
+      if (buttonCharge.frameId) {
+        cancelAnimationFrame(buttonCharge.frameId);
+        buttonCharge.frameId = 0;
+      }
+    }
+
+    function tickButtonCharge() {
+      if (!buttonCharge.active) return;
+      const elapsed = performance.now() - buttonCharge.startedAt;
+      const power = 0.1 + Math.min(1, elapsed / buttonCharge.maxMs) * 0.9;
+      setButtonPower(power);
+      renderButtonSoccerRoomControls(mp.buttonRoom);
+      if (mp.buttonRoom && !mp.buttonShotAnimating) {
+        drawButtonSoccerField(mp.buttonRoom);
+      }
+      buttonCharge.frameId = requestAnimationFrame(tickButtonCharge);
+    }
+
+    function startButtonCharge(event) {
+      if (event.button !== undefined && event.button !== 0) return;
+      event.preventDefault();
+      updateButtonAim(event);
+
+      if (!isButtonSoccerMyTurn()) {
+        if (mp.buttonRoom?.status === "playing") showToast("Aguarde sua vez.");
+        return;
+      }
+
+      if (mp.buttonShotAnimating || buttonCharge.active) return;
+      if (buttonSoccerCanvas.setPointerCapture) {
+        buttonSoccerCanvas.setPointerCapture(event.pointerId);
+      }
+      buttonCharge.active = true;
+      buttonCharge.pointerId = event.pointerId;
+      buttonCharge.startedAt = performance.now();
+      setButtonPower(0.1);
+      stopButtonChargeLoop();
+      tickButtonCharge();
+    }
+
+    function finishButtonCharge(event) {
+      if (!buttonCharge.active || event.pointerId !== buttonCharge.pointerId) return;
+      event.preventDefault();
+      updateButtonAim(event);
+      const power = currentButtonPower();
+      buttonCharge.active = false;
+      buttonCharge.pointerId = null;
+      stopButtonChargeLoop();
+      renderButtonSoccerRoomControls(mp.buttonRoom);
+      shootButtonSoccer(power);
+    }
+
+    function cancelButtonCharge() {
+      if (!buttonCharge.active && !buttonCharge.frameId) return;
+      buttonCharge.active = false;
+      buttonCharge.pointerId = null;
+      stopButtonChargeLoop();
+      renderButtonSoccerRoomControls(mp.buttonRoom);
+      if (mp.buttonRoom && !mp.buttonShotAnimating) drawButtonSoccerField(mp.buttonRoom);
     }
 
     function getButtonCanvasPoint(event) {
@@ -7254,16 +7351,17 @@
       drawButtonSoccerField(mp.buttonRoom);
     }
 
-    function shootButtonSoccer() {
+    function shootButtonSoccer(powerOverride = null) {
       if (!mp.buttonRoomId || !mp.buttonRoom) return;
       if (mp.buttonRoom.turnSocketId !== mp.socket?.id) {
         showToast("Aguarde sua vez.");
         return;
       }
+      const power = powerOverride === null ? currentButtonPower() : Number(powerOverride);
       mp.socket.emit("button:shoot", {
         roomId: mp.buttonRoomId,
         angle: mp.buttonAimAngle,
-        power: Number(buttonPower.value || 60) / 100
+        power: Math.max(0.1, Math.min(1, power || 0.1))
       });
       document.getElementById("buttonShootBtn").disabled = true;
     }
@@ -7319,7 +7417,7 @@
 
       const me = getButtonSoccerMe();
       if (room.status === "playing" && me && room.turnSocketId === mp.socket?.id && !mp.buttonShotAnimating) {
-        const force = Number(buttonPower.value || 60) / 100;
+        const force = currentButtonPower();
         const length = 72 + force * 135;
         ctx.save();
         ctx.translate(me.x, me.y);
@@ -7407,12 +7505,10 @@
     }
 
     buttonSoccerCanvas.addEventListener("pointermove", updateButtonAim);
-    buttonSoccerCanvas.addEventListener("pointerdown", (event) => {
-      updateButtonAim(event);
-      if (buttonSoccerCanvas.setPointerCapture) {
-        buttonSoccerCanvas.setPointerCapture(event.pointerId);
-      }
-    });
+    buttonSoccerCanvas.addEventListener("pointerdown", startButtonCharge);
+    buttonSoccerCanvas.addEventListener("pointerup", finishButtonCharge);
+    buttonSoccerCanvas.addEventListener("pointercancel", cancelButtonCharge);
+    buttonSoccerCanvas.addEventListener("contextmenu", (event) => event.preventDefault());
     buttonPower.addEventListener("input", () => {
       buttonPowerValue.textContent = `${buttonPower.value}%`;
       if (mp.buttonRoom && !mp.buttonShotAnimating) drawButtonSoccerField(mp.buttonRoom);

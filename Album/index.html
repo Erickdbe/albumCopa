@@ -3702,6 +3702,7 @@
       credits: initialCredits,
       openingPack: false,
       pendingPackItems: [],
+      pendingPackUser: null,
       duplicates: {},
       betCredits: 350,
       betMatches: 0,
@@ -3989,7 +3990,6 @@
       state.bjWins += 1; // deixa ímpar novamente
       renderBetPanel();
       renderProgress();
-      syncStateToServer();
       showToast("10 créditos de aposta viraram créditos do álbum!");
     }
 
@@ -5047,10 +5047,16 @@
       resetPackDrag();
     }
 
-    function openPack() {
+    async function openPack() {
       const locked = getCollectibleStickers().filter((sticker) => !sticker.unlocked);
 
       if (state.openingPack) {
+        return;
+      }
+
+      if (!mp.token) {
+        showToast("Faca login para comprar pacotes com seguranca.");
+        document.getElementById("authOverlay").classList.remove("hidden");
         return;
       }
 
@@ -5064,10 +5070,46 @@
         return;
       }
 
-      const packItems = drawPackStickers(packSize);
-      state.credits -= packCost;
+      packButton.disabled = true;
+      let data;
+      try {
+        const res = await fetch(`${SERVER_URL}/api/pack/open`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${mp.token}`
+          }
+        });
+        data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Nao foi possivel comprar pacote.");
+      } catch (err) {
+        showToast(err.message);
+        renderProgress();
+        return;
+      }
+
+      const packItems = (Array.isArray(data.packItems) ? data.packItems : [])
+        .map((item) => {
+          const sticker = stickers.find((entry) => entry.id === Number(item.stickerId || item.id));
+          return sticker ? { sticker, isDuplicate: Boolean(item.isDuplicate) } : null;
+        })
+        .filter(Boolean);
+
+      if (!packItems.length) {
+        showToast("O servidor nao retornou figurinhas para este pacote.");
+        renderProgress();
+        return;
+      }
+
       state.openingPack = true;
       state.pendingPackItems = packItems;
+      state.pendingPackUser = data.user || null;
+      if (data.user) {
+        state.credits = data.user.credits ?? state.credits;
+        state.betCredits = data.user.bet_credits ?? state.betCredits;
+        state.exchangeWins = data.user.exchange_wins ?? data.user.bj_wins ?? state.exchangeWins;
+        state.duplicates = data.user.duplicates && typeof data.user.duplicates === "object" ? data.user.duplicates : state.duplicates;
+      }
 
       packTitle.textContent = "Pacote comprado";
       // Não limpa packResults aqui — o carrossel (track/nav) precisa permanecer no DOM
@@ -5077,7 +5119,6 @@
       packModal.setAttribute("aria-hidden", "false");
       setPackDrag(0);
       renderProgress();
-      syncStateToServer();
       packPullTab.focus();
     }
 
@@ -5118,14 +5159,13 @@
     }
 
     function revealPack(packItems) {
+      if (state.pendingPackUser) {
+        applyServerData(state.pendingPackUser);
+      }
+
       packItems.forEach((item) => {
-        if (!item.isDuplicate) {
-          item.sticker.unlocked = true;
-          item.sticker.justRevealed = true;
-        } else {
-          const id = String(item.sticker.id);
-          state.duplicates[id] = (Number(state.duplicates[id]) || 0) + 1;
-        }
+        item.sticker.unlocked = true;
+        item.sticker.justRevealed = !item.isDuplicate;
       });
 
       const firstNew = packItems.find((item) => !item.isDuplicate) || packItems[0];
@@ -5163,12 +5203,12 @@
       packModal.classList.remove("is-opening");
       packModal.classList.add("is-opened");
       state.pendingPackItems = [];
+      state.pendingPackUser = null;
 
       // Anima o primeiro slide após o pacote abrir
       setTimeout(() => goToCarouselSlide(0), 60);
 
       renderSpread();
-      syncStateToServer();
       finishPack.focus();
     }
 
@@ -5181,9 +5221,9 @@
       packModal.setAttribute("aria-hidden", "true");
       state.openingPack = false;
       state.pendingPackItems = [];
+      state.pendingPackUser = null;
       setPackDrag(0);
       renderSpread();
-      syncStateToServer();
       showToast("Figurinhas coladas no álbum.");
     }
 
@@ -5416,36 +5456,14 @@
 
     // ── Salva dados do usuário no servidor ────────────────────────────────
     async function syncStateToServer() {
-      if (!mp.token) return;
-      try {
-        await fetch(`${SERVER_URL}/api/save`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${mp.token}`
-          },
-          body: JSON.stringify({
-            credits:          state.credits,
-            bet_credits:      state.betCredits,
-            stickers:         stickers.map(s => ({ id: s.id, unlocked: s.unlocked })),
-            duplicates:       state.duplicates,
-            pending_stickers: state.pendingPackItems
-          })
-        });
-      } catch (e) { /* silent */ }
+      return;
     }
 
     // Sincroniza sempre que créditos mudam (monkey-patch no renderBetPanel)
     const _origRenderBetPanel = window.renderBetPanel;
     // (vai ser chamado depois que a função for definida)
     function setupSyncHook() {
-      const orig = typeof renderBetPanel === "function" ? renderBetPanel : null;
-      if (orig) {
-        window.renderBetPanel = function(...args) {
-          orig(...args);
-          syncStateToServer();
-        };
-      }
+      return;
     }
 
     // ── Auth: Login / Registro ────────────────────────────────────────────
@@ -5511,14 +5529,18 @@
       state.duplicates = user.duplicates && typeof user.duplicates === "object" ? user.duplicates : state.duplicates;
       state.marketCanListToday = !user.last_sale_day || user.last_sale_day !== state.marketToday;
       // Restaura figurinhas coletadas
+      stickers.forEach((sticker) => {
+        sticker.unlocked = false;
+      });
       if (Array.isArray(user.stickers) && user.stickers.length > 0) {
         user.stickers.forEach(sv => {
           const s = stickers.find(x => x.id === sv.id);
           if (s && (sv.unlocked || sv.collected)) s.unlocked = true;
         });
       }
-      if (Array.isArray(user.pending_stickers)) {
-        state.pendingPackItems = user.pending_stickers;
+      if (!state.openingPack) {
+        state.pendingPackItems = [];
+        state.pendingPackUser = null;
       }
       // Set avatar
       if (user.avatar) {
@@ -6023,11 +6045,7 @@
             "Authorization": `Bearer ${mp.token}`
           },
           body: JSON.stringify({
-            stickerId: sticker.id,
-            rarity: sticker.rarity,
-            code: sticker.code,
-            name: sticker.name,
-            image: sticker.image
+            stickerId: sticker.id
           })
         });
         const data = await res.json();

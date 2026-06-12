@@ -548,6 +548,49 @@
       font-weight: 900;
     }
 
+    .button-soccer-side-button {
+      position: relative;
+      width: 100%;
+      min-height: 70px;
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 10px;
+      margin-top: 8px;
+      padding: 12px;
+      overflow: hidden;
+      border: 0;
+      border-radius: var(--radius);
+      color: #fff9e8;
+      background:
+        radial-gradient(circle at 76% 30%, #f8f3dc 0 13px, #d4383d 14px 25px, transparent 26px),
+        radial-gradient(circle at 55% 70%, #f8f3dc 0 11px, #263f8f 12px 22px, transparent 23px),
+        linear-gradient(90deg, rgba(255,255,255,.56) 0 3px, transparent 3px),
+        linear-gradient(0deg, transparent 0 48%, rgba(255,255,255,.54) 49% 51%, transparent 52%),
+        linear-gradient(145deg, #0d6a47, #173128);
+      box-shadow: 0 14px 28px rgba(13, 72, 51, 0.24);
+      cursor: pointer;
+      font-weight: 950;
+      text-align: left;
+    }
+
+    .button-soccer-side-button span,
+    .button-soccer-side-button small {
+      position: relative;
+      z-index: 2;
+    }
+
+    .button-soccer-side-button span {
+      font-size: 1.02rem;
+      text-transform: uppercase;
+    }
+
+    .button-soccer-side-button small {
+      color: rgba(255, 249, 232, 0.82);
+      font-size: 0.72rem;
+      font-weight: 900;
+    }
+
     .filter-group {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
@@ -2892,6 +2935,275 @@
       font-weight: 950;
     }
 
+    .button-soccer-open-btn {
+      width: auto;
+      padding: 8px 12px;
+      background: #0d6a47;
+      font-size: .82rem;
+    }
+
+    .button-soccer-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 10006;
+      display: grid;
+      place-items: center;
+      padding: 14px;
+      background: rgba(3, 15, 11, 0.88);
+      backdrop-filter: blur(5px);
+    }
+
+    .button-soccer-overlay.hidden { display: none; }
+
+    .button-soccer-table {
+      width: min(1240px, 98vw);
+      max-height: calc(100vh - 28px);
+      display: grid;
+      grid-template-rows: auto auto minmax(0, 1fr) auto;
+      gap: 12px;
+      padding: 16px;
+      overflow: auto;
+      border: 2px solid rgba(216, 173, 63, 0.64);
+      border-radius: 12px;
+      color: #fff9e8;
+      background: linear-gradient(145deg, #15342c, #071b16);
+      box-shadow: 0 26px 80px rgba(0, 0, 0, .52);
+    }
+
+    .button-soccer-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .button-soccer-top h3 {
+      margin: 0;
+      font-size: 1.2rem;
+      text-transform: uppercase;
+    }
+    .button-soccer-top span {
+      display: inline-flex;
+      margin-top: 3px;
+      color: rgba(255, 249, 232, .74);
+      font-size: .82rem;
+      font-weight: 850;
+    }
+
+    .button-soccer-scorebar {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+      align-items: center;
+      gap: 10px;
+      padding: 8px 10px;
+      border: 1px solid rgba(255, 249, 232, .16);
+      border-radius: 8px;
+      background: rgba(0,0,0,.18);
+      font-weight: 950;
+    }
+    .button-soccer-scorebar strong {
+      text-align: center;
+      font-size: clamp(1.1rem, 2.4vw, 1.6rem);
+    }
+    .button-team-red { color: #ff6969; }
+    .button-team-white { color: #f8f0d4; text-align: right; }
+    .button-soccer-clock {
+      display: inline-flex;
+      justify-content: center;
+      min-width: 148px;
+      color: #f9e8a8;
+      font-size: .8rem;
+      text-transform: uppercase;
+    }
+    .button-soccer-message {
+      min-height: 38px;
+      display: flex;
+      align-items: center;
+      padding: 9px 11px;
+      border: 1px solid rgba(255, 249, 232, .14);
+      border-radius: 8px;
+      color: #f9e8a8;
+      background: rgba(0,0,0,.18);
+      font-weight: 850;
+    }
+
+    .button-soccer-main {
+      display: grid;
+      grid-template-columns: minmax(720px, 1fr) minmax(260px, 320px);
+      gap: 12px;
+      min-height: 0;
+    }
+    .button-field-shell {
+      position: relative;
+      min-height: 0;
+      border: 10px solid #b98d49;
+      border-radius: 8px;
+      background: #0b5b3d;
+      box-shadow: inset 0 0 0 2px rgba(255, 249, 232, .24), 0 16px 34px rgba(0,0,0,.28);
+      overflow: hidden;
+    }
+    .button-soccer-canvas {
+      display: block;
+      width: 100%;
+      aspect-ratio: 1180 / 680;
+      min-height: 430px;
+      background: #0b7449;
+      cursor: crosshair;
+      touch-action: none;
+    }
+    .button-taunt-layer,
+    .button-confetti-layer {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      overflow: hidden;
+    }
+    .button-confetti {
+      position: absolute;
+      width: 9px;
+      height: 13px;
+      border-radius: 2px;
+      animation: buttonConfetti 1150ms ease-out forwards;
+    }
+    @keyframes buttonConfetti {
+      0% { opacity: 1; transform: translate(0, 0) rotate(0); }
+      100% { opacity: 0; transform: translate(var(--dx), var(--dy)) rotate(540deg); }
+    }
+    .button-taunt-pop,
+    .taunt-pop {
+      position: absolute;
+      left: var(--x, 50%);
+      top: var(--y, 40%);
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+      z-index: 12;
+      font-size: clamp(1.8rem, 4vw, 3.2rem);
+      filter: drop-shadow(0 7px 12px rgba(0,0,0,.32));
+      animation: floatingEmoji 1600ms ease-out forwards;
+    }
+    @keyframes floatingEmoji {
+      0% { opacity: 0; transform: translate(-50%, -22%) scale(.72); }
+      15% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+      72% { opacity: 1; transform: translate(-50%, -112%) scale(1.18); }
+      100% { opacity: 0; transform: translate(-50%, -150%) scale(.82); }
+    }
+
+    .button-side-panel {
+      display: grid;
+      grid-template-rows: auto auto auto minmax(0, 1fr);
+      gap: 10px;
+      min-height: 0;
+    }
+    .button-control-box {
+      display: grid;
+      gap: 8px;
+      padding: 10px;
+      border: 1px solid rgba(255, 249, 232, .15);
+      border-radius: 8px;
+      background: rgba(255,255,255,.06);
+    }
+    .button-control-box h4 {
+      margin: 0;
+      font-size: .82rem;
+      text-transform: uppercase;
+      color: #f9e8a8;
+    }
+    .button-force-row {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      gap: 8px;
+      align-items: center;
+      font-size: .78rem;
+      font-weight: 850;
+    }
+    .button-force-row input {
+      width: 100%;
+      accent-color: #d8ad3f;
+    }
+    .button-actions,
+    .button-emoji-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .button-actions .mp-btn {
+      flex: 1 1 120px;
+      min-height: 38px;
+      padding: 8px 10px;
+      font-size: .82rem;
+    }
+    .button-emoji-btn {
+      width: 38px;
+      height: 38px;
+      border: 1px solid rgba(255, 249, 232, .18);
+      border-radius: 8px;
+      background: rgba(255,255,255,.11);
+      cursor: pointer;
+      font-size: 1.35rem;
+      transition: transform .12s, background .12s;
+    }
+    .button-emoji-btn:hover {
+      transform: translateY(-2px);
+      background: rgba(255,255,255,.2);
+    }
+    .button-player-list {
+      display: grid;
+      gap: 7px;
+      overflow: auto;
+      padding-right: 2px;
+    }
+    .button-player-chip {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      gap: 8px;
+      align-items: center;
+      min-height: 42px;
+      padding: 7px 8px;
+      border: 1px solid rgba(255, 249, 232, .14);
+      border-radius: 8px;
+      background: rgba(0,0,0,.14);
+      font-size: .78rem;
+      font-weight: 850;
+    }
+    .button-player-chip.is-me {
+      border-color: rgba(216, 173, 63, .66);
+      background: rgba(216, 173, 63, .14);
+    }
+    .button-player-chip.is-turn {
+      box-shadow: inset 0 0 0 2px rgba(249, 232, 168, .42);
+    }
+    .button-color-dot {
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      border: 2px solid rgba(255,255,255,.48);
+      background: var(--button-color);
+      box-shadow: 0 4px 10px rgba(0,0,0,.22);
+    }
+    .button-player-chip strong,
+    .button-player-chip small {
+      display: block;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .button-player-chip small {
+      color: rgba(255,249,232,.68);
+      font-size: .68rem;
+      text-transform: uppercase;
+    }
+    .button-ready-badge {
+      color: #f9e8a8;
+      font-size: .68rem;
+      text-transform: uppercase;
+    }
+
+    @media (max-width: 980px) {
+      .button-soccer-main { grid-template-columns: 1fr; }
+      .button-soccer-canvas { min-height: 330px; }
+      .button-side-panel { grid-template-rows: none; }
+    }
+
     /* ── Horse Racing ──────────────────────────────────────────────────────── */
     .horse-overlay {
       position: fixed;
@@ -3168,6 +3480,10 @@
             <span>Apostar</span>
             <small>Head Soccer</small>
           </button>
+          <button class="button-soccer-side-button" id="openButtonSoccerGame" type="button">
+            <span>Futebol de Botao</span>
+            <small>Turnos online</small>
+          </button>
           <button class="blackjack-side-button" id="openBlackjackGame" type="button">
             <span>Mesa 21</span>
             <small>Cartas online</small>
@@ -3274,6 +3590,7 @@
         <label for="myBetInput">Minha aposta:</label>
         <input id="myBetInput" type="number" min="5" max="50" value="10" />
         <span style="font-size:.8rem;color:var(--muted)" id="betAvail"></span>
+        <button class="mp-btn button-soccer-open-btn" type="button" onclick="createButtonSoccerRoom()">Botao</button>
         <button class="mp-btn blackjack-open-btn" type="button" onclick="createBlackjackRoom()">Mesa 21</button>
         <button class="mp-btn" style="background:#9b59b6;width:auto;padding:8px 12px;font-size:.82rem" type="button" onclick="createHorseRoom()">🏇 Corrida</button>
       </div>
@@ -3364,6 +3681,13 @@
         <button class="mp-btn" id="blackjackStandBtn" type="button" onclick="blackjackStand()">Parar</button>
         <button class="mp-btn" id="blackjackLeaveBtn" type="button" onclick="leaveBlackjackRoom()">Sair da mesa</button>
       </div>
+      <div class="button-emoji-bar">
+        <button class="button-emoji-btn" type="button" onclick="sendTaunt('😂')">😂</button>
+        <button class="button-emoji-btn" type="button" onclick="sendTaunt('🔥')">🔥</button>
+        <button class="button-emoji-btn" type="button" onclick="sendTaunt('👏')">👏</button>
+        <button class="button-emoji-btn" type="button" onclick="sendTaunt('😤')">😤</button>
+        <button class="button-emoji-btn" type="button" onclick="sendTaunt('🎯')">🎯</button>
+      </div>
     </div>
   </div>
 
@@ -3378,6 +3702,90 @@
   </div>
 
   <!-- ── Corrida de Cavalos ──────────────────────────────────────────────────── -->
+  <div class="challenge-toast hidden" id="buttonSoccerInviteToast">
+    <h4>Futebol de Botao</h4>
+    <p id="buttonSoccerInviteMsg"></p>
+    <div class="challenge-toast-btns">
+      <button class="btn-accept" onclick="acceptButtonSoccerInvite()">Entrar</button>
+      <button class="btn-reject" onclick="rejectButtonSoccerInvite()">Agora nao</button>
+    </div>
+  </div>
+
+  <div class="button-soccer-overlay hidden" id="buttonSoccerOverlay">
+    <div class="button-soccer-table">
+      <div class="button-soccer-top">
+        <div>
+          <h3>Futebol de Botao</h3>
+          <span id="buttonSoccerBetLabel">Aposta: 0</span>
+        </div>
+        <button class="mp-btn" style="width:auto;padding:8px 16px" type="button" onclick="leaveButtonSoccerRoom()">Fechar</button>
+      </div>
+
+      <div class="button-soccer-scorebar">
+        <span class="button-team-red" id="buttonRedLabel">Vermelhos</span>
+        <strong id="buttonSoccerScore">0 x 0</strong>
+        <span class="button-team-white" id="buttonWhiteLabel">Brancos</span>
+        <span></span>
+        <span class="button-soccer-clock" id="buttonSoccerClock">3:00</span>
+        <span></span>
+      </div>
+
+      <div class="button-soccer-message" id="buttonSoccerMessage">Aguardando mesa.</div>
+
+      <div class="button-soccer-main">
+        <div class="button-field-shell" id="buttonFieldShell">
+          <canvas class="button-soccer-canvas" id="buttonSoccerCanvas" width="1180" height="680"></canvas>
+          <div class="button-confetti-layer" id="buttonConfettiLayer"></div>
+          <div class="button-taunt-layer" id="buttonTauntLayer"></div>
+        </div>
+
+        <aside class="button-side-panel">
+          <section class="button-control-box">
+            <h4>Tacada</h4>
+            <div class="button-force-row">
+              <span>Forca</span>
+              <input id="buttonPower" type="range" min="10" max="100" value="64">
+              <strong id="buttonPowerValue">64%</strong>
+            </div>
+            <div class="button-actions">
+              <button class="mp-btn" id="buttonShootBtn" type="button" onclick="shootButtonSoccer()">Bater</button>
+              <button class="mp-btn" id="buttonStartBtn" type="button" onclick="startButtonSoccer()">Comecar</button>
+            </div>
+          </section>
+
+          <section class="button-control-box">
+            <h4>Revanche</h4>
+            <div class="button-force-row">
+              <span>Aposta</span>
+              <input id="buttonReplayBet" type="number" min="5" max="50" value="10">
+              <strong>cr</strong>
+            </div>
+            <div class="button-actions">
+              <button class="mp-btn" id="buttonReadyBtn" type="button" onclick="readyButtonSoccerReplay()">Pronto</button>
+              <button class="mp-btn" id="buttonLeaveBtn" type="button" onclick="leaveButtonSoccerRoom()">Sair</button>
+            </div>
+          </section>
+
+          <section class="button-control-box">
+            <h4>Emoji</h4>
+            <div class="button-emoji-bar">
+              <button class="button-emoji-btn" type="button" onclick="sendTaunt('😂')">😂</button>
+              <button class="button-emoji-btn" type="button" onclick="sendTaunt('🔥')">🔥</button>
+              <button class="button-emoji-btn" type="button" onclick="sendTaunt('👏')">👏</button>
+              <button class="button-emoji-btn" type="button" onclick="sendTaunt('😤')">😤</button>
+              <button class="button-emoji-btn" type="button" onclick="sendTaunt('🎯')">🎯</button>
+            </div>
+          </section>
+
+          <section class="button-control-box">
+            <h4>Jogadores</h4>
+            <div class="button-player-list" id="buttonPlayers"></div>
+          </section>
+        </aside>
+      </div>
+    </div>
+  </div>
+
   <div class="horse-overlay hidden" id="horseOverlay">
     <div class="horse-table">
       <div class="horse-top">
@@ -3404,6 +3812,13 @@
       <div class="horse-actions">
         <button class="mp-btn" id="horseStartBtn" type="button" onclick="startHorseRace()">🏁 Largar!</button>
         <button class="mp-btn" id="horseLeaveBtn" type="button" onclick="leaveHorseRoom()">Sair</button>
+      </div>
+      <div class="button-emoji-bar" style="margin-top:10px">
+        <button class="button-emoji-btn" type="button" onclick="sendTaunt('😂')">😂</button>
+        <button class="button-emoji-btn" type="button" onclick="sendTaunt('🔥')">🔥</button>
+        <button class="button-emoji-btn" type="button" onclick="sendTaunt('👏')">👏</button>
+        <button class="button-emoji-btn" type="button" onclick="sendTaunt('😤')">😤</button>
+        <button class="button-emoji-btn" type="button" onclick="sendTaunt('🎯')">🎯</button>
       </div>
     </div>
   </div>
@@ -3476,7 +3891,7 @@
         <aside class="game-panel" aria-label="Configuração da partida">
           <div class="game-stats">
             <div class="game-stat">
-              <strong id="betCreditsLabel">350</strong>
+              <strong id="betCreditsLabel">550</strong>
               <span>Aposta</span>
             </div>
             <div class="game-stat">
@@ -3704,7 +4119,7 @@
       pendingPackItems: [],
       pendingPackUser: null,
       duplicates: {},
-      betCredits: 350,
+      betCredits: 550,
       betMatches: 0,
       exchangeWins: 0,
       marketListings: [],
@@ -3742,6 +4157,7 @@
     const packPullTab = document.getElementById("packPullTab");
     const gameModal = document.getElementById("gameModal");
     const openBetGame = document.getElementById("openBetGame");
+    const openButtonSoccerGame = document.getElementById("openButtonSoccerGame");
     const openBlackjackGame = document.getElementById("openBlackjackGame");
     const openMarket = document.getElementById("openMarket");
     const marketOverlay = document.getElementById("marketOverlay");
@@ -3767,6 +4183,10 @@
     const soccerCanvas = document.getElementById("soccerCanvas");
     const screenKick = document.getElementById("screenKick");
     const soccerCtx = soccerCanvas.getContext("2d");
+    const buttonSoccerCanvas = document.getElementById("buttonSoccerCanvas");
+    const buttonSoccerCtx = buttonSoccerCanvas.getContext("2d");
+    const buttonPower = document.getElementById("buttonPower");
+    const buttonPowerValue = document.getElementById("buttonPowerValue");
     const FIELD = {
       width: 1500,
       height: 675,
@@ -5288,6 +5708,7 @@
     nextPage.addEventListener("click", () => goToSpread(state.spread + 1));
     packButton.addEventListener("click", openPack);
     openBetGame.addEventListener("click", openGame);
+    openButtonSoccerGame.addEventListener("click", openButtonSoccerFromSidebar);
     openBlackjackGame.addEventListener("click", openBlackjackFromSidebar);
     openMarket.addEventListener("click", openMarketplace);
     closeMarket.addEventListener("click", closeMarketplace);
@@ -5450,6 +5871,13 @@
       horseInviteRoomId: null,
       horseRoomId: null,
       horseRoom: null,
+      buttonInviteRoomId: null,
+      buttonRoomId: null,
+      buttonRoom: null,
+      buttonAimAngle: 0,
+      buttonLastGoalId: null,
+      buttonLastShotId: null,
+      buttonShotAnimating: false,
       guestInputs:      { left: false, right: false, jump: false, kick: false },
       lastHostKick:     false   // kick do host recebido via game:state (usado pelo guest)
     };
@@ -5803,8 +6231,39 @@
         showToast(msg || "Não foi possível jogar 21.");
       });
 
+      mp.socket.on("button:invite", ({ roomId, fromUsername, bet }) => {
+        mp.buttonInviteRoomId = roomId;
+        document.getElementById("buttonSoccerInviteMsg").textContent =
+          `${fromUsername} abriu uma mesa de futebol de botao. Aposta: ${bet} creditos.`;
+        document.getElementById("buttonSoccerInviteToast").classList.remove("hidden");
+      });
+
+      mp.socket.on("button:update", (room) => {
+        renderButtonSoccerRoom(room);
+      });
+
+      mp.socket.on("button:finished", ({ room, updatedUser }) => {
+        if (updatedUser) {
+          applyServerData(updatedUser);
+        }
+        renderButtonSoccerRoom(room);
+        renderBetPanel();
+        updateLobbyHeader();
+        showToast(room.message || "Futebol de botao encerrado.");
+      });
+
+      mp.socket.on("button:cancelled", ({ message }) => {
+        closeButtonSoccerOverlay(true);
+        showToast(message || "Mesa de futebol de botao cancelada.");
+        updateLobbyHeader();
+      });
+
+      mp.socket.on("button:error", (msg) => {
+        showToast(msg || "Nao foi possivel jogar futebol de botao.");
+      });
+
       // ── Emoji Taunts ────────────────────────────────────────────────────
-      mp.socket.on("market:sold", ({ updatedUser }) => {
+      mp.socket.on("market:sold", ({ listing, buyer, updatedUser }) => {
         if (updatedUser) {
           applyServerData(updatedUser);
           updateLobbyHeader();
@@ -5812,11 +6271,13 @@
         if (!marketOverlay.classList.contains("hidden")) {
           refreshMarketplace().catch(() => {});
         }
-        showToast("Uma figurinha sua foi vendida.");
+        const buyerName = buyer?.username ? `${buyer.username} ` : "";
+        const stickerCode = listing?.code ? ` ${listing.code}` : "";
+        showToast(`${buyerName}comprou sua figurinha${stickerCode}.`);
       });
 
-      mp.socket.on("game:taunt", ({ emoji }) => {
-        showTauntDisplay(emoji);
+      mp.socket.on("game:taunt", (payload) => {
+        showTauntDisplay(payload?.emoji, payload);
       });
 
       // ── Horse Racing ────────────────────────────────────────────────────
@@ -6074,7 +6535,9 @@
         applyServerData(data.user);
         await refreshMarketplace();
         renderProgress();
-        showToast("Figurinha comprada e adicionada ao album.");
+        const sellerName = data.seller?.username ? ` de ${data.seller.username}` : "";
+        const stickerCode = data.listing?.code ? ` ${data.listing.code}` : "";
+        showToast(`Voce comprou${stickerCode}${sellerName}. Figurinha adicionada ao album.`);
       } catch (err) {
         showToast(err.message);
       }
@@ -6167,7 +6630,7 @@
       document.getElementById("blackjackPlayers").innerHTML = table.players.map(player => {
         const winner = table.winnerSocketId === player.socketId ? " Vencedor" : "";
         return `
-          <article class="blackjack-player ${player.isMe ? "is-me" : ""}">
+          <article class="blackjack-player ${player.isMe ? "is-me" : ""}" data-socket-id="${escHtml(player.socketId)}">
             <strong>
               <span style="display:flex;align-items:center;gap:7px;min-width:0">
                 ${renderAvatar(player.avatar, player.username)}
@@ -6539,17 +7002,422 @@
 
     // ── Emoji Taunts ──────────────────────────────────────────────────────
     function sendTaunt(emoji) {
-      if (!mp.socket?.connected || !mp.roomId) return;
-      mp.socket.emit("game:taunt", { emoji });
-      showTauntDisplay(emoji); // also show locally
+      const hasActiveRoom = mp.roomId || mp.blackjackRoomId || mp.horseRoomId || mp.buttonRoomId;
+      if (!mp.socket?.connected || !hasActiveRoom) return;
+
+      const payload = { emoji };
+      if (mp.buttonRoom && !document.getElementById("buttonSoccerOverlay").classList.contains("hidden")) {
+        const me = getButtonSoccerMe();
+        if (me) {
+          payload.game = "button";
+          payload.x = me.x;
+          payload.y = me.y;
+        }
+      }
+
+      mp.socket.emit("game:taunt", payload);
+      showTauntDisplay(emoji, { ...payload, fromSocketId: mp.socket?.id });
     }
-    function showTauntDisplay(emoji) {
+
+    function showTauntDisplay(emoji, payload = {}) {
+      if (!emoji) return;
+
+      const buttonOverlay = document.getElementById("buttonSoccerOverlay");
+      const buttonLayer = document.getElementById("buttonTauntLayer");
+      if (buttonLayer && mp.buttonRoom && !buttonOverlay.classList.contains("hidden")) {
+        const field = mp.buttonRoom.field || { width: 1180, height: 680 };
+        let x = Number(payload.x);
+        let y = Number(payload.y);
+        if (!Number.isFinite(x) || !Number.isFinite(y)) {
+          const player = mp.buttonRoom.players?.find(item => item.socketId === payload.fromSocketId) || getButtonSoccerMe();
+          x = player?.x ?? field.width / 2;
+          y = player?.y ?? field.height / 2;
+        }
+        const el = document.createElement("span");
+        el.className = "button-taunt-pop";
+        el.textContent = emoji;
+        el.style.setProperty("--x", `${(x / field.width) * 100}%`);
+        el.style.setProperty("--y", `${(y / field.height) * 100}%`);
+        buttonLayer.appendChild(el);
+        setTimeout(() => el.remove(), 1700);
+        return;
+      }
+
+      const overlay = !document.getElementById("blackjackOverlay").classList.contains("hidden")
+        ? document.getElementById("blackjackOverlay")
+        : !document.getElementById("horseOverlay").classList.contains("hidden")
+          ? document.getElementById("horseOverlay")
+          : null;
+      if (overlay) {
+        const el = document.createElement("span");
+        el.className = "taunt-pop";
+        el.textContent = emoji;
+        let x = 50;
+        let y = 44;
+        if (payload.fromSocketId) {
+          const target = Array.from(overlay.querySelectorAll("[data-socket-id]"))
+            .find(item => item.dataset.socketId === payload.fromSocketId);
+          if (target) {
+            const overlayRect = overlay.getBoundingClientRect();
+            const targetRect = target.getBoundingClientRect();
+            x = ((targetRect.left + targetRect.width / 2 - overlayRect.left) / overlayRect.width) * 100;
+            y = ((targetRect.top + targetRect.height / 2 - overlayRect.top) / overlayRect.height) * 100;
+          }
+        }
+        el.style.setProperty("--x", `${x}%`);
+        el.style.setProperty("--y", `${y}%`);
+        overlay.appendChild(el);
+        setTimeout(() => el.remove(), 1700);
+        return;
+      }
+
       const el = document.getElementById("tauntDisplay");
       el.innerHTML = `<span class="taunt-float">${emoji}</span>`;
       setTimeout(() => { el.innerHTML = ""; }, 2100);
     }
 
     // ── Avatar Upload ─────────────────────────────────────────────────────
+    // Futebol de Botao
+    let buttonTicker = null;
+    let buttonShotAnim = null;
+
+    function openButtonSoccerFromSidebar() {
+      if (!mp.isOnline) {
+        showToast("Faca login para abrir o futebol de botao.");
+        document.getElementById("authOverlay").classList.remove("hidden");
+        return;
+      }
+      openLobby();
+      setTimeout(() => document.getElementById("myBetInput")?.focus(), 80);
+    }
+
+    function createButtonSoccerRoom() {
+      if (!mp.isOnline) {
+        showToast("Faca login para abrir uma mesa.");
+        document.getElementById("authOverlay").classList.remove("hidden");
+        return;
+      }
+      const bet = Number(document.getElementById("myBetInput").value) || 10;
+      if (bet < 5) { showToast("Aposta minima: 5 creditos."); return; }
+      if (bet > state.betCredits) { showToast("Creditos de aposta insuficientes."); return; }
+      mp.socket.emit("button:create", { bet });
+      document.getElementById("lobbyOverlay").classList.add("hidden");
+    }
+
+    function acceptButtonSoccerInvite() {
+      if (!mp.buttonInviteRoomId) return;
+      document.getElementById("buttonSoccerInviteToast").classList.add("hidden");
+      mp.socket.emit("button:join", { roomId: mp.buttonInviteRoomId });
+      mp.buttonInviteRoomId = null;
+    }
+
+    function rejectButtonSoccerInvite() {
+      mp.buttonInviteRoomId = null;
+      document.getElementById("buttonSoccerInviteToast").classList.add("hidden");
+    }
+
+    function startButtonSoccer() {
+      if (!mp.buttonRoomId) return;
+      mp.socket.emit("button:start", { roomId: mp.buttonRoomId });
+    }
+
+    function readyButtonSoccerReplay() {
+      if (!mp.buttonRoomId) return;
+      const bet = Number(document.getElementById("buttonReplayBet").value) || mp.buttonRoom?.bet || 10;
+      mp.socket.emit("button:ready", { roomId: mp.buttonRoomId, bet });
+    }
+
+    function leaveButtonSoccerRoom() {
+      if (mp.buttonRoomId) {
+        mp.socket?.emit("button:leave", { roomId: mp.buttonRoomId });
+      }
+      closeButtonSoccerOverlay(false);
+    }
+
+    function closeButtonSoccerOverlay(fromServer = false) {
+      document.getElementById("buttonSoccerOverlay").classList.add("hidden");
+      document.getElementById("buttonSoccerInviteToast").classList.add("hidden");
+      if (buttonTicker) { clearInterval(buttonTicker); buttonTicker = null; }
+      if (buttonShotAnim) { cancelAnimationFrame(buttonShotAnim); buttonShotAnim = null; }
+      mp.buttonInviteRoomId = null;
+      mp.buttonRoomId = null;
+      mp.buttonRoom = null;
+      mp.buttonLastGoalId = null;
+      mp.buttonLastShotId = null;
+      mp.buttonShotAnimating = false;
+      if (!fromServer) updateLobbyHeader();
+    }
+
+    function getButtonSoccerMe() {
+      return mp.buttonRoom?.players?.find(player => player.isMe) || null;
+    }
+
+    function formatMs(ms) {
+      const total = Math.max(0, Math.ceil(Number(ms || 0) / 1000));
+      const min = Math.floor(total / 60);
+      const sec = String(total % 60).padStart(2, "0");
+      return `${min}:${sec}`;
+    }
+
+    function updateButtonSoccerClock() {
+      if (!mp.buttonRoom) return;
+      const room = mp.buttonRoom;
+      const now = Date.now();
+      const gameLeft = room.status === "playing" ? Math.max(0, Number(room.gameEndsAt || now) - now) : 0;
+      const turnLeft = room.status === "playing" ? Math.max(0, Number(room.turnEndsAt || now) - now) : 0;
+      const turnPlayer = room.players?.find(player => player.socketId === room.turnSocketId);
+      document.getElementById("buttonSoccerClock").textContent = room.status === "playing"
+        ? `${formatMs(gameLeft)} | turno ${Math.ceil(turnLeft / 1000)}s`
+        : room.status === "finished"
+          ? "Fim de jogo"
+          : "Aguardando";
+      if (turnPlayer && room.status === "playing") {
+        document.getElementById("buttonSoccerMessage").textContent = `${turnPlayer.username} na vez. ${room.message || ""}`;
+      }
+      if (!mp.buttonShotAnimating) drawButtonSoccerField(room);
+    }
+
+    function ensureButtonTicker() {
+      if (buttonTicker) clearInterval(buttonTicker);
+      buttonTicker = setInterval(updateButtonSoccerClock, 250);
+    }
+
+    function renderButtonSoccerRoom(room) {
+      const previousGoalId = mp.buttonLastGoalId;
+      const previousShotId = mp.buttonLastShotId;
+      mp.buttonRoom = room;
+      mp.buttonRoomId = room.roomId;
+
+      document.getElementById("buttonSoccerOverlay").classList.remove("hidden");
+      document.getElementById("buttonSoccerBetLabel").textContent = `Aposta: ${room.bet} creditos`;
+      document.getElementById("buttonSoccerScore").textContent = `${room.scores?.red || 0} x ${room.scores?.white || 0}`;
+      document.getElementById("buttonReplayBet").value = room.bet || 10;
+      document.getElementById("buttonSoccerMessage").textContent = room.message || "";
+
+      renderButtonSoccerRoomControls(room);
+
+      document.getElementById("buttonPlayers").innerHTML = (room.players || []).map(player => `
+        <div class="button-player-chip ${player.isMe ? "is-me" : ""} ${player.isTurn ? "is-turn" : ""}">
+          <span class="button-color-dot" style="--button-color:${escHtml(player.color || "#fff")}"></span>
+          <span>
+            <strong>${escHtml(player.username)}${player.isMe ? " (voce)" : ""}</strong>
+            <small>${escHtml(player.teamName || player.team)}${player.isHost ? " | dono" : ""}</small>
+          </span>
+          <span class="button-ready-badge">${player.ready ? `Pronto ${player.voteBet}` : player.isTurn ? "Vez" : ""}</span>
+        </div>
+      `).join("");
+
+      updateButtonSoccerClock();
+      ensureButtonTicker();
+
+      if (room.lastGoal?.id && room.lastGoal.id !== previousGoalId) {
+        mp.buttonLastGoalId = room.lastGoal.id;
+        showButtonGoalConfetti(room.lastGoal.team);
+      }
+
+      if (room.lastShot?.id && room.lastShot.id !== previousShotId && Array.isArray(room.lastShot.path) && room.lastShot.path.length) {
+        mp.buttonLastShotId = room.lastShot.id;
+        animateButtonShot(room, room.lastShot.path);
+      } else {
+        drawButtonSoccerField(room);
+      }
+    }
+
+    function renderButtonSoccerRoomControls(room) {
+      if (!room) return;
+      const isWaiting = room.status === "waiting";
+      const isPlaying = room.status === "playing";
+      const isFinished = room.status === "finished";
+      const isHost = room.hostSocketId === mp.socket?.id;
+      const me = getButtonSoccerMe();
+      document.getElementById("buttonShootBtn").disabled = !(isPlaying && room.turnSocketId === mp.socket?.id) || mp.buttonShotAnimating;
+      document.getElementById("buttonStartBtn").disabled = !(isWaiting && isHost && (room.players?.length || 0) >= 2);
+      document.getElementById("buttonReadyBtn").disabled = !(isFinished && me && !me.ready);
+      document.getElementById("buttonReplayBet").disabled = !isFinished;
+    }
+
+    function getButtonCanvasPoint(event) {
+      const rect = buttonSoccerCanvas.getBoundingClientRect();
+      const field = mp.buttonRoom?.field || { width: buttonSoccerCanvas.width, height: buttonSoccerCanvas.height };
+      return {
+        x: ((event.clientX - rect.left) / rect.width) * field.width,
+        y: ((event.clientY - rect.top) / rect.height) * field.height
+      };
+    }
+
+    function updateButtonAim(event) {
+      if (!mp.buttonRoom || mp.buttonRoom.status !== "playing") return;
+      const me = getButtonSoccerMe();
+      if (!me || mp.buttonRoom.turnSocketId !== mp.socket?.id) return;
+      const point = getButtonCanvasPoint(event);
+      mp.buttonAimAngle = Math.atan2(point.y - me.y, point.x - me.x);
+      drawButtonSoccerField(mp.buttonRoom);
+    }
+
+    function shootButtonSoccer() {
+      if (!mp.buttonRoomId || !mp.buttonRoom) return;
+      if (mp.buttonRoom.turnSocketId !== mp.socket?.id) {
+        showToast("Aguarde sua vez.");
+        return;
+      }
+      mp.socket.emit("button:shoot", {
+        roomId: mp.buttonRoomId,
+        angle: mp.buttonAimAngle,
+        power: Number(buttonPower.value || 60) / 100
+      });
+      document.getElementById("buttonShootBtn").disabled = true;
+    }
+
+    function drawButtonSoccerField(room, frame = null) {
+      const field = room.field || { width: 1180, height: 680, goalWidth: 190, buttonRadius: 25, ballRadius: 12 };
+      const ctx = buttonSoccerCtx;
+      ctx.clearRect(0, 0, field.width, field.height);
+
+      ctx.fillStyle = "#0b7449";
+      ctx.fillRect(0, 0, field.width, field.height);
+      for (let x = 0; x < field.width; x += 118) {
+        ctx.fillStyle = (x / 118) % 2 ? "rgba(255,255,255,.035)" : "rgba(0,0,0,.035)";
+        ctx.fillRect(x, 0, 118, field.height);
+      }
+
+      ctx.strokeStyle = "rgba(255,255,255,.82)";
+      ctx.lineWidth = 5;
+      ctx.strokeRect(52, 52, field.width - 104, field.height - 104);
+      ctx.beginPath();
+      ctx.moveTo(field.width / 2, 52);
+      ctx.lineTo(field.width / 2, field.height - 52);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(field.width / 2, field.height / 2, 92, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.strokeRect(52, field.height / 2 - 145, 150, 290);
+      ctx.strokeRect(field.width - 202, field.height / 2 - 145, 150, 290);
+
+      const goalTop = field.height / 2 - field.goalWidth / 2;
+      ctx.fillStyle = "rgba(255,255,255,.18)";
+      ctx.fillRect(0, goalTop, 52, field.goalWidth);
+      ctx.fillRect(field.width - 52, goalTop, 52, field.goalWidth);
+      ctx.strokeRect(0, goalTop, 52, field.goalWidth);
+      ctx.strokeRect(field.width - 52, goalTop, 52, field.goalWidth);
+
+      const ball = frame?.ball || room.ball || { x: field.width / 2, y: field.height / 2 };
+      const activeFrameButton = frame?.button;
+      (room.players || []).forEach(player => {
+        const drawPlayer = activeFrameButton && player.socketId === room.lastShot?.playerSocketId
+          ? { ...player, x: activeFrameButton.x, y: activeFrameButton.y }
+          : player;
+        drawButtonPlayer(ctx, drawPlayer, field, player.socketId === room.turnSocketId);
+      });
+
+      ctx.fillStyle = "#fbf6e3";
+      ctx.beginPath();
+      ctx.arc(ball.x, ball.y, field.ballRadius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = "#17201d";
+      ctx.lineWidth = 3;
+      ctx.stroke();
+
+      const me = getButtonSoccerMe();
+      if (room.status === "playing" && me && room.turnSocketId === mp.socket?.id && !mp.buttonShotAnimating) {
+        const force = Number(buttonPower.value || 60) / 100;
+        const length = 72 + force * 135;
+        ctx.save();
+        ctx.translate(me.x, me.y);
+        ctx.rotate(mp.buttonAimAngle);
+        ctx.strokeStyle = "#f9e8a8";
+        ctx.fillStyle = "#f9e8a8";
+        ctx.lineWidth = 5;
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineTo(length, 0);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(length + 14, 0);
+        ctx.lineTo(length - 10, -10);
+        ctx.lineTo(length - 10, 10);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+      }
+    }
+
+    function drawButtonPlayer(ctx, player, field, isTurn) {
+      const radius = field.buttonRadius || 25;
+      ctx.save();
+      ctx.shadowColor = "rgba(0,0,0,.34)";
+      ctx.shadowBlur = 12;
+      ctx.shadowOffsetY = 5;
+      ctx.fillStyle = player.color || (player.team === "red" ? "#d84545" : "#f6f0df");
+      ctx.beginPath();
+      ctx.arc(player.x, player.y, radius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.shadowColor = "transparent";
+      ctx.lineWidth = isTurn ? 6 : 3;
+      ctx.strokeStyle = isTurn ? "#f9e8a8" : player.team === "red" ? "#771e25" : "#25312d";
+      ctx.stroke();
+      ctx.fillStyle = player.team === "red" ? "#fff9e8" : "#173128";
+      ctx.font = "900 14px Segoe UI, Arial";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(String(player.username || "?").slice(0, 2).toUpperCase(), player.x, player.y);
+      ctx.restore();
+    }
+
+    function animateButtonShot(room, path) {
+      if (buttonShotAnim) cancelAnimationFrame(buttonShotAnim);
+      mp.buttonShotAnimating = true;
+      renderButtonSoccerRoomControls(room);
+      const start = performance.now();
+      const duration = Math.min(1150, Math.max(520, path.length * 18));
+
+      function frame(now) {
+        const t = Math.min((now - start) / duration, 1);
+        const idx = Math.min(path.length - 1, Math.floor(t * (path.length - 1)));
+        drawButtonSoccerField(room, path[idx]);
+        if (t < 1) {
+          buttonShotAnim = requestAnimationFrame(frame);
+        } else {
+          mp.buttonShotAnimating = false;
+          buttonShotAnim = null;
+          drawButtonSoccerField(room);
+          renderButtonSoccerRoomControls(room);
+        }
+      }
+      buttonShotAnim = requestAnimationFrame(frame);
+    }
+
+    function showButtonGoalConfetti(team) {
+      const layer = document.getElementById("buttonConfettiLayer");
+      if (!layer || !mp.buttonRoom) return;
+      const field = mp.buttonRoom.field || { width: 1180, height: 680 };
+      const originX = team === "red" ? field.width - 92 : 92;
+      const originY = field.height / 2;
+      const colors = ["#f9e8a8", "#ff6969", "#ffffff", "#42d392", "#3fb5ff"];
+      for (let i = 0; i < 54; i += 1) {
+        const piece = document.createElement("span");
+        piece.className = "button-confetti";
+        piece.style.left = `${(originX / field.width) * 100}%`;
+        piece.style.top = `${(originY / field.height) * 100}%`;
+        piece.style.background = colors[i % colors.length];
+        piece.style.setProperty("--dx", `${(Math.random() - 0.5) * 520}px`);
+        piece.style.setProperty("--dy", `${-80 - Math.random() * 260}px`);
+        layer.appendChild(piece);
+        setTimeout(() => piece.remove(), 1250);
+      }
+    }
+
+    buttonSoccerCanvas.addEventListener("pointermove", updateButtonAim);
+    buttonSoccerCanvas.addEventListener("pointerdown", (event) => {
+      updateButtonAim(event);
+      if (buttonSoccerCanvas.setPointerCapture) {
+        buttonSoccerCanvas.setPointerCapture(event.pointerId);
+      }
+    });
+    buttonPower.addEventListener("input", () => {
+      buttonPowerValue.textContent = `${buttonPower.value}%`;
+      if (mp.buttonRoom && !mp.buttonShotAnimating) drawButtonSoccerField(mp.buttonRoom);
+    });
+
     function setAvatarDisplay(avatarDataUrl) {
       const el = document.getElementById("myAvatarDisplay");
       if (!el) return;
@@ -6695,7 +7563,7 @@
       // Players list
       document.getElementById("horseRacers").innerHTML = room.players.map(p => {
         const horse = room.horses.find(h=>h.id===p.pickedHorse);
-        return `<div class="horse-racer-chip ${p.isMe?'is-me':''}">
+        return `<div class="horse-racer-chip ${p.isMe?'is-me':''}" data-socket-id="${escHtml(p.socketId)}">
           ${p.avatar ? `<img src="${p.avatar}" style="width:20px;height:20px;border-radius:50%;object-fit:cover">` : ''}
           ${escHtml(p.username)}${horse ? ` → ${HORSE_EMOJIS[horse.id-1]}${horse.name}` : ' (sem cavalo)'}
         </div>`;

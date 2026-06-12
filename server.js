@@ -53,6 +53,7 @@ const db = {
       id:               data.nextUserId++,
       username,
       password_hash,
+      avatar:           "",
       credits:          DAILY_ALBUM_CREDITS,
       bet_credits:      INITIAL_BET_CREDITS,
       stickers:         [],
@@ -278,6 +279,22 @@ app.post("/api/save", authMiddleware, (req, res) => {
   }
 });
 
+// ─── REST: Avatar ─────────────────────────────────────────────────────────
+app.post("/api/avatar", authMiddleware, (req, res) => {
+  try {
+    const { avatar } = req.body || {};
+    // avatar is a base64 data URI, max ~20KB (80x80 JPEG)
+    if (!avatar || typeof avatar !== "string") return res.status(400).json({ error: "Avatar inválido" });
+    if (avatar.length > 30000) return res.status(400).json({ error: "Imagem muito grande (max 80x80)" });
+    db.updateUser(req.userId, { avatar });
+    const updated = db.findUser("id", req.userId);
+    res.json({ ok: true, user: safeUser(updated) });
+  } catch (err) {
+    console.error("[avatar] erro:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ─── REST: Histórico de partidas ───────────────────────────────────────────
 app.get("/api/matches", authMiddleware, (req, res) => {
   try {
@@ -306,6 +323,7 @@ io.use((socket, next) => {
   if (!payload) return next(new Error("Não autenticado"));
   socket.userId   = payload.id;
   socket.username = payload.username;
+  socket.avatar   = db.findUser("id", payload.id)?.avatar || "";
   next();
 });
 
@@ -416,12 +434,32 @@ function finishBlackjackRoom(room) {
       return a.index - b.index;
     });
 
-  const winner = eligible[0]?.player || null;
+  let winner = null;
+  let tiebreaker = null;
+
+  if (eligible.length > 1 && eligible[0].total === eligible[1].total) {
+    // Tie! Each tied player draws one more card
+    const topTotal = eligible[0].total;
+    const tied = eligible.filter(e => e.total === topTotal);
+    tied.forEach(e => {
+      e.tieCard = drawBlackjackCard(room);
+      e.player.cards.push(e.tieCard); // add to hand for display
+    });
+    // Highest tiebreak card wins; if still tied, first to join wins
+    tied.sort((a, b) => cardValue(b.tieCard) - cardValue(a.tieCard));
+    winner = tied[0].player;
+    tiebreaker = `Desempate: ${tied.map(e => `${e.player.username} tirou ${e.tieCard.rank}`).join(', ')}.`;
+  } else {
+    winner = eligible[0]?.player || null;
+  }
+
   room.winnerSocketId = winner?.socketId || null;
   room.houseWon = !winner;
-  room.message = winner
-    ? `${winner.username} venceu a mesa com ${handTotal(winner.cards)} pontos.`
-    : `A casa venceu com ${dealerBust ? "estouro dos jogadores" : `${dealerTotal} pontos`}.`;
+  room.message = tiebreaker
+    ? `${tiebreaker} ${winner.username} vence!`
+    : winner
+      ? `${winner.username} venceu a mesa com ${handTotal(winner.cards)} pontos.`
+      : `A casa venceu com ${dealerBust ? "estouro dos jogadores" : `${dealerTotal} pontos`}.`;
 
   const totalPot = room.players.reduce((sum, player) => sum + player.bet, 0);
   room.players.forEach(player => {
@@ -476,6 +514,7 @@ io.on("connection", (socket) => {
     socketId: socket.id,
     userId:   socket.userId,
     username: socket.username,
+    avatar:   socket.avatar || "",
     inGame:   false,
     roomId:   null
   });
@@ -571,6 +610,12 @@ io.on("connection", (socket) => {
     }
   });
 
+  // ── Emoji Taunts ───────────────────────────────────────────────────────
+  socket.on("game:taunt", ({ emoji }) => {
+    const p = onlinePlayers.get(socket.id);
+    if (p?.roomId) socket.to(p.roomId).emit("game:taunt", { emoji, from: socket.username });
+  });
+
   // ── Jogo em tempo real ─────────────────────────────────────────────────
   socket.on("game:state", (state) => {
     const p = onlinePlayers.get(socket.id);
@@ -638,9 +683,9 @@ io.on("connection", (socket) => {
     broadcastOnlineList();
   });
 
-  // ── Desconexão ─────────────────────────────────────────────────────────
+  // ── Blackjack ───────────────────────────────────────────────────────────
   socket.on("blackjack:create", ({ bet }) => {
-    const tableBet = Math.max(5, Number(bet) || 10);
+    const tableBet = Math.max(5, Math.min(50, Number(bet) || 10));
     const user = db.findUser("id", socket.userId);
     const player = onlinePlayers.get(socket.id);
     if (!user || user.bet_credits < tableBet)
@@ -702,6 +747,12 @@ io.on("connection", (socket) => {
       return socket.emit("blackjack:error", "Créditos de aposta insuficientes.");
     if (player?.inGame)
       return socket.emit("blackjack:error", "Você já está em uma partida.");
+
+    // Feature 4: Bet cap for 3+ players
+    const maxBet = room.players.length >= 2 ? 20 : 50;
+    if (room.bet > maxBet) {
+      return socket.emit("blackjack:error", `Esta mesa tem ${room.players.length + 1} jogadores. Aposta máxima é ${maxBet} créditos.`);
+    }
 
     room.players.push({
       socketId: socket.id,
@@ -785,6 +836,146 @@ io.on("connection", (socket) => {
     if (allBlackjackPlayersDone(room)) finishBlackjackRoom(room);
   });
 
+  // ── Corrida de Cavalos ─────────────────────────────────────────────────
+  socket.on("horse:create", ({ bet }) => {
+    const tableBet = Math.max(5, Math.min(50, Number(bet) || 10));
+    const user = db.findUser("id", socket.userId);
+    const player = onlinePlayers.get(socket.id);
+    if (!user || user.bet_credits < tableBet)
+      return socket.emit("horse:error", "Créditos de aposta insuficientes.");
+    if (player?.inGame)
+      return socket.emit("horse:error", "Você já está em uma partida.");
+
+    const roomId = `horse-${Date.now()}-${socket.id}`;
+    const room = {
+      roomId, hostSocketId: socket.id, hostUsername: socket.username,
+      bet: tableBet, status: "waiting", finishOrder: null,
+      message: "Mesa aberta. Aguarde jogadores ou inicie a corrida.",
+      players: [{ socketId: socket.id, userId: socket.userId, username: socket.username, avatar: socket.avatar || "", bet: tableBet, pickedHorse: null, joinedAt: Date.now() }]
+    };
+    horseRooms.set(roomId, room);
+    socket.join(roomId);
+    if (player) { player.inGame = true; player.roomId = roomId; }
+
+    // Notify others
+    for (const [, target] of onlinePlayers) {
+      if (target.socketId !== socket.id && !target.inGame) {
+        io.to(target.socketId).emit("horse:invite", { roomId, fromUsername: socket.username, bet: tableBet });
+      }
+    }
+    emitHorseUpdate(room);
+    broadcastOnlineList();
+  });
+
+  socket.on("horse:join", ({ roomId }) => {
+    const room = horseRooms.get(roomId);
+    if (!room || room.status !== "waiting")
+      return socket.emit("horse:error", "Corrida indisponível.");
+    if (room.players.some(p => p.socketId === socket.id))
+      return emitHorseUpdate(room);
+    if (room.players.length >= 5)
+      return socket.emit("horse:error", "Mesa cheia (máx. 5 jogadores).");
+
+    const user = db.findUser("id", socket.userId);
+    const player = onlinePlayers.get(socket.id);
+    if (!user || user.bet_credits < room.bet)
+      return socket.emit("horse:error", "Créditos de aposta insuficientes.");
+    if (player?.inGame)
+      return socket.emit("horse:error", "Você já está em uma partida.");
+
+    room.players.push({ socketId: socket.id, userId: socket.userId, username: socket.username, avatar: socket.avatar || "", bet: room.bet, pickedHorse: null, joinedAt: Date.now() });
+    socket.join(roomId);
+    if (player) { player.inGame = true; player.roomId = roomId; }
+    room.message = `${socket.username} entrou na corrida.`;
+    emitHorseUpdate(room);
+    broadcastOnlineList();
+  });
+
+  socket.on("horse:pick", ({ roomId, horseId }) => {
+    const room = horseRooms.get(roomId);
+    if (!room || room.status !== "waiting") return;
+    const player = room.players.find(p => p.socketId === socket.id);
+    if (!player) return;
+    player.pickedHorse = Number(horseId);
+    room.message = `${socket.username} escolheu o cavalo ${HORSES.find(h => h.id === player.pickedHorse)?.name}.`;
+    emitHorseUpdate(room);
+  });
+
+  socket.on("horse:start", ({ roomId }) => {
+    const room = horseRooms.get(roomId);
+    if (!room || room.status !== "waiting") return;
+    if (room.hostSocketId !== socket.id)
+      return socket.emit("horse:error", "Só o dono pode iniciar.");
+    if (room.players.some(p => p.pickedHorse === null))
+      return socket.emit("horse:error", "Todos devem escolher um cavalo antes de largar.");
+
+    room.status = "racing";
+    room.finishOrder = makeFinishOrder();
+    room.message = "Largaram! 🏇";
+
+    // Descontar apostas antecipadamente
+    room.players.forEach(p => {
+      const u = db.findUser("id", p.userId);
+      if (u) db.updateUser(p.userId, { bet_credits: Math.max(0, (u.bet_credits || 0) - p.bet) });
+    });
+
+    emitHorseUpdate(room);
+
+    // Finalizar após 8 segundos (tempo da animação no cliente)
+    setTimeout(() => {
+      if (!horseRooms.has(roomId)) return;
+      room.status = "finished";
+      const winnerHorseId = room.finishOrder[0];
+      const winners = room.players.filter(p => p.pickedHorse === winnerHorseId);
+      const totalPot = room.players.reduce((s, p) => s + p.bet, 0);
+
+      if (winners.length > 0) {
+        const share = Math.floor(totalPot / winners.length);
+        winners.forEach(w => {
+          const u = db.findUser("id", w.userId);
+          if (u) db.updateUser(w.userId, { bet_credits: (u.bet_credits || 0) + share });
+        });
+        room.message = `🏆 ${HORSES.find(h=>h.id===winnerHorseId).name} venceu! ${winners.map(w=>w.username).join(', ')} ganhou${winners.length>1?` (dividido)`:""}!`;
+      } else {
+        room.message = `🏆 ${HORSES.find(h=>h.id===winnerHorseId).name} venceu! Ninguém apostou nele.`;
+      }
+
+      room.players.forEach(p => {
+        const updated = db.findUser("id", p.userId);
+        io.to(p.socketId).emit("horse:finished", {
+          room: serializeHorseRoom(room, p.socketId),
+          updatedUser: safeUser(updated)
+        });
+        const online = onlinePlayers.get(p.socketId);
+        if (online) { online.inGame = false; online.roomId = null; }
+      });
+      horseRooms.delete(roomId);
+      broadcastOnlineList();
+    }, 8000);
+  });
+
+  socket.on("horse:leave", ({ roomId }) => {
+    const room = horseRooms.get(roomId);
+    if (!room || room.status !== "waiting") return;
+    if (room.hostSocketId === socket.id) {
+      room.players.forEach(p => {
+        io.to(p.socketId).emit("horse:cancelled", { message: "O dono cancelou a corrida." });
+        const online = onlinePlayers.get(p.socketId);
+        if (online) { online.inGame = false; online.roomId = null; }
+      });
+      horseRooms.delete(roomId);
+      broadcastOnlineList();
+      return;
+    }
+    room.players = room.players.filter(p => p.socketId !== socket.id);
+    socket.leave(roomId);
+    const online = onlinePlayers.get(socket.id);
+    if (online) { online.inGame = false; online.roomId = null; }
+    room.message = `${socket.username} saiu da corrida.`;
+    emitHorseUpdate(room);
+    broadcastOnlineList();
+  });
+
   socket.on("disconnect", () => {
     console.log(`[-] ${socket.username} desconectado`);
     const player = onlinePlayers.get(socket.id);
@@ -801,6 +992,16 @@ io.on("connection", (socket) => {
         if (other) { other.inGame = false; other.roomId = null; }
         activeRooms.delete(player.roomId);
       }
+    }
+
+    const horseRoom = findHorseRoomBySocket(socket.id);
+    if (horseRoom && (horseRoom.status === "waiting" || horseRoom.hostSocketId === socket.id)) {
+      horseRoom.players.forEach(p => {
+        io.to(p.socketId).emit("horse:cancelled", { message: `${socket.username} desconectou.` });
+        const online = onlinePlayers.get(p.socketId);
+        if (online) { online.inGame = false; online.roomId = null; }
+      });
+      horseRooms.delete(horseRoom.roomId);
     }
 
     const blackjackRoom = findBlackjackRoomBySocket(socket.id);
@@ -829,10 +1030,62 @@ io.on("connection", (socket) => {
   });
 });
 
+// ── Corrida de Cavalos ──────────────────────────────────────────────────────
+const HORSES = [
+  { id: 1, name: "Trovão",     color: "#e74c3c" },
+  { id: 2, name: "Relâmpago",  color: "#f39c12" },
+  { id: 3, name: "Tempestade", color: "#2ecc71" },
+  { id: 4, name: "Cometa",     color: "#3498db" },
+  { id: 5, name: "Furacão",    color: "#9b59b6" }
+];
+const horseRooms = new Map();
+
+function makeFinishOrder() {
+  const order = [1,2,3,4,5];
+  for (let i = order.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [order[i], order[j]] = [order[j], order[i]];
+  }
+  return order;
+}
+
+function serializeHorseRoom(room, viewerSocketId) {
+  return {
+    roomId: room.roomId,
+    hostSocketId: room.hostSocketId,
+    bet: room.bet,
+    status: room.status,
+    message: room.message,
+    horses: HORSES,
+    finishOrder: room.status === "finished" ? room.finishOrder : null,
+    players: room.players.map(p => ({
+      socketId: p.socketId,
+      username: p.username,
+      avatar: p.avatar || "",
+      pickedHorse: p.pickedHorse,
+      isHost: p.socketId === room.hostSocketId,
+      isMe: p.socketId === viewerSocketId
+    }))
+  };
+}
+
+function emitHorseUpdate(room) {
+  room.players.forEach(p => {
+    io.to(p.socketId).emit("horse:update", serializeHorseRoom(room, p.socketId));
+  });
+}
+
+function findHorseRoomBySocket(socketId) {
+  for (const room of horseRooms.values()) {
+    if (room.players.some(p => p.socketId === socketId)) return room;
+  }
+  return null;
+}
+
 function broadcastOnlineList() {
   const list = [];
   for (const [, p] of onlinePlayers) {
-    list.push({ socketId: p.socketId, username: p.username, inGame: p.inGame });
+    list.push({ socketId: p.socketId, username: p.username, inGame: p.inGame, avatar: p.avatar });
   }
   io.emit("online:list", list);
 }

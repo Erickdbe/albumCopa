@@ -20,6 +20,11 @@ const SALT_ROUNDS = 10;
 const DB_FILE     = path.join(__dirname, "db.json");
 const DAILY_ALBUM_CREDITS = 30;
 const INITIAL_BET_CREDITS = 350;
+const MARKET_PRICES = {
+  common: 10,
+  rare: 20,
+  legendary: 30
+};
 
 function todayKey() {
   return new Intl.DateTimeFormat("en-CA", {
@@ -33,9 +38,38 @@ function todayKey() {
 // ─── Banco de dados JSON ───────────────────────────────────────────────────
 function loadDb() {
   if (!fs.existsSync(DB_FILE)) {
-    fs.writeFileSync(DB_FILE, JSON.stringify({ users: [], matches: [], nextUserId: 1, nextMatchId: 1 }));
+    fs.writeFileSync(DB_FILE, JSON.stringify({ users: [], matches: [], market_listings: [], nextUserId: 1, nextMatchId: 1, nextMarketId: 1 }));
   }
-  return JSON.parse(fs.readFileSync(DB_FILE, "utf8"));
+  const data = JSON.parse(fs.readFileSync(DB_FILE, "utf8"));
+  let changed = false;
+
+  if (!Array.isArray(data.users)) {
+    data.users = [];
+    changed = true;
+  }
+  if (!Array.isArray(data.matches)) {
+    data.matches = [];
+    changed = true;
+  }
+  if (!Array.isArray(data.market_listings)) {
+    data.market_listings = [];
+    changed = true;
+  }
+  if (!Number.isFinite(Number(data.nextUserId))) {
+    data.nextUserId = 1;
+    changed = true;
+  }
+  if (!Number.isFinite(Number(data.nextMatchId))) {
+    data.nextMatchId = 1;
+    changed = true;
+  }
+  if (!Number.isFinite(Number(data.nextMarketId))) {
+    data.nextMarketId = 1;
+    changed = true;
+  }
+
+  if (changed) saveDb(data);
+  return data;
 }
 
 function saveDb(db) {
@@ -56,8 +90,12 @@ const db = {
       avatar:           "",
       credits:          DAILY_ALBUM_CREDITS,
       bet_credits:      INITIAL_BET_CREDITS,
+      exchange_wins:    0,
+      bj_wins:          0,
       stickers:         [],
+      duplicates:       {},
       pending_stickers: [],
+      last_sale_day:    "",
       initial_bet_credits_granted: INITIAL_BET_CREDITS,
       last_album_credit_day: todayKey(),
       created_at:       new Date().toISOString()
@@ -115,6 +153,41 @@ const db = {
       }));
   }
 };
+
+function normalizeUserProgress(user) {
+  if (!user) return null;
+
+  const fields = {};
+  if (!user.duplicates || Array.isArray(user.duplicates) || typeof user.duplicates !== "object") {
+    fields.duplicates = {};
+  }
+  if (!Number.isFinite(Number(user.exchange_wins))) {
+    fields.exchange_wins = Math.max(0, Number(user.bj_wins || 0) || 0);
+  }
+  if (!Number.isFinite(Number(user.bj_wins))) {
+    fields.bj_wins = Math.max(0, Number(user.exchange_wins || 0) || 0);
+  }
+  if (typeof user.last_sale_day !== "string") {
+    fields.last_sale_day = "";
+  }
+
+  return Object.keys(fields).length ? db.updateUser(user.id, fields) : user;
+}
+
+function addExchangeWin(userId) {
+  const user = normalizeUserProgress(db.findUser("id", userId));
+  if (!user) return null;
+
+  const wins = Math.max(0, Number(user.exchange_wins || 0) || 0) + 1;
+  return db.updateUser(userId, {
+    exchange_wins: wins,
+    bj_wins: wins
+  });
+}
+
+function getMarketPrice(rarity) {
+  return MARKET_PRICES[rarity] || 0;
+}
 
 function refreshDailyAlbumCredits(user) {
   if (!user) return null;
@@ -184,6 +257,7 @@ function verifyToken(token) {
 }
 function safeUser(user) {
   if (!user) return null;
+  user = normalizeUserProgress(user);
   const { password_hash, ...safe } = user;
   return safe;
 }
@@ -229,7 +303,7 @@ app.post("/api/login", async (req, res) => {
     const ok = await bcrypt.compare(password, user.password_hash);
     if (!ok) return res.status(401).json({ error: "Usuário ou senha inválidos" });
 
-    user = normalizeInitialBetCredits(refreshDailyAlbumCredits(user));
+    user = normalizeUserProgress(normalizeInitialBetCredits(refreshDailyAlbumCredits(user)));
     console.log(`[login] ${user.username}`);
     res.json({ token: signToken(user), user: safeUser(user) });
   } catch (err) {
@@ -252,7 +326,7 @@ app.get("/api/me", authMiddleware, (req, res) => {
   try {
     let user = db.findUser("id", req.userId);
     if (!user) return res.status(404).json({ error: "Usuário não encontrado" });
-    user = normalizeInitialBetCredits(refreshDailyAlbumCredits(user));
+    user = normalizeUserProgress(normalizeInitialBetCredits(refreshDailyAlbumCredits(user)));
     res.json(safeUser(user));
   } catch (err) {
     console.error("[me] erro:", err);
@@ -263,14 +337,14 @@ app.get("/api/me", authMiddleware, (req, res) => {
 // ─── REST: Salvar progresso ────────────────────────────────────────────────
 app.post("/api/save", authMiddleware, (req, res) => {
   try {
-    const { credits, bet_credits, bj_wins, stickers, pending_stickers } = req.body || {};
+    const { credits, bet_credits, stickers, duplicates, pending_stickers } = req.body || {};
     const fields = {
       credits:          Number(credits)     || 0,
       bet_credits:      Number(bet_credits) || 0,
       stickers:         Array.isArray(stickers)         ? stickers         : [],
+      duplicates:       duplicates && typeof duplicates === "object" && !Array.isArray(duplicates) ? duplicates : {},
       pending_stickers: Array.isArray(pending_stickers) ? pending_stickers : []
     };
-    if (bj_wins !== undefined) fields.bj_wins = Math.max(0, Number(bj_wins) || 0);
     db.updateUser(req.userId, fields);
     res.json({ ok: true });
   } catch (err) {
@@ -288,6 +362,18 @@ app.post("/api/avatar", authMiddleware, (req, res) => {
     if (avatar.length > 30000) return res.status(400).json({ error: "Imagem muito grande (max 80x80)" });
     db.updateUser(req.userId, { avatar });
     const updated = db.findUser("id", req.userId);
+
+    if (typeof onlinePlayers !== "undefined") {
+      for (const [, player] of onlinePlayers) {
+        if (player.userId === req.userId) {
+          player.avatar = avatar;
+          const liveSocket = io.sockets.sockets.get(player.socketId);
+          if (liveSocket) liveSocket.avatar = avatar;
+        }
+      }
+      broadcastOnlineList();
+    }
+
     res.json({ ok: true, user: safeUser(updated) });
   } catch (err) {
     console.error("[avatar] erro:", err);
@@ -296,6 +382,186 @@ app.post("/api/avatar", authMiddleware, (req, res) => {
 });
 
 // ─── REST: Histórico de partidas ───────────────────────────────────────────
+app.post("/api/exchange-credits", authMiddleware, (req, res) => {
+  try {
+    const user = normalizeUserProgress(db.findUser("id", req.userId));
+    if (!user) return res.status(404).json({ error: "Usuario nao encontrado" });
+
+    const exchangeWins = Math.max(0, Number(user.exchange_wins || 0) || 0);
+    const betCredits = Math.max(0, Number(user.bet_credits || 0) || 0);
+    if (exchangeWins < 2) {
+      return res.status(400).json({ error: "Ganhe 2 partidas para liberar a troca." });
+    }
+    if (betCredits < 10) {
+      return res.status(400).json({ error: "Voce precisa de 10 creditos de aposta." });
+    }
+
+    const updated = db.updateUser(req.userId, {
+      bet_credits: betCredits - 10,
+      credits: Math.max(0, Number(user.credits || 0) || 0) + 10,
+      exchange_wins: exchangeWins - 2,
+      bj_wins: Math.max(0, exchangeWins - 2)
+    });
+    res.json({ ok: true, user: safeUser(updated) });
+  } catch (err) {
+    console.error("[exchange] erro:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get("/api/market", authMiddleware, (req, res) => {
+  try {
+    const data = loadDb();
+    const userMap = {};
+    data.users.forEach(user => {
+      userMap[user.id] = {
+        username: user.username,
+        avatar: user.avatar || ""
+      };
+    });
+
+    const listings = data.market_listings
+      .filter(item => item.status === "active")
+      .slice(-80)
+      .reverse()
+      .map(item => ({
+        ...item,
+        seller_username: userMap[item.seller_id]?.username || "?",
+        seller_avatar: userMap[item.seller_id]?.avatar || ""
+      }));
+
+    const user = normalizeUserProgress(db.findUser("id", req.userId));
+    res.json({
+      listings,
+      today: todayKey(),
+      canListToday: user?.last_sale_day !== todayKey()
+    });
+  } catch (err) {
+    console.error("[market:list] erro:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/api/market/list", authMiddleware, (req, res) => {
+  try {
+    const { stickerId, rarity, code, name, image } = req.body || {};
+    const id = Number(stickerId);
+    const price = getMarketPrice(rarity);
+    if (!id || !price) return res.status(400).json({ error: "Figurinha invalida para venda." });
+
+    const user = normalizeUserProgress(db.findUser("id", req.userId));
+    if (!user) return res.status(404).json({ error: "Usuario nao encontrado" });
+
+    const today = todayKey();
+    if (user.last_sale_day === today) {
+      return res.status(400).json({ error: "Voce ja anunciou uma figurinha hoje." });
+    }
+
+    const duplicates = { ...(user.duplicates || {}) };
+    const currentCount = Math.max(0, Number(duplicates[id] || 0) || 0);
+    if (currentCount < 1) {
+      return res.status(400).json({ error: "Voce nao tem essa figurinha repetida." });
+    }
+    duplicates[id] = currentCount - 1;
+    if (duplicates[id] <= 0) delete duplicates[id];
+
+    const data = loadDb();
+    const listing = {
+      id: data.nextMarketId++,
+      seller_id: req.userId,
+      sticker_id: id,
+      rarity,
+      price,
+      code: String(code || `FIG-${String(id).padStart(2, "0")}`),
+      name: String(name || "Figurinha"),
+      image: String(image || ""),
+      status: "active",
+      created_day: today,
+      created_at: new Date().toISOString()
+    };
+    data.market_listings.push(listing);
+
+    const userIndex = data.users.findIndex(item => item.id === req.userId);
+    if (userIndex !== -1) {
+      data.users[userIndex].duplicates = duplicates;
+      data.users[userIndex].last_sale_day = today;
+    }
+    saveDb(data);
+
+    res.json({ ok: true, listing, user: safeUser(db.findUser("id", req.userId)) });
+  } catch (err) {
+    console.error("[market:create] erro:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/api/market/buy", authMiddleware, (req, res) => {
+  try {
+    const listingId = Number(req.body?.listingId);
+    const data = loadDb();
+    const listing = data.market_listings.find(item => item.id === listingId && item.status === "active");
+    if (!listing) return res.status(404).json({ error: "Anuncio indisponivel." });
+    if (listing.seller_id === req.userId) {
+      return res.status(400).json({ error: "Voce nao pode comprar seu proprio anuncio." });
+    }
+
+    const buyerIndex = data.users.findIndex(user => user.id === req.userId);
+    const sellerIndex = data.users.findIndex(user => user.id === listing.seller_id);
+    if (buyerIndex === -1 || sellerIndex === -1) {
+      return res.status(404).json({ error: "Usuario nao encontrado." });
+    }
+
+    const buyer = normalizeUserProgress(data.users[buyerIndex]);
+    const seller = normalizeUserProgress(data.users[sellerIndex]);
+    if (Number(buyer.credits || 0) < listing.price) {
+      return res.status(400).json({ error: "Creditos do album insuficientes." });
+    }
+
+    const buyerStickers = Array.isArray(buyer.stickers) ? [...buyer.stickers] : [];
+    const owned = buyerStickers.find(item => Number(item.id) === listing.sticker_id);
+    const buyerDuplicates = { ...(buyer.duplicates || {}) };
+
+    if (owned && (owned.unlocked || owned.collected)) {
+      buyerDuplicates[listing.sticker_id] = Math.max(0, Number(buyerDuplicates[listing.sticker_id] || 0) || 0) + 1;
+    } else if (owned) {
+      owned.unlocked = true;
+    } else {
+      buyerStickers.push({ id: listing.sticker_id, unlocked: true });
+    }
+
+    data.users[buyerIndex] = {
+      ...buyer,
+      credits: Number(buyer.credits || 0) - listing.price,
+      stickers: buyerStickers,
+      duplicates: buyerDuplicates
+    };
+    data.users[sellerIndex] = {
+      ...seller,
+      credits: Number(seller.credits || 0) + listing.price
+    };
+    listing.status = "sold";
+    listing.sold_to_id = req.userId;
+    listing.sold_at = new Date().toISOString();
+
+    saveDb(data);
+
+    const updatedSeller = safeUser(db.findUser("id", listing.seller_id));
+    for (const [, player] of onlinePlayers) {
+      if (player.userId === listing.seller_id) {
+        io.to(player.socketId).emit("market:sold", {
+          listing,
+          updatedUser: updatedSeller
+        });
+      }
+    }
+
+    res.json({ ok: true, user: safeUser(db.findUser("id", req.userId)) });
+  } catch (err) {
+    console.error("[market:buy] erro:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get("/api/matches", authMiddleware, (req, res) => {
   try {
     res.json(db.getMatchesForUser(req.userId));
@@ -384,6 +650,7 @@ function serializeBlackjackRoom(room, viewerSocketId) {
       return {
         socketId: player.socketId,
         username: player.username,
+        avatar: player.avatar || "",
         cards: player.cards,
         total,
         status: player.status,
@@ -474,6 +741,10 @@ function finishBlackjackRoom(room) {
     });
   });
 
+  if (winner?.userId) {
+    addExchangeWin(winner.userId);
+  }
+
   room.players.forEach(player => {
     const updated = db.findUser("id", player.userId);
     io.to(player.socketId).emit("blackjack:finished", {
@@ -509,12 +780,14 @@ function findBlackjackRoomBySocket(socketId) {
 
 io.on("connection", (socket) => {
   console.log(`[+] ${socket.username} conectado`);
+  const connectedUser = normalizeUserProgress(db.findUser("id", socket.userId));
+  socket.avatar = connectedUser?.avatar || socket.avatar || "";
 
   onlinePlayers.set(socket.id, {
     socketId: socket.id,
     userId:   socket.userId,
     username: socket.username,
-    avatar:   socket.avatar || "",
+    avatar:   socket.avatar,
     inGame:   false,
     roomId:   null
   });
@@ -664,6 +937,10 @@ io.on("connection", (socket) => {
       if (loser) db.updateUser(loserId, { bet_credits: Math.max(0, loser.bet_credits - loserBet) });
     }
 
+    if (winnerId) {
+      addExchangeWin(winnerId);
+    }
+
     // Envia resultado com saldo atualizado para cada jogador
     [[room.player1SocketId, p1?.userId], [room.player2SocketId, p2?.userId]].forEach(([sid, uid]) => {
       if (!sid || !uid) return;
@@ -709,6 +986,7 @@ io.on("connection", (socket) => {
         socketId: socket.id,
         userId: socket.userId,
         username: socket.username,
+        avatar: socket.avatar || "",
         bet: tableBet,
         cards: [],
         status: "waiting",
@@ -758,6 +1036,7 @@ io.on("connection", (socket) => {
       socketId: socket.id,
       userId: socket.userId,
       username: socket.username,
+      avatar: socket.avatar || "",
       bet: room.bet,
       cards: [],
       status: "waiting",
@@ -933,7 +1212,10 @@ io.on("connection", (socket) => {
         const share = Math.floor(totalPot / winners.length);
         winners.forEach(w => {
           const u = db.findUser("id", w.userId);
-          if (u) db.updateUser(w.userId, { bet_credits: (u.bet_credits || 0) + share });
+          if (u) {
+            db.updateUser(w.userId, { bet_credits: (u.bet_credits || 0) + share });
+            addExchangeWin(w.userId);
+          }
         });
         room.message = `🏆 ${HORSES.find(h=>h.id===winnerHorseId).name} venceu! ${winners.map(w=>w.username).join(', ')} ganhou${winners.length>1?` (dividido)`:""}!`;
       } else {
@@ -1085,6 +1367,8 @@ function findHorseRoomBySocket(socketId) {
 function broadcastOnlineList() {
   const list = [];
   for (const [, p] of onlinePlayers) {
+    const user = db.findUser("id", p.userId);
+    p.avatar = user?.avatar || p.avatar || "";
     list.push({ socketId: p.socketId, username: p.username, inGame: p.inGame, avatar: p.avatar });
   }
   io.emit("online:list", list);

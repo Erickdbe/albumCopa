@@ -4057,10 +4057,12 @@
       // Chute: só no primeiro frame do pressionamento (evita "puxar" a bola)
       const playerKick = justPressedKeys.has(" ") || justPressedKeys.has("Space");
       collideBallWithPlayer(game.player, playerKick);
-      // No modo online (host), o "cpu" é o guest — usa o input de kick dele
+      // Kick do oponente: host usa input do guest, guest usa kick do host (chegou via estado)
       const cpuIsKicking = (game.isOnlineGame && game.onlineRole === "host")
         ? (typeof mp !== "undefined" && mp.guestInputs?.kick)
-        : Math.abs(game.ball.x - game.cpu.x) < 75 && !(game.cpu.kickCooldown > 0);
+        : (game.isOnlineGame && game.onlineRole === "guest")
+          ? (typeof mp !== "undefined" && mp.lastHostKick)
+          : Math.abs(game.ball.x - game.cpu.x) < 75 && !(game.cpu.kickCooldown > 0);
       collideBallWithPlayer(game.cpu, cpuIsKicking);
     }
 
@@ -4793,7 +4795,8 @@
       blackjackInviteRoomId: null,
       blackjackRoomId: null,
       blackjackTable: null,
-      guestInputs:      { left: false, right: false, jump: false, kick: false }
+      guestInputs:      { left: false, right: false, jump: false, kick: false },
+      lastHostKick:     false   // kick do host recebido via game:state (usado pelo guest)
     };
 
     // ── Salva dados do usuário no servidor ────────────────────────────────
@@ -5418,28 +5421,35 @@
     function applyRemoteGameState(s) {
       if (!game.ball || !game.player || !game.cpu) return;
 
-      // Bola: interpolação suave — evita saltos bruscos
-      game.ball.x  = lerp(game.ball.x,  s.bx,  0.35);
-      game.ball.y  = lerp(game.ball.y,  s.by,  0.35);
-      game.ball.vx = s.bvx;
-      game.ball.vy = s.bvy;
+      // Guarda kick do host para a física local do guest
+      if (s.p1kick) mp.lastHostKick = true;
 
-      // Oponente (host aparece como "cpu" para o guest)
-      game.cpu.x  = lerp(game.cpu.x,  s.p1x, 0.40);
-      game.cpu.y  = lerp(game.cpu.y,  s.p1y, 0.40);
-      game.cpu.vx = s.p1vx; game.cpu.vy = s.p1vy;
+      // Bola: o guest já roda física local, então só corrige se derivar muito
+      const bdx = Math.abs(game.ball.x - s.bx);
+      const bdy = Math.abs(game.ball.y - s.by);
+      if (bdx > 30 || bdy > 30) {
+        // Deriva detectada: puxa suavemente para o estado autoritativo do host
+        game.ball.x  = lerp(game.ball.x,  s.bx,  0.18);
+        game.ball.y  = lerp(game.ball.y,  s.by,  0.18);
+      }
+      // Velocidade da bola: sincroniza suavemente (importante após chutes)
+      game.ball.vx = lerp(game.ball.vx, s.bvx, 0.22);
+      game.ball.vy = lerp(game.ball.vy, s.bvy, 0.22);
+
+      // Oponente (host visto como "cpu"): sincroniza posição e velocidade
+      game.cpu.x  = lerp(game.cpu.x,  s.p1x, 0.35);
+      game.cpu.y  = lerp(game.cpu.y,  s.p1y, 0.35);
+      game.cpu.vx = s.p1vx;
+      game.cpu.vy = s.p1vy;
       game.cpu.kickTimer = s.p1k;
 
-      // Próprio jogador do guest: só corrige se o drift for grande (>40px)
-      // Assim o controle parece responsivo mesmo com latência
+      // Próprio jogador do guest: só corrige se o drift for grande (>45px)
       const dx = Math.abs(game.player.x - s.p2x);
       const dy = Math.abs(game.player.y - s.p2y);
-      if (dx > 40 || dy > 40) {
-        game.player.x = lerp(game.player.x, s.p2x, 0.20);
-        game.player.y = lerp(game.player.y, s.p2y, 0.20);
+      if (dx > 45 || dy > 45) {
+        game.player.x = lerp(game.player.x, s.p2x, 0.15);
+        game.player.y = lerp(game.player.y, s.p2y, 0.15);
       }
-      game.player.vx = lerp(game.player.vx, s.p2vx, 0.30);
-      game.player.vy = lerp(game.player.vy, s.p2vy, 0.30);
       game.player.kickTimer = s.p2k;
 
       game.playerScore = s.gs2;
@@ -5450,9 +5460,12 @@
     // Serializa estado do jogo para envio (host → guest)
     function serializeGameState() {
       const b = game.ball; const p1 = game.player; const p2 = game.cpu;
+      // p1kick: host chutou nesse frame (usado pelo guest para física local da bola)
+      const p1kick = justPressedKeys.has(" ") || justPressedKeys.has("Space");
       return {
         bx: b.x, by: b.y, bvx: b.vx, bvy: b.vy,
         p1x: p1.x, p1y: p1.y, p1vx: p1.vx, p1vy: p1.vy, p1k: p1.kickTimer,
+        p1kick,
         p2x: p2.x, p2y: p2.y, p2vx: p2.vx, p2vy: p2.vy, p2k: p2.kickTimer,
         gs1: game.playerScore, gs2: game.cpuScore, t: game.remaining
       };
@@ -5582,30 +5595,32 @@
         }
 
       } else {
-        // Guest: roda física local para controle responsivo
+        // Guest: física completa local → sem esperar resposta do host para sentir o jogo
         const kick = justPressedKeys.has(" ") || justPressedKeys.has("Space");
         const guestControls = {
           left:  keys.has("ArrowLeft")  || keys.has("a"),
           right: keys.has("ArrowRight") || keys.has("d"),
           jump:  keys.has("ArrowUp")    || keys.has("w")
         };
-        // Atualiza o próprio jogador localmente (prediction)
+
+        // Jogador do guest: prediction local (100% responsivo)
         updatePlayer(game.player, guestControls, dt);
+
+        // Oponente (host): extrapola posição entre pacotes
+        if (game.cpu && dt < 0.05) {
+          game.cpu.x += game.cpu.vx * dt;
+          game.cpu.y += game.cpu.vy * dt;
+        }
+
+        // Bola: física completa local (sem esperar host)
+        // mp.lastHostKick vem do applyRemoteGameState e é consumido aqui
+        updateBall(dt);
+        mp.lastHostKick = false; // consome o kick do host após aplicar
 
         // Envia inputs ao host a 60fps
         if (mp.socket?.connected && now - _lastNetworkTime > 16) {
-          mp.socket.volatile.emit("game:input", {
-            ...guestControls, kick
-          });
+          mp.socket.volatile.emit("game:input", { ...guestControls, kick });
           _lastNetworkTime = now;
-        }
-
-        // Extrapola bola e oponente entre pacotes para suavizar
-        if (game.ball && dt < 0.05) {
-          game.ball.x += game.ball.vx * dt;
-          game.ball.y += game.ball.vy * dt;
-          game.cpu.x  += game.cpu.vx  * dt;
-          game.cpu.y  += game.cpu.vy  * dt;
         }
       }
 

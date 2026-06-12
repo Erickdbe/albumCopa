@@ -1894,15 +1894,14 @@
     }
 
     /* A figurinha dentro do carrossel: tamanho fixo menor */
-    .pack-carousel-track .slot > .slot {
-      width: 60px;
-      flex: 0 0 60px;
-      font-size: 0.82em;
+    .pack-carousel-track > .slot {
+      width: 200px;
+      flex: 0 0 200px;
+      font-size: 0.85em;
     }
 
     /* ── Efeito lendário ─────────────────────────────────────────────────── */
-    .pack-carousel-track .slot > .slot.rarity-legendary,
-    .pack-carousel-track .slot.rarity-legendary {
+    .pack-carousel-track > .slot.rarity-legendary {
       animation: legendaryReveal 700ms cubic-bezier(0.22, 1, 0.36, 1) both,
                  legendaryGlow   1400ms 700ms ease-in-out infinite alternate;
       box-shadow:
@@ -1912,7 +1911,7 @@
     }
 
     /* Partículas douradas em pseudo-elementos */
-    .pack-carousel-track .slot > .slot.rarity-legendary::before {
+    .pack-carousel-track > .slot.rarity-legendary::before {
       content: "★ LENDÁRIA ★";
       position: absolute;
       top: -28px;
@@ -1929,7 +1928,7 @@
     }
 
     /* Fundo brilhante da figurinha lendária */
-    .pack-carousel-track .slot > .slot.rarity-legendary::after {
+    .pack-carousel-track > .slot.rarity-legendary::after {
       content: "";
       position: absolute;
       inset: -6px;

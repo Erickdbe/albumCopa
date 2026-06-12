@@ -1363,7 +1363,7 @@
 
     .soccer-canvas {
       width: 100%;
-      aspect-ratio: 16 / 9;
+      aspect-ratio: 20 / 9;
       display: block;
       background: #172660;
       touch-action: none;
@@ -2245,6 +2245,151 @@
       border: 1px solid var(--line); font-size: .92rem;
     }
 
+    .blackjack-open-btn {
+      width: auto;
+      padding: 8px 16px;
+      background: #202c28;
+      font-size: .82rem;
+    }
+
+    .blackjack-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 10002;
+      display: grid;
+      place-items: center;
+      padding: 16px;
+      background: rgba(5, 18, 14, 0.86);
+    }
+
+    .blackjack-overlay.hidden {
+      display: none;
+    }
+
+    .blackjack-table {
+      width: min(900px, 96vw);
+      max-height: calc(100vh - 32px);
+      display: grid;
+      gap: 14px;
+      padding: 18px;
+      overflow: auto;
+      border: 2px solid rgba(216, 173, 63, 0.7);
+      border-radius: 12px;
+      color: #fff8e8;
+      background:
+        radial-gradient(circle at 50% 10%, rgba(216, 173, 63, 0.18), transparent 18rem),
+        linear-gradient(145deg, #103f2d, #071d18);
+      box-shadow: 0 24px 70px rgba(0, 0, 0, 0.46);
+    }
+
+    .blackjack-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .blackjack-top h3 {
+      margin: 0;
+      font-size: 1.18rem;
+      text-transform: uppercase;
+    }
+
+    .blackjack-message {
+      min-height: 38px;
+      padding: 10px 12px;
+      border: 1px solid rgba(255, 248, 232, 0.18);
+      border-radius: 8px;
+      color: #f9e8a8;
+      background: rgba(0, 0, 0, 0.18);
+      font-weight: 800;
+    }
+
+    .blackjack-zone {
+      display: grid;
+      gap: 8px;
+      padding: 12px;
+      border: 1px solid rgba(255, 248, 232, 0.14);
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.06);
+    }
+
+    .blackjack-zone h4 {
+      margin: 0;
+      font-size: .86rem;
+      text-transform: uppercase;
+    }
+
+    .blackjack-cards {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .playing-card {
+      width: 54px;
+      height: 76px;
+      display: grid;
+      place-items: center;
+      border: 2px solid rgba(18, 24, 22, 0.3);
+      border-radius: 8px;
+      color: #16201f;
+      background: #fffaf0;
+      box-shadow: 0 6px 0 rgba(0, 0, 0, 0.16);
+      font-weight: 1000;
+    }
+
+    .playing-card.red {
+      color: #b52835;
+    }
+
+    .playing-card.hidden-card {
+      color: #fff8e8;
+      background:
+        linear-gradient(135deg, rgba(255,255,255,.18), transparent 42%),
+        #173a66;
+    }
+
+    .blackjack-players {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 10px;
+    }
+
+    .blackjack-player {
+      display: grid;
+      gap: 8px;
+      padding: 10px;
+      border: 1px solid rgba(255, 248, 232, 0.16);
+      border-radius: 9px;
+      background: rgba(0, 0, 0, 0.16);
+    }
+
+    .blackjack-player.is-me {
+      border-color: var(--gold);
+      background: rgba(216, 173, 63, 0.12);
+    }
+
+    .blackjack-player strong {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      font-size: .88rem;
+    }
+
+    .blackjack-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .blackjack-actions .mp-btn {
+      width: auto;
+      min-width: 118px;
+      padding: 9px 15px;
+      font-size: .86rem;
+    }
+
     /* Waiting overlay (esperando oponente aceitar) */
     .waiting-overlay {
       position: fixed; inset: 0;
@@ -2435,6 +2580,7 @@
         <label for="myBetInput">Minha aposta:</label>
         <input id="myBetInput" type="number" min="5" value="10" />
         <span style="font-size:.8rem;color:var(--muted)" id="betAvail"></span>
+        <button class="mp-btn blackjack-open-btn" type="button" onclick="createBlackjackRoom()">Mesa 21</button>
       </div>
 
       <div id="matchHistoryBox" style="display:none;margin-top:14px">
@@ -2464,6 +2610,46 @@
   </div>
 
   <!-- ── Aguardando resposta ─────────────────────────────────────────────── -->
+  <div class="challenge-toast hidden" id="blackjackInviteToast">
+    <h4>21 online</h4>
+    <p id="blackjackInviteMsg"></p>
+    <div class="challenge-toast-btns">
+      <button class="btn-accept" onclick="acceptBlackjackInvite()">Entrar</button>
+      <button class="btn-reject" onclick="rejectBlackjackInvite()">Agora n&atilde;o</button>
+    </div>
+  </div>
+
+  <div class="blackjack-overlay hidden" id="blackjackOverlay">
+    <div class="blackjack-table">
+      <div class="blackjack-top">
+        <div>
+          <h3>Mesa 21</h3>
+          <span id="blackjackBetLabel">Aposta: 0</span>
+        </div>
+        <button class="mp-btn" style="width:auto;padding:8px 16px" type="button" onclick="leaveBlackjackRoom()">Fechar</button>
+      </div>
+
+      <div class="blackjack-message" id="blackjackMessage">Aguardando mesa.</div>
+
+      <section class="blackjack-zone">
+        <h4>Casa <span id="blackjackDealerTotal"></span></h4>
+        <div class="blackjack-cards" id="blackjackDealerCards"></div>
+      </section>
+
+      <section class="blackjack-zone">
+        <h4>Jogadores</h4>
+        <div class="blackjack-players" id="blackjackPlayers"></div>
+      </section>
+
+      <div class="blackjack-actions">
+        <button class="mp-btn" id="blackjackStartBtn" type="button" onclick="startBlackjackRound()">Come&ccedil;ar</button>
+        <button class="mp-btn" id="blackjackHitBtn" type="button" onclick="blackjackHit()">Pedir carta</button>
+        <button class="mp-btn" id="blackjackStandBtn" type="button" onclick="blackjackStand()">Parar</button>
+        <button class="mp-btn" id="blackjackLeaveBtn" type="button" onclick="leaveBlackjackRoom()">Sair da mesa</button>
+      </div>
+    </div>
+  </div>
+
   <div class="waiting-overlay hidden" id="waitingOverlay">
     <div class="waiting-spinner"></div>
     <p id="waitingMsg">Aguardando o oponente aceitar o desafio…</p>
@@ -2566,7 +2752,7 @@
             <span class="team-name" id="cpuTeamName">CPU</span>
           </div>
           <div class="soccer-wrap">
-            <canvas class="soccer-canvas" id="soccerCanvas" width="1200" height="675"></canvas>
+            <canvas class="soccer-canvas" id="soccerCanvas" width="1500" height="675"></canvas>
             <button class="kick-screen-button" id="screenKick" type="button" aria-label="Chutar com espaco">ESPA&Ccedil;O</button>
           </div>
         </section>
@@ -2581,7 +2767,8 @@
       { title: "Clássicos", kicker: "Rivais" },
       { title: "Europa", kicker: "Camisas" },
       { title: "Lendas", kicker: "História" },
-      { title: "Estádios", kicker: "Palcos" }
+      { title: "Estádios", kicker: "Palcos" },
+      { title: "Extras", kicker: "Especial", size: 1 }
     ];
 
     const palette = [
@@ -2655,12 +2842,13 @@
       { id: 51, name: "Pablito Éléphant", country: "Costa do Marfim" },
       { id: 52, name: "Pablito DZ", country: "Argélia" },
       { id: 53, name: "Pablito Ukraina", country: "Ucrânia" },
-      { id: 54, name: "Pablito Čech", country: "Tchéquia" }
+      { id: 54, name: "Pablito Čech", country: "Tchéquia" },
+      { id: 55, name: "Pablito Fazendinha", country: "Especial", image: "assets/album-copa/figurinhas/figurinha-55-placeholder.svg" }
     ].map((sticker) => [
       sticker.id,
       {
         ...sticker,
-        image: `assets/album-copa/figurinhas/figurinha-${String(sticker.id).padStart(2, "0")}.png`
+        image: sticker.image || `assets/album-copa/figurinhas/figurinha-${String(sticker.id).padStart(2, "0")}.png`
       }
     ]));
 
@@ -2703,7 +2891,7 @@
     }
 
     const stickers = chapters.flatMap((chapter, chapterIndex) => {
-      return Array.from({ length: 9 }, (_, itemIndex) => {
+      return Array.from({ length: chapter.size || 9 }, (_, itemIndex) => {
         const number = chapterIndex * 9 + itemIndex + 1;
         const colors = palette[(chapterIndex + itemIndex) % palette.length];
         const rarity = getStickerRarity(itemIndex);
@@ -2780,7 +2968,7 @@
     const screenKick = document.getElementById("screenKick");
     const soccerCtx = soccerCanvas.getContext("2d");
     const FIELD = {
-      width: 1200,
+      width: 1500,
       height: 675,
       skyBottom: 263,
       pitchTop: 305,
@@ -2972,8 +3160,8 @@
     }
 
     function resetGameObjects() {
-      game.player = makePlayer(344, 1, game.playerSticker);
-      game.cpu = makePlayer(856, -1, game.cpuSticker);
+      game.player = makePlayer(390, 1, game.playerSticker);
+      game.cpu = makePlayer(1110, -1, game.cpuSticker);
       game.ball = {
         x: FIELD.width / 2,
         y: 275,
@@ -3385,11 +3573,11 @@
       }
 
       soccerCtx.fillStyle = "#e3b52a";
-      soccerCtx.fillRect(0, 293, 358, 43);
+      soccerCtx.fillRect(0, 293, width * 0.30, 43);
       soccerCtx.fillStyle = "#27b7aa";
-      soccerCtx.fillRect(365, 293, 463, 43);
+      soccerCtx.fillRect(width * 0.305, 293, width * 0.38, 43);
       soccerCtx.fillStyle = "#ef573f";
-      soccerCtx.fillRect(838, 293, 363, 43);
+      soccerCtx.fillRect(width * 0.695, 293, width * 0.305, 43);
       soccerCtx.fillStyle = "rgba(0, 0, 0, 0.22)";
       soccerCtx.fillRect(0, 335, width, 8);
 
@@ -3444,6 +3632,7 @@
 
       // Decrementa o timer da animação de chute
       if (player.kickTimer > 0) player.kickTimer = Math.max(0, player.kickTimer - dt);
+      if (player.kickCooldown > 0) player.kickCooldown = Math.max(0, player.kickCooldown - dt);
 
       if (controls.left) player.vx -= speed * dt;
       if (controls.right) player.vx += speed * dt;
@@ -3484,21 +3673,38 @@
       const dy = ball.y - headY;
       const minDist = ball.radius + player.radius;
       // Ao chutar, o jogador alcança a bola mesmo sem tocá-la (pé estendido)
-      const reach = kick ? 78 : 0;
       const dist = Math.hypot(dx, dy) || 1;
 
-      if (dist < minDist + reach) {
+      if (dist < minDist) {
         const nx = dx / dist;
         const ny = dy / dist;
         // Posiciona a bola no limite de contato real (não no reach)
-        ball.x = headX + nx * (minDist + reach * 0.3);
-        ball.y = headY + ny * (minDist + reach * 0.3);
-        const force = kick ? 960 : 450;
+        ball.x = headX + nx * minDist;
+        ball.y = headY + ny * minDist;
+        const force = 450;
         ball.vx = nx * force + player.vx * 0.40;
-        ball.vy = ny * force - (kick ? 280 : 90);
+        ball.vy = ny * force - 90;
         playGameSound(gameSounds.hit, "lastHitSound", 95);
         // Dispara animação de chute (só se ainda não está animando)
-        if (kick && player.kickTimer <= 0) player.kickTimer = 0.24;
+      }
+
+      if (kick && !(player.kickCooldown > 0)) {
+        const footX = player.x + player.side * 76;
+        const footY = player.y - 4;
+        const footDx = ball.x - footX;
+        const footDy = ball.y - footY;
+        const footDist = Math.hypot(footDx, footDy) || 1;
+        const inFront = (ball.x - player.x) * player.side > -8;
+
+        player.kickTimer = 0.24;
+        player.kickCooldown = 0.26;
+
+        if (inFront && footDist < ball.radius + 68) {
+          ball.x = footX + player.side * (ball.radius + 32);
+          ball.vx = player.side * 1080 + player.vx * 0.22;
+          ball.vy = Math.min(ball.vy, ball.y > player.y - player.radius ? -330 : -190);
+          playGameSound(gameSounds.hit, "lastHitSound", 95);
+        }
       }
     }
 
@@ -3581,7 +3787,7 @@
       // No modo online (host), o "cpu" é o guest — usa o input de kick dele
       const cpuIsKicking = (game.isOnlineGame && game.onlineRole === "host")
         ? (typeof mp !== "undefined" && mp.guestInputs?.kick)
-        : Math.abs(game.ball.x - game.cpu.x) < 75;
+        : Math.abs(game.ball.x - game.cpu.x) < 75 && !(game.cpu.kickCooldown > 0);
       collideBallWithPlayer(game.cpu, cpuIsKicking);
     }
 
@@ -3677,6 +3883,21 @@
     function renderPage(target, pageIndex, side) {
       const chapter = chapters[pageIndex];
       const pageNumber = String(pageIndex + 1).padStart(2, "0");
+      if (!chapter) {
+        target.className = `page ${side}`;
+        target.innerHTML = `
+          <header class="page-header">
+            <div>
+              <p class="page-kicker">Em breve</p>
+              <h2>Novas figurinhas</h2>
+            </div>
+            <span class="page-number">${pageNumber}</span>
+          </header>
+          <div class="sticker-grid"></div>
+        `;
+        return;
+      }
+
       const pageStickers = stickers.filter((sticker) => sticker.pageIndex === pageIndex);
 
       target.className = `page ${side}`;
@@ -4222,6 +4443,9 @@
       opponentUsername: null,
       pendingChallengeId: null,  // desafio aguardando resposta
       receivedChallengeId: null, // desafio recebido
+      blackjackInviteRoomId: null,
+      blackjackRoomId: null,
+      blackjackTable: null,
       guestInputs:      { left: false, right: false, jump: false, kick: false }
     };
 
@@ -4528,6 +4752,41 @@
       mp.socket.on("game:opponent_disconnected", () => {
         endOnlineGame(null, null, null, null, true);
       });
+
+      mp.socket.on("blackjack:invite", ({ roomId, fromUsername, bet }) => {
+        mp.blackjackInviteRoomId = roomId;
+        document.getElementById("blackjackInviteMsg").textContent =
+          `${fromUsername} abriu uma mesa de 21 apostando ${bet} crÃ©ditos.`;
+        document.getElementById("blackjackInviteToast").classList.remove("hidden");
+      });
+
+      mp.socket.on("blackjack:update", (table) => {
+        renderBlackjackTable(table);
+      });
+
+      mp.socket.on("blackjack:finished", ({ table, updatedUser }) => {
+        if (updatedUser) {
+          state.betCredits = updatedUser.bet_credits ?? state.betCredits;
+          state.credits = updatedUser.credits ?? state.credits;
+          mp.user = updatedUser;
+        }
+        renderBlackjackTable(table);
+        updateLobbyHeader();
+        showToast(table.message || "Mesa de 21 encerrada.");
+      });
+
+      mp.socket.on("blackjack:cancelled", ({ message }) => {
+        mp.blackjackRoomId = null;
+        mp.blackjackTable = null;
+        document.getElementById("blackjackOverlay").classList.add("hidden");
+        document.getElementById("blackjackInviteToast").classList.add("hidden");
+        updateLobbyHeader();
+        showToast(message || "Mesa de 21 cancelada.");
+      });
+
+      mp.socket.on("blackjack:error", (msg) => {
+        showToast(msg || "NÃ£o foi possÃ­vel jogar 21.");
+      });
     }
 
     // ── Lobby ─────────────────────────────────────────────────────────────
@@ -4624,6 +4883,129 @@
     }
 
     // ── Jogo Online ───────────────────────────────────────────────────────
+    function cardSuitSymbol(suit) {
+      return { S: "♠", H: "♥", D: "♦", C: "♣" }[suit] || suit || "";
+    }
+
+    function renderCard(card) {
+      if (!card) {
+        return `<span class="playing-card hidden-card">?</span>`;
+      }
+
+      const red = card.suit === "H" || card.suit === "D" ? " red" : "";
+      return `<span class="playing-card${red}">${card.rank}${cardSuitSymbol(card.suit)}</span>`;
+    }
+
+    function blackjackStatusLabel(player) {
+      if (player.status === "bust") return "Estourou";
+      if (player.status === "stand") return "Parou";
+      if (player.status === "playing") return "Jogando";
+      return "Aguardando";
+    }
+
+    function renderBlackjackTable(table) {
+      mp.blackjackTable = table;
+      mp.blackjackRoomId = table.roomId;
+
+      const me = table.players.find(player => player.isMe);
+      const isHost = table.hostSocketId === mp.socket?.id;
+      const isWaiting = table.status === "waiting";
+      const isPlaying = table.status === "playing";
+      const isFinished = table.status === "finished";
+
+      document.getElementById("blackjackOverlay").classList.remove("hidden");
+      document.getElementById("blackjackBetLabel").textContent = `Aposta: ${table.bet} crÃ©ditos`;
+      document.getElementById("blackjackMessage").textContent = table.message || "";
+      document.getElementById("blackjackDealerCards").innerHTML = (table.dealerCards || []).map(renderCard).join("");
+      document.getElementById("blackjackDealerTotal").textContent = table.dealerTotal == null ? "" : `Â· ${table.dealerTotal}`;
+
+      document.getElementById("blackjackPlayers").innerHTML = table.players.map(player => {
+        const winner = table.winnerSocketId === player.socketId ? " Vencedor" : "";
+        return `
+          <article class="blackjack-player ${player.isMe ? "is-me" : ""}">
+            <strong>
+              <span>${escHtml(player.username)}${player.isHost ? " â˜…" : ""}</span>
+              <span>${player.total || 0}</span>
+            </strong>
+            <div class="blackjack-cards">${(player.cards || []).map(renderCard).join("") || "<span>Aguardando</span>"}</div>
+            <small>${blackjackStatusLabel(player)}${winner}</small>
+          </article>
+        `;
+      }).join("");
+
+      document.getElementById("blackjackStartBtn").disabled = !(isWaiting && isHost);
+      document.getElementById("blackjackHitBtn").disabled = !(isPlaying && me?.status === "playing");
+      document.getElementById("blackjackStandBtn").disabled = !(isPlaying && me?.status === "playing");
+      document.getElementById("blackjackLeaveBtn").disabled = !(isWaiting || isFinished);
+      document.getElementById("blackjackLeaveBtn").textContent = isFinished ? "Fechar" : "Sair da mesa";
+    }
+
+    function createBlackjackRoom() {
+      if (!mp.isOnline) {
+        showToast("FaÃ§a login para abrir uma mesa de 21.");
+        document.getElementById("authOverlay").classList.remove("hidden");
+        return;
+      }
+
+      const bet = Number(document.getElementById("myBetInput").value) || 10;
+      if (bet < 5) { showToast("Aposta mÃ­nima: 5 crÃ©ditos."); return; }
+      if (bet > state.betCredits) { showToast("CrÃ©ditos de aposta insuficientes."); return; }
+      mp.socket.emit("blackjack:create", { bet });
+      document.getElementById("lobbyOverlay").classList.add("hidden");
+    }
+
+    function acceptBlackjackInvite() {
+      if (!mp.blackjackInviteRoomId) return;
+      document.getElementById("blackjackInviteToast").classList.add("hidden");
+      mp.socket.emit("blackjack:join", { roomId: mp.blackjackInviteRoomId });
+      mp.blackjackInviteRoomId = null;
+    }
+
+    function rejectBlackjackInvite() {
+      mp.blackjackInviteRoomId = null;
+      document.getElementById("blackjackInviteToast").classList.add("hidden");
+    }
+
+    function startBlackjackRound() {
+      if (!mp.blackjackRoomId) return;
+      mp.socket.emit("blackjack:start", { roomId: mp.blackjackRoomId });
+    }
+
+    function blackjackHit() {
+      if (!mp.blackjackRoomId) return;
+      mp.socket.emit("blackjack:hit", { roomId: mp.blackjackRoomId });
+    }
+
+    function blackjackStand() {
+      if (!mp.blackjackRoomId) return;
+      mp.socket.emit("blackjack:stand", { roomId: mp.blackjackRoomId });
+    }
+
+    function leaveBlackjackRoom() {
+      if (!mp.blackjackTable || mp.blackjackTable.status === "finished") {
+        closeBlackjackTable();
+        return;
+      }
+
+      if (mp.blackjackTable.status === "playing") {
+        showToast("Termine sua mÃ£o antes de fechar a mesa.");
+        return;
+      }
+
+      if (mp.blackjackRoomId) {
+        mp.socket.emit("blackjack:leave", { roomId: mp.blackjackRoomId });
+      }
+      closeBlackjackTable();
+    }
+
+    function closeBlackjackTable() {
+      document.getElementById("blackjackOverlay").classList.add("hidden");
+      if (!mp.blackjackTable || mp.blackjackTable.status === "finished") {
+        mp.blackjackRoomId = null;
+        mp.blackjackTable = null;
+      }
+    }
+
     function startOnlineGame(role, opponentUsername, myBet, opponentBet) {
       keys.clear();
       unlockGameAudio();

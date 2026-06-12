@@ -1,0 +1,22 @@
+# This workspace has other projects. Keep Git focused on the Album app.
+*
+
+!.gitignore
+!README.md
+!COMO_RODAR_SERVIDOR.md
+!.env.example
+!db.example.json
+
+!package.json
+!package-lock.json
+!server.js
+!hitboll.mp3
+!jump.mp3
+
+!Album/
+!Album/index.html
+
+!assets/
+!assets/album-copa/
+!assets/album-copa/figurinhas/
+!assets/album-copa/figurinhas/**

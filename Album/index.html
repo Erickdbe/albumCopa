@@ -2649,6 +2649,194 @@
       animation: spin .8s linear infinite;
     }
     @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Taunt Bar ──────────────────────────────────────────────────────── */
+    .taunt-bar {
+      display: flex;
+      gap: 6px;
+      justify-content: center;
+      margin-top: 6px;
+    }
+    .taunt-btn {
+      font-size: 1.5rem;
+      background: rgba(255,255,255,0.15);
+      border: none;
+      border-radius: 8px;
+      padding: 4px 8px;
+      cursor: pointer;
+      transition: transform 120ms;
+    }
+    .taunt-btn:hover { transform: scale(1.2); }
+    .taunt-display {
+      position: absolute;
+      top: 40px;
+      left: 50%;
+      transform: translateX(-50%);
+      pointer-events: none;
+      font-size: 3rem;
+      z-index: 10;
+    }
+    .taunt-float {
+      animation: tauntFloat 2s ease-out forwards;
+      display: inline-block;
+    }
+    @keyframes tauntFloat {
+      0%   { opacity: 1; transform: translateY(0) scale(1); }
+      70%  { opacity: 1; transform: translateY(-60px) scale(1.3); }
+      100% { opacity: 0; transform: translateY(-100px) scale(0.8); }
+    }
+
+    /* ── Avatar ─────────────────────────────────────────────────────────── */
+    .lobby-avatar-row { display:flex; align-items:center; gap:10px; margin-bottom:10px; }
+    .avatar-circle { width:48px; height:48px; border-radius:50%; background:#2d4a3e; border:2px solid rgba(255,255,255,0.3); overflow:hidden; flex-shrink:0; }
+    .avatar-circle img { width:100%; height:100%; object-fit:cover; }
+    .avatar-upload-label { cursor:pointer; font-size:1.2rem; opacity:0.7; }
+    .avatar-upload-label:hover { opacity:1; }
+    .online-avatar { width:32px; height:32px; border-radius:50%; background:#2d4a3e; border:1px solid rgba(255,255,255,0.2); overflow:hidden; flex-shrink:0; }
+    .online-avatar img { width:100%; height:100%; object-fit:cover; }
+
+    /* ── Horse Racing ──────────────────────────────────────────────────────── */
+    .horse-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(0,0,0,0.72);
+      backdrop-filter: blur(4px);
+    }
+    .horse-overlay.hidden { display: none; }
+    .horse-table {
+      width: min(640px, 96vw);
+      max-height: 90vh;
+      overflow-y: auto;
+      background: linear-gradient(160deg, #1a2e28, #0d1f1a);
+      border: 2px solid rgba(255,255,255,0.12);
+      border-radius: 14px;
+      padding: 20px;
+      color: #fff9e8;
+    }
+    .horse-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+    .horse-top h3 { margin:0; font-size:1.2rem; }
+    .horse-message {
+      background: rgba(255,255,255,0.07);
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: .88rem;
+      margin-bottom: 14px;
+      min-height: 38px;
+    }
+    .horse-track {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+    .horse-lane {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .horse-lane-label {
+      width: 110px;
+      font-size: .82rem;
+      font-weight: 700;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .horse-lane-bar-wrap {
+      flex: 1;
+      height: 28px;
+      background: rgba(255,255,255,0.07);
+      border-radius: 6px;
+      overflow: hidden;
+      position: relative;
+    }
+    .horse-lane-bar {
+      height: 100%;
+      width: 0%;
+      border-radius: 6px;
+      transition: width 0.15s linear;
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      padding-right: 6px;
+      font-size: 1.1rem;
+    }
+    .horse-lane-badge {
+      font-size: .72rem;
+      font-weight: 900;
+      background: rgba(0,0,0,0.32);
+      padding: 2px 6px;
+      border-radius: 999px;
+      margin-left: 6px;
+    }
+    .horse-pick-section {
+      margin-bottom: 14px;
+    }
+    .horse-pick-section h4 { margin:0 0 8px; font-size:.9rem; opacity:.7; }
+    .horse-pick-buttons {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .horse-pick-btn {
+      padding: 8px 14px;
+      border: 2px solid rgba(255,255,255,0.2);
+      border-radius: 8px;
+      background: rgba(255,255,255,0.06);
+      color: #fff9e8;
+      font-size: .85rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 160ms;
+    }
+    .horse-pick-btn:hover { background: rgba(255,255,255,0.14); }
+    .horse-pick-btn.is-picked {
+      border-color: var(--gold);
+      background: rgba(216,173,63,0.18);
+      color: var(--gold);
+    }
+    .horse-racers {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .horse-racer-chip {
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: .78rem;
+      font-weight: 700;
+      background: rgba(255,255,255,0.08);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .horse-racer-chip.is-me { background: rgba(216,173,63,0.18); color: var(--gold); }
+    .horse-actions { display:flex; gap:8px; flex-wrap:wrap; }
+
+    /* Winner animation */
+    .horse-winner-banner {
+      text-align: center;
+      font-size: 1.5rem;
+      font-weight: 900;
+      color: var(--gold);
+      padding: 12px;
+      animation: winnerPop 600ms cubic-bezier(0.22,1,0.36,1) both;
+    }
+    @keyframes winnerPop {
+      0%   { transform: scale(0.5); opacity: 0; }
+      100% { transform: scale(1);   opacity: 1; }
+    }
   </style>
 </head>
 <body>
@@ -2810,6 +2998,11 @@
         </div>
       </div>
 
+      <div class="lobby-avatar-row">
+        <div class="avatar-circle" id="myAvatarDisplay" title="Clique para trocar foto"></div>
+        <label class="avatar-upload-label" for="avatarInput" title="Trocar foto de perfil">📷</label>
+        <input type="file" id="avatarInput" accept="image/*" style="display:none">
+      </div>
       <div class="lobby-user-info">
         <span>Logado como <strong id="lobbyUsername">—</strong></span>
         <div class="lobby-credits">
@@ -2824,10 +3017,12 @@
 
       <div class="bet-row">
         <label for="myBetInput">Minha aposta:</label>
-        <input id="myBetInput" type="number" min="5" value="10" />
+        <input id="myBetInput" type="number" min="5" max="50" value="10" />
         <span style="font-size:.8rem;color:var(--muted)" id="betAvail"></span>
         <button class="mp-btn blackjack-open-btn" type="button" onclick="createBlackjackRoom()">Mesa 21</button>
+        <button class="mp-btn" style="background:#9b59b6;width:auto;padding:8px 12px;font-size:.82rem" type="button" onclick="createHorseRoom()">🏇 Corrida</button>
       </div>
+      <small style="color:var(--muted);font-size:.75rem">Máx. 50 (2 jogadores) / 20 (3+)</small>
 
       <div id="matchHistoryBox" style="display:none;margin-top:14px">
         <h4 style="margin:0 0 8px;font-size:.9rem;color:var(--grass)">📋 Últimas partidas</h4>
@@ -2892,6 +3087,47 @@
         <button class="mp-btn" id="blackjackHitBtn" type="button" onclick="blackjackHit()">Pedir carta</button>
         <button class="mp-btn" id="blackjackStandBtn" type="button" onclick="blackjackStand()">Parar</button>
         <button class="mp-btn" id="blackjackLeaveBtn" type="button" onclick="leaveBlackjackRoom()">Sair da mesa</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Convite corrida de cavalos ──────────────────────────────────────────── -->
+  <div class="challenge-toast hidden" id="horseInviteToast">
+    <h4>🏇 Corrida de Cavalos</h4>
+    <p id="horseInviteMsg"></p>
+    <div class="challenge-toast-btns">
+      <button class="btn-accept" onclick="acceptHorseInvite()">Entrar</button>
+      <button class="btn-reject" onclick="rejectHorseInvite()">Agora não</button>
+    </div>
+  </div>
+
+  <!-- ── Corrida de Cavalos ──────────────────────────────────────────────────── -->
+  <div class="horse-overlay hidden" id="horseOverlay">
+    <div class="horse-table">
+      <div class="horse-top">
+        <div>
+          <h3>🏇 Corrida de Cavalos</h3>
+          <span id="horseBetLabel" style="font-size:.82rem;opacity:.7">Aposta: 0</span>
+        </div>
+        <button class="mp-btn" style="width:auto;padding:8px 16px" onclick="leaveHorseRoom()">Fechar</button>
+      </div>
+
+      <div class="horse-message" id="horseMessage">Aguardando...</div>
+
+      <div class="horse-track" id="horseTrack"></div>
+
+      <div class="horse-pick-section" id="horsePickSection">
+        <h4>Escolha seu cavalo:</h4>
+        <div class="horse-pick-buttons" id="horsePickButtons"></div>
+      </div>
+
+      <div class="horse-racers" id="horseRacers"></div>
+
+      <div id="horseWinnerBanner"></div>
+
+      <div class="horse-actions">
+        <button class="mp-btn" id="horseStartBtn" type="button" onclick="startHorseRace()">🏁 Largar!</button>
+        <button class="mp-btn" id="horseLeaveBtn" type="button" onclick="leaveHorseRoom()">Sair</button>
       </div>
     </div>
   </div>
@@ -3008,6 +3244,15 @@
           <div class="soccer-wrap">
             <canvas class="soccer-canvas" id="soccerCanvas" width="1500" height="675"></canvas>
             <button class="kick-screen-button" id="screenKick" type="button" aria-label="Chutar com espaco">ESPA&Ccedil;O</button>
+            <div class="taunt-bar" id="tauntBar" style="display:none">
+              <button class="taunt-btn" onclick="sendTaunt('😂')">😂</button>
+              <button class="taunt-btn" onclick="sendTaunt('🔥')">🔥</button>
+              <button class="taunt-btn" onclick="sendTaunt('💀')">💀</button>
+              <button class="taunt-btn" onclick="sendTaunt('👏')">👏</button>
+              <button class="taunt-btn" onclick="sendTaunt('😤')">😤</button>
+              <button class="taunt-btn" onclick="sendTaunt('🎯')">🎯</button>
+            </div>
+            <div class="taunt-display" id="tauntDisplay"></div>
           </div>
         </section>
       </div>
@@ -3384,6 +3629,7 @@
       keys.clear();
       gameModal.classList.remove("is-open");
       gameModal.setAttribute("aria-hidden", "true");
+      document.getElementById("tauntBar").style.display = "none";
     }
 
     function exchangeCredits() {
@@ -4795,6 +5041,9 @@
       blackjackInviteRoomId: null,
       blackjackRoomId: null,
       blackjackTable: null,
+      horseInviteRoomId: null,
+      horseRoomId: null,
+      horseRoom: null,
       guestInputs:      { left: false, right: false, jump: false, kick: false },
       lastHostKick:     false   // kick do host recebido via game:state (usado pelo guest)
     };
@@ -4902,6 +5151,10 @@
       }
       if (Array.isArray(user.pending_stickers)) {
         state.pendingPackItems = user.pending_stickers;
+      }
+      // Set avatar
+      if (user.avatar) {
+        setAvatarDisplay(user.avatar);
       }
       renderBetPanel && renderBetPanel();
       renderSpread && renderSpread();
@@ -5108,7 +5361,7 @@
       mp.socket.on("blackjack:invite", ({ roomId, fromUsername, bet }) => {
         mp.blackjackInviteRoomId = roomId;
         document.getElementById("blackjackInviteMsg").textContent =
-          `${fromUsername} abriu uma mesa de 21 apostando ${bet} crÃ©ditos.`;
+          `${fromUsername} abriu uma mesa de 21 apostando ${bet} créditos.`;
         document.getElementById("blackjackInviteToast").classList.remove("hidden");
       });
 
@@ -5150,7 +5403,49 @@
       });
 
       mp.socket.on("blackjack:error", (msg) => {
-        showToast(msg || "NÃ£o foi possÃ­vel jogar 21.");
+        showToast(msg || "Não foi possível jogar 21.");
+      });
+
+      // ── Emoji Taunts ────────────────────────────────────────────────────
+      mp.socket.on("game:taunt", ({ emoji }) => {
+        showTauntDisplay(emoji);
+      });
+
+      // ── Horse Racing ────────────────────────────────────────────────────
+      mp.socket.on("horse:update", (room) => {
+        renderHorseRoom(room);
+      });
+
+      mp.socket.on("horse:finished", ({ room, updatedUser }) => {
+        if (updatedUser) {
+          state.betCredits = updatedUser.bet_credits ?? state.betCredits;
+          state.credits    = updatedUser.credits    ?? state.credits;
+          mp.user = updatedUser;
+        }
+        // Cancel current animation and start final animation showing correct winner
+        if (horseRaceAnim) { cancelAnimationFrame(horseRaceAnim); horseRaceAnim = null; }
+        if (room.finishOrder) animateHorseRace(room.finishOrder);
+        setTimeout(() => renderHorseRoom(room), 3000);
+        renderBetPanel();
+        updateLobbyHeader();
+      });
+
+      mp.socket.on("horse:cancelled", ({ message }) => {
+        mp.horseRoomId = null;
+        mp.horseRoom = null;
+        document.getElementById("horseOverlay").classList.add("hidden");
+        showToast(message || "Corrida cancelada.");
+        updateLobbyHeader();
+      });
+
+      mp.socket.on("horse:invite", ({ roomId, fromUsername, bet }) => {
+        mp.horseInviteRoomId = roomId;
+        document.getElementById("horseInviteMsg").textContent = `${fromUsername} abriu uma corrida. Aposta: ${bet} créditos.`;
+        document.getElementById("horseInviteToast").classList.remove("hidden");
+      });
+
+      mp.socket.on("horse:error", (msg) => {
+        showToast(msg);
       });
     }
 
@@ -5189,6 +5484,7 @@
 
       ul.innerHTML = others.map(p => `
         <li>
+          <div class="online-avatar">${p.avatar ? `<img src="${escHtml(p.avatar)}" alt="">` : ""}</div>
           <span class="player-name">${escHtml(p.username)}</span>
           <span class="status-badge ${p.inGame ? "in-game" : "available"}">
             ${p.inGame ? "Em jogo" : "Disponível"}
@@ -5279,17 +5575,17 @@
       const isFinished = table.status === "finished";
 
       document.getElementById("blackjackOverlay").classList.remove("hidden");
-      document.getElementById("blackjackBetLabel").textContent = `Aposta: ${table.bet} crÃ©ditos`;
+      document.getElementById("blackjackBetLabel").textContent = `Aposta: ${table.bet} créditos`;
       document.getElementById("blackjackMessage").textContent = table.message || "";
       document.getElementById("blackjackDealerCards").innerHTML = (table.dealerCards || []).map(renderCard).join("");
-      document.getElementById("blackjackDealerTotal").textContent = table.dealerTotal == null ? "" : `Â· ${table.dealerTotal}`;
+      document.getElementById("blackjackDealerTotal").textContent = table.dealerTotal == null ? "" : `· ${table.dealerTotal}`;
 
       document.getElementById("blackjackPlayers").innerHTML = table.players.map(player => {
         const winner = table.winnerSocketId === player.socketId ? " Vencedor" : "";
         return `
           <article class="blackjack-player ${player.isMe ? "is-me" : ""}">
             <strong>
-              <span>${escHtml(player.username)}${player.isHost ? " â˜…" : ""}</span>
+              <span>${escHtml(player.username)}${player.isHost ? " ★" : ""}</span>
               <span>${player.total || 0}</span>
             </strong>
             <div class="blackjack-cards">${(player.cards || []).map(renderCard).join("") || "<span>Aguardando</span>"}</div>
@@ -5307,14 +5603,14 @@
 
     function createBlackjackRoom() {
       if (!mp.isOnline) {
-        showToast("FaÃ§a login para abrir uma mesa de 21.");
+        showToast("Faça login para abrir uma mesa de 21.");
         document.getElementById("authOverlay").classList.remove("hidden");
         return;
       }
 
       const bet = Number(document.getElementById("myBetInput").value) || 10;
-      if (bet < 5) { showToast("Aposta mÃ­nima: 5 crÃ©ditos."); return; }
-      if (bet > state.betCredits) { showToast("CrÃ©ditos de aposta insuficientes."); return; }
+      if (bet < 5) { showToast("Aposta mínima: 5 créditos."); return; }
+      if (bet > state.betCredits) { showToast("Créditos de aposta insuficientes."); return; }
       mp.socket.emit("blackjack:create", { bet });
       document.getElementById("lobbyOverlay").classList.add("hidden");
     }
@@ -5406,6 +5702,7 @@
         : game.playerSticker.country;
 
       gameMessage.textContent = `Partida online vs ${opponentUsername} — aposta: ${myBet} vs ${opponentBet} créditos`;
+      document.getElementById("tauntBar").style.display = "flex";
       renderBetPanel();
       resetGameObjects();
       updateGameHud();
@@ -5479,6 +5776,7 @@
       keys.clear();
       cancelAnimationFrame(game.animationId);
       mp.roomId = null;
+      document.getElementById("tauntBar").style.display = "none";
 
       if (disconnected) {
         gameMessage.textContent = "Oponente desconectou. Vitória sua!";
@@ -5652,6 +5950,224 @@
         updateGameHud();
         game.animationId = requestAnimationFrame(gameLoop);
       }
+    }
+
+    // ── Emoji Taunts ──────────────────────────────────────────────────────
+    function sendTaunt(emoji) {
+      if (!mp.socket?.connected || !mp.roomId) return;
+      mp.socket.emit("game:taunt", { emoji });
+      showTauntDisplay(emoji); // also show locally
+    }
+    function showTauntDisplay(emoji) {
+      const el = document.getElementById("tauntDisplay");
+      el.innerHTML = `<span class="taunt-float">${emoji}</span>`;
+      setTimeout(() => { el.innerHTML = ""; }, 2100);
+    }
+
+    // ── Avatar Upload ─────────────────────────────────────────────────────
+    function setAvatarDisplay(avatarDataUrl) {
+      const el = document.getElementById("myAvatarDisplay");
+      if (!el) return;
+      el.innerHTML = avatarDataUrl ? `<img src="${avatarDataUrl}" alt="Avatar">` : "";
+    }
+
+    document.getElementById("avatarInput").addEventListener("change", function() {
+      const file = this.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const img = new Image();
+        img.onload = function() {
+          const canvas = document.createElement("canvas");
+          canvas.width = 80; canvas.height = 80;
+          const ctx = canvas.getContext("2d");
+          // Crop to square and resize
+          const size = Math.min(img.width, img.height);
+          const sx = (img.width - size) / 2;
+          const sy = (img.height - size) / 2;
+          ctx.drawImage(img, sx, sy, size, size, 0, 0, 80, 80);
+          const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+          // POST to server
+          fetch(`${SERVER_URL}/api/avatar`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": `Bearer ${mp.token}`
+            },
+            body: JSON.stringify({ avatar: dataUrl })
+          }).then(r => r.json()).then(data => {
+            if (data.ok && data.user) {
+              mp.user = data.user;
+              mp.user.avatar = data.user.avatar;
+              setAvatarDisplay(data.user.avatar);
+              showToast("Foto de perfil atualizada!");
+            }
+          }).catch(() => showToast("Erro ao enviar foto."));
+        };
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
+    });
+
+    // ── Corrida de Cavalos ─────────────────────────────────────────────────────
+    const HORSE_COLORS = ["#e74c3c","#f39c12","#2ecc71","#3498db","#9b59b6"];
+    const HORSE_EMOJIS = ["🔴","🟡","🟢","🔵","🟣"];
+    let horseRaceAnim = null;
+
+    function createHorseRoom() {
+      if (!mp.isOnline) {
+        showToast("Faça login para abrir uma corrida.");
+        document.getElementById("authOverlay").classList.remove("hidden");
+        return;
+      }
+      const bet = Number(document.getElementById("myBetInput").value) || 10;
+      if (bet < 5) { showToast("Aposta mínima: 5 créditos."); return; }
+      if (bet > state.betCredits) { showToast("Créditos de aposta insuficientes."); return; }
+      mp.socket.emit("horse:create", { bet });
+      document.getElementById("lobbyOverlay").classList.add("hidden");
+    }
+
+    function acceptHorseInvite() {
+      if (!mp.horseInviteRoomId) return;
+      document.getElementById("horseInviteToast").classList.add("hidden");
+      mp.socket.emit("horse:join", { roomId: mp.horseInviteRoomId });
+      mp.horseInviteRoomId = null;
+    }
+
+    function rejectHorseInvite() {
+      mp.horseInviteRoomId = null;
+      document.getElementById("horseInviteToast").classList.add("hidden");
+    }
+
+    function pickHorse(horseId) {
+      if (!mp.horseRoomId) return;
+      mp.socket.emit("horse:pick", { roomId: mp.horseRoomId, horseId });
+    }
+
+    function startHorseRace() {
+      if (!mp.horseRoomId) return;
+      mp.socket.emit("horse:start", { roomId: mp.horseRoomId });
+    }
+
+    function leaveHorseRoom() {
+      if (mp.horseRoomId && mp.horseRoom?.status === "waiting") {
+        mp.socket.emit("horse:leave", { roomId: mp.horseRoomId });
+      }
+      closeHorseOverlay();
+    }
+
+    function closeHorseOverlay() {
+      document.getElementById("horseOverlay").classList.add("hidden");
+      if (horseRaceAnim) { cancelAnimationFrame(horseRaceAnim); horseRaceAnim = null; }
+      mp.horseRoomId = null;
+      mp.horseRoom = null;
+    }
+
+    function renderHorseRoom(room) {
+      mp.horseRoom = room;
+      mp.horseRoomId = room.roomId;
+
+      const isHost = room.hostSocketId === mp.socket?.id;
+      const isWaiting = room.status === "waiting";
+      const isFinished = room.status === "finished";
+      const me = room.players.find(p => p.isMe);
+
+      document.getElementById("horseOverlay").classList.remove("hidden");
+      document.getElementById("horseBetLabel").textContent = `Aposta: ${room.bet} créditos`;
+      document.getElementById("horseMessage").textContent = room.message || "";
+
+      // Track lanes - only render HTML when waiting (preserve during racing for animation)
+      const track = document.getElementById("horseTrack");
+      if (room.status === "waiting") {
+        track.innerHTML = room.horses.map(h => `
+          <div class="horse-lane" id="lane-${h.id}">
+            <div class="horse-lane-label" style="color:${h.color}">
+              ${HORSE_EMOJIS[h.id-1]} ${h.name}
+            </div>
+            <div class="horse-lane-bar-wrap">
+              <div class="horse-lane-bar" id="bar-${h.id}" style="background:${h.color};width:0%"></div>
+            </div>
+            <span class="horse-lane-badge" id="badge-${h.id}" style="color:${h.color}">
+              ${room.players.filter(p=>p.pickedHorse===h.id).length > 0 ? room.players.filter(p=>p.pickedHorse===h.id).map(p=>p.username).join(', ') : '—'}
+            </span>
+          </div>
+        `).join("");
+      }
+
+      // Pick buttons
+      const pickSection = document.getElementById("horsePickSection");
+      pickSection.style.display = isWaiting ? "block" : "none";
+      if (isWaiting) {
+        document.getElementById("horsePickButtons").innerHTML = room.horses.map(h => `
+          <button class="horse-pick-btn ${me?.pickedHorse===h.id?'is-picked':''}"
+                  style="border-color:${me?.pickedHorse===h.id?h.color:'rgba(255,255,255,0.2)'}"
+                  onclick="pickHorse(${h.id})">
+            ${HORSE_EMOJIS[h.id-1]} ${h.name}
+          </button>
+        `).join("");
+      }
+
+      // Players list
+      document.getElementById("horseRacers").innerHTML = room.players.map(p => {
+        const horse = room.horses.find(h=>h.id===p.pickedHorse);
+        return `<div class="horse-racer-chip ${p.isMe?'is-me':''}">
+          ${p.avatar ? `<img src="${p.avatar}" style="width:20px;height:20px;border-radius:50%;object-fit:cover">` : ''}
+          ${escHtml(p.username)}${horse ? ` → ${HORSE_EMOJIS[horse.id-1]}${horse.name}` : ' (sem cavalo)'}
+        </div>`;
+      }).join("");
+
+      // Buttons
+      document.getElementById("horseStartBtn").disabled = !(isHost && isWaiting);
+      document.getElementById("horseLeaveBtn").textContent = isFinished ? "Fechar" : "Sair";
+
+      // Winner banner
+      const banner = document.getElementById("horseWinnerBanner");
+      if (isFinished && room.finishOrder) {
+        const winHorse = room.horses.find(h => h.id === room.finishOrder[0]);
+        banner.innerHTML = `<div class="horse-winner-banner">🏆 ${winHorse.name} venceu!</div>`;
+      } else {
+        banner.innerHTML = "";
+      }
+
+      // Start race animation if status changed to racing
+      if (room.status === "racing" && !horseRaceAnim) {
+        const randomOrder = [1,2,3,4,5].sort(() => Math.random()-0.5);
+        animateHorseRace(randomOrder);
+        document.getElementById("horsePickSection").style.display = "none";
+      }
+    }
+
+    function animateHorseRace(finishOrder) {
+      const totalMs = 7500;
+      const start = performance.now();
+      const targets = {};
+      finishOrder.forEach((horseId, rank) => {
+        targets[horseId] = 1.0 - rank * 0.04;
+      });
+
+      function frame(now) {
+        const elapsed = now - start;
+        const t = Math.min(elapsed / totalMs, 1);
+        const easedT = t < 0.5 ? 2*t*t : -1+(4-2*t)*t;
+
+        finishOrder.forEach(horseId => {
+          const bar = document.getElementById(`bar-${horseId}`);
+          if (!bar) return;
+          const pct = easedT * targets[horseId] * 100;
+          bar.style.width = pct.toFixed(1) + "%";
+          bar.textContent = pct > 20 ? "🏇" : "";
+        });
+
+        if (t < 1) {
+          horseRaceAnim = requestAnimationFrame(frame);
+        } else {
+          finishOrder.forEach(horseId => {
+            const bar = document.getElementById(`bar-${horseId}`);
+            if (bar) { bar.style.width = (targets[horseId]*100).toFixed(1)+"%"; bar.textContent = "🏇"; }
+          });
+        }
+      }
+      horseRaceAnim = requestAnimationFrame(frame);
     }
 
     // ── Init ─────────────────────────────────────────────────────────────

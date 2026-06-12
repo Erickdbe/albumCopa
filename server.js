@@ -18,6 +18,17 @@ const PORT        = process.env.PORT || 3000;
 const JWT_SECRET  = process.env.JWT_SECRET || "albumcopa_secret_mude_em_producao";
 const SALT_ROUNDS = 10;
 const DB_FILE     = path.join(__dirname, "db.json");
+const DAILY_ALBUM_CREDITS = 30;
+const INITIAL_BET_CREDITS = 350;
+
+function todayKey() {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Sao_Paulo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).format(new Date());
+}
 
 // ─── Banco de dados JSON ───────────────────────────────────────────────────
 function loadDb() {
@@ -42,10 +53,12 @@ const db = {
       id:               data.nextUserId++,
       username,
       password_hash,
-      credits:          100,
-      bet_credits:      50,
+      credits:          DAILY_ALBUM_CREDITS,
+      bet_credits:      INITIAL_BET_CREDITS,
       stickers:         [],
       pending_stickers: [],
+      initial_bet_credits_granted: INITIAL_BET_CREDITS,
+      last_album_credit_day: todayKey(),
       created_at:       new Date().toISOString()
     };
     data.users.push(user);
@@ -102,6 +115,49 @@ const db = {
   }
 };
 
+function refreshDailyAlbumCredits(user) {
+  if (!user) return null;
+
+  const today = todayKey();
+  const currentCredits = Number.isFinite(Number(user.credits)) ? Number(user.credits) : 0;
+
+  if (!user.last_album_credit_day) {
+    return db.updateUser(user.id, {
+      credits: DAILY_ALBUM_CREDITS,
+      last_album_credit_day: today
+    });
+  }
+
+  if (user.last_album_credit_day !== today && currentCredits < DAILY_ALBUM_CREDITS) {
+    return db.updateUser(user.id, {
+      credits: DAILY_ALBUM_CREDITS,
+      last_album_credit_day: today
+    });
+  }
+
+  if (user.last_album_credit_day !== today) {
+    return db.updateUser(user.id, {
+      last_album_credit_day: today
+    });
+  }
+
+  return user;
+}
+
+function normalizeInitialBetCredits(user) {
+  if (!user) return null;
+
+  if (user.initial_bet_credits_granted === INITIAL_BET_CREDITS) {
+    return user;
+  }
+
+  const currentBetCredits = Number.isFinite(Number(user.bet_credits)) ? Number(user.bet_credits) : 0;
+  return db.updateUser(user.id, {
+    bet_credits: Math.max(currentBetCredits, INITIAL_BET_CREDITS),
+    initial_bet_credits_granted: INITIAL_BET_CREDITS
+  });
+}
+
 // ─── App ───────────────────────────────────────────────────────────────────
 const app    = express();
 const server = http.createServer(app);
@@ -115,7 +171,7 @@ app.use(express.static(path.join(__dirname)));
 
 // Rota raiz → abre o álbum
 app.get("/", (req, res) => {
-  res.sendFile(path.join(__dirname, "albumCopa.html"));
+  res.sendFile(path.join(__dirname, "Album", "index.html"));
 });
 
 // ─── Helpers JWT ───────────────────────────────────────────────────────────
@@ -166,12 +222,13 @@ app.post("/api/login", async (req, res) => {
     if (!username || !password)
       return res.status(400).json({ error: "Usuário e senha obrigatórios" });
 
-    const user = db.findUser("username", username.trim());
+    let user = db.findUser("username", username.trim());
     if (!user) return res.status(401).json({ error: "Usuário ou senha inválidos" });
 
     const ok = await bcrypt.compare(password, user.password_hash);
     if (!ok) return res.status(401).json({ error: "Usuário ou senha inválidos" });
 
+    user = normalizeInitialBetCredits(refreshDailyAlbumCredits(user));
     console.log(`[login] ${user.username}`);
     res.json({ token: signToken(user), user: safeUser(user) });
   } catch (err) {
@@ -192,8 +249,9 @@ function authMiddleware(req, res, next) {
 // ─── REST: Perfil ──────────────────────────────────────────────────────────
 app.get("/api/me", authMiddleware, (req, res) => {
   try {
-    const user = db.findUser("id", req.userId);
+    let user = db.findUser("id", req.userId);
     if (!user) return res.status(404).json({ error: "Usuário não encontrado" });
+    user = normalizeInitialBetCredits(refreshDailyAlbumCredits(user));
     res.json(safeUser(user));
   } catch (err) {
     console.error("[me] erro:", err);
@@ -353,12 +411,12 @@ io.on("connection", (socket) => {
   // ── Jogo em tempo real ─────────────────────────────────────────────────
   socket.on("game:state", (state) => {
     const p = onlinePlayers.get(socket.id);
-    if (p?.roomId) socket.to(p.roomId).emit("game:state", state);
+    if (p?.roomId) socket.volatile.to(p.roomId).emit("game:state", state);
   });
 
   socket.on("game:input", (inputs) => {
     const p = onlinePlayers.get(socket.id);
-    if (p?.roomId) socket.to(p.roomId).emit("game:input", inputs);
+    if (p?.roomId) socket.volatile.to(p.roomId).emit("game:input", inputs);
   });
 
   socket.on("game:goal", ({ scorer, scores, roomId }) => {

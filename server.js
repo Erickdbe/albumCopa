@@ -20,11 +20,107 @@ const SALT_ROUNDS = 10;
 const DB_FILE     = path.join(__dirname, "db.json");
 const DAILY_ALBUM_CREDITS = 30;
 const INITIAL_BET_CREDITS = 350;
+const PACK_COST = 15;
+const PACK_SIZE = 3;
+const MAX_STICKER_ID = 62;
 const MARKET_PRICES = {
   common: 10,
   rare: 20,
   legendary: 30
 };
+const RARITY_SETTINGS = {
+  common: { chance: 73.7, duplicateChance: 0.46 },
+  rare: { chance: 24, duplicateChance: 0.22 },
+  legendary: { chance: 2.3, duplicateChance: 0.10 }
+};
+const RARITY_ORDER = ["common", "rare", "legendary"];
+const SERVER_STICKER_OVERRIDES = {
+  55: { name: "Fabinho Cocorico", image: "assets/album-copa/figurinhas/fabinho%20cocorico.png" },
+  56: { name: "Juiz", rarity: "rare", image: "assets/album-copa/figurinhas/Juiz.png" },
+  57: { name: "Cascao Lendaria", rarity: "legendary", image: "assets/album-copa/figurinhas/Casc%C3%A3o%20lend%C3%A1ria.png" },
+  58: { name: "Pablo Gaucho", rarity: "legendary", image: "assets/album-copa/figurinhas/Pablo%20Gaucho%20lend%C3%A1ria.png" },
+  59: { name: "Pablo Jackson", rarity: "legendary", image: "assets/album-copa/figurinhas/Pablo%20Jackson%20Lend%C3%A1ria.png" },
+  60: { name: "Pablo Neymar", rarity: "legendary", image: "assets/album-copa/figurinhas/Pablo%20neymar%20lend%C3%A1ria.png" },
+  61: { name: "Pablo Tiro Certo", rarity: "rare", image: "assets/album-copa/figurinhas/Pablo%20tiro%20certo.png" },
+  62: { name: "Pablo Vitar", rarity: "legendary", image: "assets/album-copa/figurinhas/Pablo%20Vitar%20lend%C3%A1ria.png" }
+};
+
+function defaultStickerRarity(stickerId) {
+  const itemIndex = (stickerId - 1) % 9;
+  if (itemIndex === 8) return "legendary";
+  if (itemIndex === 2 || itemIndex === 5) return "rare";
+  return "common";
+}
+
+function getServerSticker(stickerId) {
+  const id = Number(stickerId);
+  if (!Number.isInteger(id) || id < 1 || id > MAX_STICKER_ID) return null;
+
+  const override = SERVER_STICKER_OVERRIDES[id] || {};
+  return {
+    id,
+    code: `FIG-${String(id).padStart(2, "0")}`,
+    name: override.name || `Figurinha ${String(id).padStart(2, "0")}`,
+    image: override.image || `assets/album-copa/figurinhas/figurinha-${String(id).padStart(2, "0")}.png`,
+    rarity: override.rarity || defaultStickerRarity(id)
+  };
+}
+
+function getServerStickers() {
+  return Array.from({ length: MAX_STICKER_ID }, (_, index) => getServerSticker(index + 1));
+}
+
+function normalizeStickerList(stickers) {
+  if (!Array.isArray(stickers)) return [];
+
+  const seen = new Set();
+  return stickers.reduce((list, item) => {
+    const id = Number(item?.id);
+    if (!getServerSticker(id) || seen.has(id)) return list;
+    if (!(item.unlocked || item.collected)) return list;
+
+    seen.add(id);
+    list.push({ id, unlocked: true });
+    return list;
+  }, []);
+}
+
+function normalizeDuplicateMap(duplicates) {
+  if (!duplicates || Array.isArray(duplicates) || typeof duplicates !== "object") return {};
+
+  return Object.entries(duplicates).reduce((map, [key, value]) => {
+    const id = Number(key);
+    const count = Math.floor(Number(value));
+    if (getServerSticker(id) && count > 0) {
+      map[id] = Math.min(count, 999);
+    }
+    return map;
+  }, {});
+}
+
+function pickPackRarity() {
+  const roll = Math.random() * 100;
+  let accumulated = 0;
+
+  for (const rarity of RARITY_ORDER) {
+    accumulated += RARITY_SETTINGS[rarity].chance;
+    if (roll < accumulated) return rarity;
+  }
+
+  return "common";
+}
+
+function pickServerStickerForRarity(rarity, ownedIds, usedIds) {
+  const pool = getServerStickers().filter(sticker => sticker.rarity === rarity && !usedIds.has(sticker.id));
+  const candidates = pool.length ? pool : getServerStickers().filter(sticker => sticker.rarity === rarity);
+  const owned = candidates.filter(sticker => ownedIds.has(sticker.id));
+  const locked = candidates.filter(sticker => !ownedIds.has(sticker.id));
+  const shouldRepeat = owned.length && Math.random() < RARITY_SETTINGS[rarity].duplicateChance;
+
+  if (shouldRepeat) return owned[Math.floor(Math.random() * owned.length)];
+  if (locked.length) return locked[Math.floor(Math.random() * locked.length)];
+  return candidates[Math.floor(Math.random() * candidates.length)];
+}
 
 function todayKey() {
   return new Intl.DateTimeFormat("en-CA", {
@@ -158,8 +254,15 @@ function normalizeUserProgress(user) {
   if (!user) return null;
 
   const fields = {};
-  if (!user.duplicates || Array.isArray(user.duplicates) || typeof user.duplicates !== "object") {
-    fields.duplicates = {};
+  const normalizedStickers = normalizeStickerList(user.stickers);
+  const currentStickers = Array.isArray(user.stickers) ? user.stickers : [];
+  if (JSON.stringify(normalizedStickers) !== JSON.stringify(currentStickers)) {
+    fields.stickers = normalizedStickers;
+  }
+
+  const normalizedDuplicates = normalizeDuplicateMap(user.duplicates);
+  if (JSON.stringify(normalizedDuplicates) !== JSON.stringify(user.duplicates || {})) {
+    fields.duplicates = normalizedDuplicates;
   }
   if (!Number.isFinite(Number(user.exchange_wins))) {
     fields.exchange_wins = Math.max(0, Number(user.bj_wins || 0) || 0);
@@ -337,18 +440,66 @@ app.get("/api/me", authMiddleware, (req, res) => {
 // ─── REST: Salvar progresso ────────────────────────────────────────────────
 app.post("/api/save", authMiddleware, (req, res) => {
   try {
-    const { credits, bet_credits, stickers, duplicates, pending_stickers } = req.body || {};
-    const fields = {
-      credits:          Number(credits)     || 0,
-      bet_credits:      Number(bet_credits) || 0,
-      stickers:         Array.isArray(stickers)         ? stickers         : [],
-      duplicates:       duplicates && typeof duplicates === "object" && !Array.isArray(duplicates) ? duplicates : {},
-      pending_stickers: Array.isArray(pending_stickers) ? pending_stickers : []
-    };
-    db.updateUser(req.userId, fields);
-    res.json({ ok: true });
+    const user = normalizeUserProgress(db.findUser("id", req.userId));
+    if (!user) return res.status(404).json({ error: "Usuario nao encontrado" });
+    res.json({ ok: true, user: safeUser(user) });
   } catch (err) {
     console.error("[save] erro:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/api/pack/open", authMiddleware, (req, res) => {
+  try {
+    const user = normalizeUserProgress(db.findUser("id", req.userId));
+    if (!user) return res.status(404).json({ error: "Usuario nao encontrado" });
+
+    const credits = Math.max(0, Number(user.credits || 0) || 0);
+    if (credits < PACK_COST) {
+      return res.status(400).json({ error: "Creditos insuficientes para comprar pacote." });
+    }
+
+    const stickers = normalizeStickerList(user.stickers);
+    const duplicates = normalizeDuplicateMap(user.duplicates);
+    const ownedIds = new Set(stickers.map(sticker => Number(sticker.id)));
+    const usedIds = new Set();
+    const packItems = [];
+
+    for (let i = 0; i < PACK_SIZE; i += 1) {
+      const rarity = pickPackRarity();
+      const sticker = pickServerStickerForRarity(rarity, ownedIds, usedIds);
+      if (!sticker) return res.status(500).json({ error: "Falha ao sortear figurinha." });
+
+      const isDuplicate = ownedIds.has(sticker.id);
+      usedIds.add(sticker.id);
+
+      if (isDuplicate) {
+        duplicates[sticker.id] = Math.max(0, Number(duplicates[sticker.id] || 0) || 0) + 1;
+      } else {
+        stickers.push({ id: sticker.id, unlocked: true });
+        ownedIds.add(sticker.id);
+      }
+
+      packItems.push({
+        stickerId: sticker.id,
+        code: sticker.code,
+        name: sticker.name,
+        image: sticker.image,
+        rarity: sticker.rarity,
+        isDuplicate
+      });
+    }
+
+    const updated = db.updateUser(req.userId, {
+      credits: credits - PACK_COST,
+      stickers,
+      duplicates,
+      pending_stickers: []
+    });
+
+    res.json({ ok: true, packItems, user: safeUser(updated) });
+  } catch (err) {
+    console.error("[pack:open] erro:", err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -444,10 +595,13 @@ app.get("/api/market", authMiddleware, (req, res) => {
 
 app.post("/api/market/list", authMiddleware, (req, res) => {
   try {
-    const { stickerId, rarity, code, name, image } = req.body || {};
+    const { stickerId } = req.body || {};
     const id = Number(stickerId);
-    const price = getMarketPrice(rarity);
-    if (!id || !price) return res.status(400).json({ error: "Figurinha invalida para venda." });
+    const sticker = getServerSticker(id);
+    if (!sticker) return res.status(400).json({ error: "Figurinha invalida para venda." });
+
+    const price = getMarketPrice(sticker.rarity);
+    if (!price) return res.status(400).json({ error: "Figurinha invalida para venda." });
 
     const user = normalizeUserProgress(db.findUser("id", req.userId));
     if (!user) return res.status(404).json({ error: "Usuario nao encontrado" });
@@ -470,11 +624,11 @@ app.post("/api/market/list", authMiddleware, (req, res) => {
       id: data.nextMarketId++,
       seller_id: req.userId,
       sticker_id: id,
-      rarity,
+      rarity: sticker.rarity,
       price,
-      code: String(code || `FIG-${String(id).padStart(2, "0")}`),
-      name: String(name || "Figurinha"),
-      image: String(image || ""),
+      code: sticker.code,
+      name: sticker.name,
+      image: sticker.image,
       status: "active",
       created_day: today,
       created_at: new Date().toISOString()

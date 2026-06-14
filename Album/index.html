@@ -3591,6 +3591,7 @@
         <label for="myBetInput">Minha aposta:</label>
         <input id="myBetInput" type="number" min="5" max="50" value="10" />
         <span style="font-size:.8rem;color:var(--muted)" id="betAvail"></span>
+        <button class="mp-btn" style="background:#16689f;width:auto;padding:8px 12px;font-size:.82rem" type="button" onclick="createHeadSoccerRoom()">Head Soccer</button>
         <button class="mp-btn button-soccer-open-btn" type="button" onclick="createButtonSoccerRoom()">Botao</button>
         <button class="mp-btn blackjack-open-btn" type="button" onclick="createBlackjackRoom()">Mesa 21</button>
         <button class="mp-btn" style="background:#9b59b6;width:auto;padding:8px 12px;font-size:.82rem" type="button" onclick="createHorseRoom()">🏇 Corrida</button>
@@ -3645,6 +3646,15 @@
   </div>
 
   <!-- ── Aguardando resposta ─────────────────────────────────────────────── -->
+  <div class="challenge-toast hidden" id="headSoccerInviteToast">
+    <h4>Head Soccer online</h4>
+    <p id="headSoccerInviteMsg"></p>
+    <div class="challenge-toast-btns">
+      <button class="btn-accept" onclick="acceptHeadSoccerInvite()">Entrar</button>
+      <button class="btn-reject" onclick="rejectHeadSoccerInvite()">Agora nao</button>
+    </div>
+  </div>
+
   <div class="challenge-toast hidden" id="blackjackInviteToast">
     <h4>21 online</h4>
     <p id="blackjackInviteMsg"></p>
@@ -4332,6 +4342,19 @@
       drawIdleField();
     }
 
+    function openHeadSoccerFromSidebar() {
+      if (!mp.isOnline) {
+        showToast("Faca login para abrir uma sala de Head Soccer.");
+        document.getElementById("authOverlay").classList.remove("hidden");
+        return;
+      }
+
+      openLobby();
+      window.setTimeout(() => {
+        document.querySelector("[onclick='createHeadSoccerRoom()']")?.focus();
+      }, 0);
+    }
+
     function openBlackjackFromSidebar() {
       if (!mp.isOnline) {
         showToast("Faça login para abrir uma Mesa 21 online.");
@@ -4346,6 +4369,20 @@
     }
 
     function closeGame() {
+      if (mp.headRoomId) {
+        if (mp.headRoom?.status === "playing") {
+          showToast("Termine a partida antes de fechar.");
+          return;
+        }
+
+        if (mp.headRoom?.status === "waiting") {
+          mp.socket?.emit("head:leave", { roomId: mp.headRoomId });
+        }
+
+        closeHeadSoccerRoom(false);
+        return;
+      }
+
       if (game.running) {
         showToast("Termine a partida antes de fechar.");
         return;
@@ -4452,6 +4489,11 @@
     }
 
     function startGame() {
+      if (mp.headRoomId && mp.headRoom?.status === "waiting") {
+        startHeadSoccerOnline();
+        return;
+      }
+
       keys.clear();
       unlockGameAudio();
       const teams    = getCollectibleStickers();
@@ -5708,7 +5750,7 @@
     prevPage.addEventListener("click", () => goToSpread(state.spread - 1));
     nextPage.addEventListener("click", () => goToSpread(state.spread + 1));
     packButton.addEventListener("click", openPack);
-    openBetGame.addEventListener("click", openGame);
+    openBetGame.addEventListener("click", openHeadSoccerFromSidebar);
     openButtonSoccerGame.addEventListener("click", openButtonSoccerFromSidebar);
     openBlackjackGame.addEventListener("click", openBlackjackFromSidebar);
     openMarket.addEventListener("click", openMarketplace);
@@ -5879,6 +5921,12 @@
       buttonLastGoalId: null,
       buttonLastShotId: null,
       buttonShotAnimating: false,
+      headInviteRoomId: null,
+      headRoomId: null,
+      headRoom: null,
+      headRenderId: 0,
+      headLastInputAt: 0,
+      headLastInput: null,
       guestInputs:      { left: false, right: false, jump: false, kick: false },
       lastHostKick:     false   // kick do host recebido via game:state (usado pelo guest)
     };
@@ -6178,6 +6226,37 @@
       // Oponente desconectou
       mp.socket.on("game:opponent_disconnected", () => {
         endOnlineGame(null, null, null, null, true);
+      });
+
+      mp.socket.on("head:invite", ({ roomId, fromUsername, bet }) => {
+        mp.headInviteRoomId = roomId;
+        document.getElementById("headSoccerInviteMsg").textContent =
+          `${fromUsername} abriu uma sala de Head Soccer. Aposta: ${bet} creditos.`;
+        document.getElementById("headSoccerInviteToast").classList.remove("hidden");
+      });
+
+      mp.socket.on("head:update", (room) => {
+        renderHeadSoccerRoom(room);
+      });
+
+      mp.socket.on("head:finished", ({ room, updatedUser }) => {
+        if (updatedUser) {
+          applyServerData(updatedUser);
+        }
+        renderBetPanel();
+        renderHeadSoccerRoom(room);
+        updateLobbyHeader();
+        showToast(room.message || "Head Soccer encerrado.");
+      });
+
+      mp.socket.on("head:cancelled", ({ message }) => {
+        closeHeadSoccerRoom(true);
+        showToast(message || "Sala de Head Soccer cancelada.");
+        updateLobbyHeader();
+      });
+
+      mp.socket.on("head:error", (msg) => {
+        showToast(msg || "Nao foi possivel jogar Head Soccer.");
       });
 
       mp.socket.on("blackjack:invite", ({ roomId, fromUsername, bet }) => {
@@ -7003,10 +7082,19 @@
 
     // ── Emoji Taunts ──────────────────────────────────────────────────────
     function sendTaunt(emoji) {
-      const hasActiveRoom = mp.roomId || mp.blackjackRoomId || mp.horseRoomId || mp.buttonRoomId;
+      const hasActiveRoom = mp.roomId || mp.blackjackRoomId || mp.horseRoomId || mp.buttonRoomId || mp.headRoomId;
       if (!mp.socket?.connected || !hasActiveRoom) return;
 
       const payload = { emoji };
+      if (mp.headRoom && gameModal.classList.contains("is-open")) {
+        const me = getHeadSoccerMe();
+        if (me) {
+          payload.game = "head";
+          payload.x = me.x;
+          payload.y = me.y - (me.radius || 46);
+        }
+      }
+
       if (mp.buttonRoom && !document.getElementById("buttonSoccerOverlay").classList.contains("hidden")) {
         const me = getButtonSoccerMe();
         if (me) {
@@ -7022,6 +7110,26 @@
 
     function showTauntDisplay(emoji, payload = {}) {
       if (!emoji) return;
+
+      const soccerWrap = document.querySelector(".soccer-wrap");
+      if (soccerWrap && mp.headRoom && gameModal.classList.contains("is-open")) {
+        const field = mp.headRoom.field || { width: 1500, height: 675 };
+        let x = Number(payload.x);
+        let y = Number(payload.y);
+        if (!Number.isFinite(x) || !Number.isFinite(y)) {
+          const player = mp.headRoom.players?.find(item => item.socketId === payload.fromSocketId) || getHeadSoccerMe();
+          x = player?.x ?? field.width / 2;
+          y = (player?.y ?? field.height / 2) - (player?.radius || 46);
+        }
+        const el = document.createElement("span");
+        el.className = "taunt-pop";
+        el.textContent = emoji;
+        el.style.setProperty("--x", `${(x / field.width) * 100}%`);
+        el.style.setProperty("--y", `${(y / field.height) * 100}%`);
+        soccerWrap.appendChild(el);
+        setTimeout(() => el.remove(), 1700);
+        return;
+      }
 
       const buttonOverlay = document.getElementById("buttonSoccerOverlay");
       const buttonLayer = document.getElementById("buttonTauntLayer");
@@ -7513,6 +7621,350 @@
       buttonPowerValue.textContent = `${buttonPower.value}%`;
       if (mp.buttonRoom && !mp.buttonShotAnimating) drawButtonSoccerField(mp.buttonRoom);
     });
+
+    // Head Soccer em sala
+    const headAssetCache = new Map();
+    const HEAD_FIELD_ASSET = "kenney_sports-pack/Tilesheet/groundGrass_mownWide.png";
+    const HEAD_BALL_ASSET = "kenney_sports-pack/PNG/Equipment/ball_soccer1.png";
+
+    function getHeadAsset(src) {
+      if (!src) return null;
+      if (!headAssetCache.has(src)) {
+        const img = new Image();
+        img.src = src;
+        headAssetCache.set(src, img);
+      }
+      return headAssetCache.get(src);
+    }
+
+    function createHeadSoccerRoom() {
+      if (!mp.isOnline) {
+        showToast("Faca login para abrir uma sala de Head Soccer.");
+        document.getElementById("authOverlay").classList.remove("hidden");
+        return;
+      }
+      const bet = Number(document.getElementById("myBetInput").value) || 10;
+      if (bet < 5) { showToast("Aposta minima: 5 creditos."); return; }
+      if (bet > state.betCredits) { showToast("Creditos de aposta insuficientes."); return; }
+      mp.socket.emit("head:create", { bet });
+      document.getElementById("lobbyOverlay").classList.add("hidden");
+    }
+
+    function acceptHeadSoccerInvite() {
+      if (!mp.headInviteRoomId) return;
+      document.getElementById("headSoccerInviteToast").classList.add("hidden");
+      mp.socket.emit("head:join", { roomId: mp.headInviteRoomId });
+      mp.headInviteRoomId = null;
+    }
+
+    function rejectHeadSoccerInvite() {
+      mp.headInviteRoomId = null;
+      document.getElementById("headSoccerInviteToast").classList.add("hidden");
+    }
+
+    function startHeadSoccerOnline() {
+      if (!mp.headRoomId) return;
+      unlockGameAudio();
+      mp.socket.emit("head:start", { roomId: mp.headRoomId });
+    }
+
+    function getHeadSoccerMe() {
+      return mp.headRoom?.players?.find(player => player.isMe) || null;
+    }
+
+    function renderHeadSoccerRoom(room) {
+      const firstRender = mp.headRoomId !== room.roomId;
+      mp.headRoom = room;
+      mp.headRoomId = room.roomId;
+      game.running = false;
+      game.isOnlineGame = false;
+      cancelAnimationFrame(game.animationId);
+
+      if (firstRender) {
+        keys.clear();
+        justPressedKeys.clear();
+      }
+
+      gameModal.classList.add("is-open");
+      gameModal.setAttribute("aria-hidden", "false");
+      document.getElementById("lobbyOverlay").classList.add("hidden");
+      document.getElementById("headSoccerInviteToast").classList.add("hidden");
+      document.getElementById("gameTitle").textContent = "Head Soccer Online";
+      const kicker = gameModal.querySelector(".game-kicker");
+      if (kicker) kicker.textContent = "Sala online";
+
+      teamSelect.disabled = true;
+      wagerInput.disabled = true;
+      exchangeBetCredits.disabled = true;
+      document.getElementById("tauntBar").style.display = "flex";
+
+      const blueCount = (room.players || []).filter(player => player.team === "blue").length;
+      const redCount = (room.players || []).filter(player => player.team === "red").length;
+      playerTeamName.textContent = `Azuis (${blueCount})`;
+      cpuTeamName.textContent = `Vermelhos (${redCount})`;
+      gameScore.textContent = `${room.scores?.blue || 0} x ${room.scores?.red || 0} · ${
+        room.status === "playing" ? formatMs(room.gameLeftMs) : room.status === "finished" ? "Fim" : "Aguardando"
+      }`;
+      gameMessage.textContent = room.message || "";
+
+      const isHost = room.hostSocketId === mp.socket?.id;
+      const canStart = room.status === "waiting" && isHost && (room.players?.length || 0) >= 2;
+      startMatch.textContent = room.status === "waiting"
+        ? "Comecar online"
+        : room.status === "finished"
+          ? "Partida encerrada"
+          : "Em campo";
+      startMatch.disabled = !canStart;
+
+      drawHeadSoccerRoom(room);
+      ensureHeadSoccerRenderLoop();
+    }
+
+    function closeHeadSoccerRoom(fromServer = false) {
+      if (mp.headRenderId) {
+        cancelAnimationFrame(mp.headRenderId);
+        mp.headRenderId = 0;
+      }
+      mp.headInviteRoomId = null;
+      mp.headRoomId = null;
+      mp.headRoom = null;
+      mp.headLastInputAt = 0;
+      mp.headLastInput = null;
+      keys.clear();
+      justPressedKeys.clear();
+      document.getElementById("headSoccerInviteToast").classList.add("hidden");
+      gameModal.classList.remove("is-open");
+      gameModal.setAttribute("aria-hidden", "true");
+      document.getElementById("gameTitle").textContent = "Head Soccer";
+      const kicker = gameModal.querySelector(".game-kicker");
+      if (kicker) kicker.textContent = "Aposta valendo creditos";
+      teamSelect.disabled = false;
+      wagerInput.disabled = false;
+      startMatch.textContent = "Comecar partida";
+      document.getElementById("tauntBar").style.display = "none";
+      renderBetPanel();
+      if (!fromServer) updateLobbyHeader();
+      drawIdleField();
+    }
+
+    function currentHeadInput() {
+      const kick = justPressedKeys.has(" ") || justPressedKeys.has("Space");
+      return {
+        left: keys.has("ArrowLeft") || keys.has("a"),
+        right: keys.has("ArrowRight") || keys.has("d"),
+        jump: keys.has("ArrowUp") || keys.has("w"),
+        kick
+      };
+    }
+
+    function sendHeadSoccerInput(now) {
+      if (!mp.headRoomId || mp.headRoom?.status !== "playing" || !mp.socket?.connected) return;
+      const input = currentHeadInput();
+      const previous = mp.headLastInput;
+      const changed = !previous
+        || previous.left !== input.left
+        || previous.right !== input.right
+        || previous.jump !== input.jump
+        || previous.kick !== input.kick;
+
+      if (changed || now - mp.headLastInputAt > 90) {
+        mp.socket.volatile.emit("head:input", { roomId: mp.headRoomId, inputs: input });
+        mp.headLastInput = { ...input };
+        mp.headLastInputAt = now;
+      }
+
+      if (input.kick) {
+        justPressedKeys.clear();
+      }
+    }
+
+    function ensureHeadSoccerRenderLoop() {
+      if (mp.headRenderId) return;
+
+      function frame(now) {
+        if (!mp.headRoomId || !mp.headRoom) {
+          mp.headRenderId = 0;
+          return;
+        }
+        sendHeadSoccerInput(now);
+        if (mp.headRoom.status === "playing") {
+          const left = Math.max(0, Number(mp.headRoom.gameEndsAt || Date.now()) - Date.now());
+          gameScore.textContent = `${mp.headRoom.scores?.blue || 0} x ${mp.headRoom.scores?.red || 0} · ${formatMs(left)}`;
+        }
+        drawHeadSoccerRoom(mp.headRoom);
+        mp.headRenderId = requestAnimationFrame(frame);
+      }
+
+      mp.headRenderId = requestAnimationFrame(frame);
+    }
+
+    function drawHeadSoccerRoom(room) {
+      const field = room.field || { width: soccerCanvas.width, height: soccerCanvas.height, pitchTop: 305, ground: 570, goalTop: 190, goalBottom: 570, goalWidth: 98 };
+      const ctx = soccerCtx;
+      ctx.clearRect(0, 0, field.width, field.height);
+
+      const sky = ctx.createLinearGradient(0, 0, 0, field.pitchTop);
+      sky.addColorStop(0, "#6db7e8");
+      sky.addColorStop(0.62, "#c6ecff");
+      sky.addColorStop(1, "#f5d47a");
+      ctx.fillStyle = sky;
+      ctx.fillRect(0, 0, field.width, field.pitchTop);
+
+      ctx.fillStyle = "#29374a";
+      ctx.fillRect(0, field.pitchTop - 54, field.width, 54);
+      for (let x = 0; x < field.width; x += 48) {
+        ctx.fillStyle = x % 96 === 0 ? "#f5d04e" : "#e95548";
+        ctx.fillRect(x, field.pitchTop - 42, 32, 30);
+      }
+
+      const grass = getHeadAsset(HEAD_FIELD_ASSET);
+      if (grass?.complete && grass.naturalWidth) {
+        const pattern = ctx.createPattern(grass, "repeat");
+        if (pattern) {
+          ctx.fillStyle = pattern;
+          ctx.fillRect(0, field.pitchTop, field.width, field.height - field.pitchTop);
+        }
+      } else {
+        ctx.fillStyle = "#1f9b39";
+        ctx.fillRect(0, field.pitchTop, field.width, field.height - field.pitchTop);
+      }
+
+      ctx.fillStyle = "rgba(20, 104, 42, 0.28)";
+      for (let x = 0; x < field.width; x += 150) {
+        ctx.fillRect(x, field.pitchTop, 75, field.height - field.pitchTop);
+      }
+
+      ctx.strokeStyle = "rgba(255,255,255,.86)";
+      ctx.lineWidth = 5;
+      ctx.strokeRect(90, 385, field.width - 180, 188);
+      ctx.beginPath();
+      ctx.moveTo(field.width / 2, 360);
+      ctx.lineTo(field.width / 2, field.ground + 68);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(field.width / 2, 478, 88, 0, Math.PI * 2);
+      ctx.stroke();
+      drawHeadSoccerGoal(ctx, field, "left");
+      drawHeadSoccerGoal(ctx, field, "right");
+
+      const players = [...(room.players || [])].sort((a, b) => (a.y || 0) - (b.y || 0));
+      players.forEach(player => drawHeadSoccerPlayer(ctx, player));
+      drawHeadSoccerBall(ctx, room.ball, field);
+    }
+
+    function drawHeadSoccerGoal(ctx, field, side) {
+      const x = side === "left" ? 6 : field.width - field.goalWidth - 6;
+      const width = field.goalWidth;
+      const height = field.goalBottom - field.goalTop;
+      ctx.save();
+      ctx.fillStyle = "rgba(222, 245, 255, .38)";
+      ctx.fillRect(x, field.goalTop, width, height);
+      ctx.strokeStyle = "#f8fbff";
+      ctx.lineWidth = 9;
+      ctx.strokeRect(x, field.goalTop, width, height);
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = "rgba(37,49,45,.42)";
+      for (let gx = x + 16; gx < x + width; gx += 22) {
+        ctx.beginPath();
+        ctx.moveTo(gx, field.goalTop);
+        ctx.lineTo(gx, field.goalBottom);
+        ctx.stroke();
+      }
+      for (let gy = field.goalTop + 22; gy < field.goalBottom; gy += 28) {
+        ctx.beginPath();
+        ctx.moveTo(x, gy);
+        ctx.lineTo(x + width, gy);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    function drawHeadSoccerPlayer(ctx, player) {
+      const radius = player.radius || 46;
+      const img = getHeadAsset(player.sprite);
+      ctx.save();
+      ctx.fillStyle = "rgba(0,0,0,.24)";
+      ctx.beginPath();
+      ctx.ellipse(player.x, player.y + 15, radius * 1.18, 14, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      if (img?.complete && img.naturalWidth) {
+        const w = radius * 2.15;
+        const h = radius * 2.72;
+        ctx.drawImage(img, player.x - w / 2, player.y - h + 10, w, h);
+      } else {
+        ctx.fillStyle = player.color || "#2f8fd8";
+        ctx.beginPath();
+        ctx.arc(player.x, player.y - radius, radius, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      if (Number(player.kickTimer || 0) > 0) {
+        ctx.strokeStyle = "#f9e8a8";
+        ctx.lineWidth = 7;
+        ctx.beginPath();
+        ctx.moveTo(player.x + player.side * 18, player.y - 14);
+        ctx.lineTo(player.x + player.side * 82, player.y - 3);
+        ctx.stroke();
+      }
+
+      ctx.lineWidth = player.isMe ? 6 : 3;
+      ctx.strokeStyle = player.isMe ? "#f9e8a8" : player.color || "#ffffff";
+      ctx.beginPath();
+      ctx.arc(player.x, player.y - radius, radius + 4, 0, Math.PI * 2);
+      ctx.stroke();
+
+      ctx.font = "900 18px Segoe UI, Arial";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      const label = String(player.username || "?").slice(0, 14);
+      const metrics = ctx.measureText(label);
+      const labelWidth = Math.max(68, metrics.width + 20);
+      const labelY = player.y - radius * 2.28;
+      ctx.fillStyle = "rgba(23,33,31,.78)";
+      roundCanvasRect(ctx, player.x - labelWidth / 2, labelY - 15, labelWidth, 30, 8);
+      ctx.fill();
+      ctx.fillStyle = "#fff9e8";
+      ctx.fillText(label, player.x, labelY);
+      ctx.restore();
+    }
+
+    function drawHeadSoccerBall(ctx, ball, field) {
+      if (!ball) return;
+      const radius = ball.radius || field.ballRadius || 21;
+      const img = getHeadAsset(HEAD_BALL_ASSET);
+      ctx.save();
+      ctx.fillStyle = "rgba(0,0,0,.22)";
+      ctx.beginPath();
+      ctx.ellipse(ball.x, field.ground + 8, radius * 1.2, 7, 0, 0, Math.PI * 2);
+      ctx.fill();
+      if (img?.complete && img.naturalWidth) {
+        ctx.drawImage(img, ball.x - radius, ball.y - radius, radius * 2, radius * 2);
+      } else {
+        ctx.fillStyle = "#fffaf0";
+        ctx.beginPath();
+        ctx.arc(ball.x, ball.y, radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = "#17211f";
+        ctx.lineWidth = 3;
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    function roundCanvasRect(ctx, x, y, width, height, radius) {
+      const r = Math.min(radius, width / 2, height / 2);
+      ctx.beginPath();
+      ctx.moveTo(x + r, y);
+      ctx.lineTo(x + width - r, y);
+      ctx.quadraticCurveTo(x + width, y, x + width, y + r);
+      ctx.lineTo(x + width, y + height - r);
+      ctx.quadraticCurveTo(x + width, y + height, x + width - r, y + height);
+      ctx.lineTo(x + r, y + height);
+      ctx.quadraticCurveTo(x, y + height, x, y + height - r);
+      ctx.lineTo(x, y + r);
+      ctx.quadraticCurveTo(x, y, x + r, y);
+    }
 
     function setAvatarDisplay(avatarDataUrl) {
       const el = document.getElementById("myAvatarDisplay");

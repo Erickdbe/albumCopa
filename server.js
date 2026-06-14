@@ -822,6 +822,7 @@ const pendingChallenges  = new Map();   // challengeId → detalhes
 const activeRooms        = new Map();   // roomId → detalhes da sala
 const blackjackRooms     = new Map();   // roomId -> mesa de 21
 const buttonSoccerRooms  = new Map();   // roomId -> futebol de botao
+const headSoccerRooms    = new Map();   // roomId -> head soccer em sala
 
 io.use((socket, next) => {
   const token   = socket.handshake.auth.token;
@@ -1488,6 +1489,489 @@ function simulateButtonSoccerShot(room, player, angle, power) {
   return goalTeam;
 }
 
+const HEAD_SOCCER_FIELD = {
+  width: 1500,
+  height: 675,
+  pitchTop: 305,
+  ground: 570,
+  playerGround: 548,
+  goalTop: 190,
+  goalBottom: 570,
+  goalWidth: 98,
+  playerRadius: 46,
+  ballRadius: 21
+};
+const HEAD_SOCCER_MAX_PLAYERS = 8;
+const HEAD_SOCCER_GAME_MS = 180000;
+const HEAD_SOCCER_TICK_MS = 1000 / 30;
+const HEAD_SOCCER_GOALS_TO_WIN = 3;
+const HEAD_SOCCER_BLUE_FOLDERS = ["Blue", "Green", "Special", "Blue"];
+const HEAD_SOCCER_RED_FOLDERS = ["Red", "White", "Special", "Red"];
+const HEAD_SOCCER_TEAM_COLORS = {
+  blue: "#2f8fd8",
+  red: "#d84545"
+};
+
+function headSoccerTeamName(team) {
+  return team === "blue" ? "Azuis" : "Vermelhos";
+}
+
+function headSoccerSpritePath(folder, pose) {
+  return `kenney_sports-pack/PNG/${folder}/character${folder}%20(${pose}).png`;
+}
+
+function makeHeadSoccerPlayer(socket, index, bet) {
+  const team = index % 2 === 0 ? "blue" : "red";
+  const teamIndex = Math.floor(index / 2);
+  const folders = team === "blue" ? HEAD_SOCCER_BLUE_FOLDERS : HEAD_SOCCER_RED_FOLDERS;
+  const folder = folders[teamIndex % folders.length];
+  const pose = (teamIndex % 12) + 1;
+
+  return {
+    socketId: socket.id,
+    userId: socket.userId,
+    username: socket.username,
+    avatar: socket.avatar || "",
+    team,
+    side: team === "blue" ? 1 : -1,
+    color: HEAD_SOCCER_TEAM_COLORS[team],
+    sprite: headSoccerSpritePath(folder, pose),
+    bet,
+    x: 0,
+    y: HEAD_SOCCER_FIELD.playerGround,
+    vx: 0,
+    vy: 0,
+    radius: HEAD_SOCCER_FIELD.playerRadius,
+    inputs: { left: false, right: false, jump: false, kick: false },
+    kickTimer: 0,
+    kickCooldown: 0,
+    joinedAt: Date.now()
+  };
+}
+
+function assignHeadSoccerTeams(room) {
+  room.players.forEach((player, index) => {
+    const team = index % 2 === 0 ? "blue" : "red";
+    const teamIndex = Math.floor(index / 2);
+    const folders = team === "blue" ? HEAD_SOCCER_BLUE_FOLDERS : HEAD_SOCCER_RED_FOLDERS;
+    const folder = folders[teamIndex % folders.length];
+    player.team = team;
+    player.side = team === "blue" ? 1 : -1;
+    player.color = HEAD_SOCCER_TEAM_COLORS[team];
+    player.sprite = headSoccerSpritePath(folder, (teamIndex % 12) + 1);
+  });
+}
+
+function resetHeadSoccerPositions(room) {
+  const blue = room.players.filter(player => player.team === "blue");
+  const red = room.players.filter(player => player.team === "red");
+
+  blue.forEach((player, index) => {
+    player.x = 330 + (index % 4) * 78;
+    player.y = HEAD_SOCCER_FIELD.playerGround;
+    player.vx = 0;
+    player.vy = 0;
+    player.kickTimer = 0;
+    player.kickCooldown = 0;
+  });
+
+  red.forEach((player, index) => {
+    player.x = HEAD_SOCCER_FIELD.width - 330 - (index % 4) * 78;
+    player.y = HEAD_SOCCER_FIELD.playerGround;
+    player.vx = 0;
+    player.vy = 0;
+    player.kickTimer = 0;
+    player.kickCooldown = 0;
+  });
+
+  room.ball = {
+    x: HEAD_SOCCER_FIELD.width / 2,
+    y: 276,
+    vx: (Math.random() > 0.5 ? 1 : -1) * 140,
+    vy: -80,
+    radius: HEAD_SOCCER_FIELD.ballRadius
+  };
+}
+
+function serializeHeadSoccerRoom(room, viewerSocketId) {
+  const now = Date.now();
+  return {
+    roomId: room.roomId,
+    hostSocketId: room.hostSocketId,
+    hostUsername: room.hostUsername,
+    bet: room.bet,
+    status: room.status,
+    message: room.message,
+    field: HEAD_SOCCER_FIELD,
+    scores: room.scores,
+    ball: room.ball,
+    gameEndsAt: room.gameEndsAt || null,
+    gameLeftMs: room.status === "playing" ? Math.max(0, (room.gameEndsAt || now) - now) : 0,
+    winnerTeam: room.winnerTeam || null,
+    players: room.players.map((player, index) => ({
+      socketId: player.socketId,
+      username: player.username,
+      avatar: player.avatar || "",
+      team: player.team,
+      teamName: headSoccerTeamName(player.team),
+      side: player.side,
+      color: player.color,
+      sprite: player.sprite,
+      x: Math.round(player.x),
+      y: Math.round(player.y),
+      vx: Math.round(player.vx),
+      vy: Math.round(player.vy),
+      radius: player.radius,
+      kickTimer: player.kickTimer,
+      isHost: player.socketId === room.hostSocketId,
+      isMe: player.socketId === viewerSocketId,
+      order: index
+    }))
+  };
+}
+
+function emitHeadSoccerUpdate(room) {
+  room.players.forEach(player => {
+    io.to(player.socketId).emit("head:update", serializeHeadSoccerRoom(room, player.socketId));
+  });
+}
+
+function startHeadSoccerRound(room, requestedBet = room.bet) {
+  const maxBet = room.players.length >= 3 ? 20 : 50;
+  const tableBet = clampNumber(requestedBet, 5, maxBet);
+  if (room.players.length < 2) {
+    room.message = "Precisa de pelo menos 2 jogadores para iniciar.";
+    emitHeadSoccerUpdate(room);
+    return false;
+  }
+
+  for (const player of room.players) {
+    const user = db.findUser("id", player.userId);
+    if (!user || Number(user.bet_credits || 0) < tableBet) {
+      room.message = `${player.username} nao tem creditos para ${tableBet}.`;
+      emitHeadSoccerUpdate(room);
+      return false;
+    }
+  }
+
+  room.players.forEach(player => {
+    const user = db.findUser("id", player.userId);
+    db.updateUser(player.userId, {
+      bet_credits: Math.max(0, Number(user.bet_credits || 0) - tableBet)
+    });
+    player.bet = tableBet;
+    player.inputs = { left: false, right: false, jump: false, kick: false };
+  });
+
+  room.bet = tableBet;
+  room.status = "playing";
+  room.scores = { blue: 0, red: 0 };
+  room.winnerTeam = null;
+  room.startedAt = Date.now();
+  room.gameEndsAt = room.startedAt + HEAD_SOCCER_GAME_MS;
+  room.lastTick = Date.now();
+  room.message = "Partida iniciada. Cada pessoa controla um jogador.";
+  resetHeadSoccerPositions(room);
+
+  clearInterval(room.tickTimer);
+  room.tickTimer = setInterval(() => tickHeadSoccerRoom(room), HEAD_SOCCER_TICK_MS);
+
+  emitHeadSoccerUpdate(room);
+  broadcastOnlineList();
+  return true;
+}
+
+function updateHeadSoccerPlayer(player, dt) {
+  const speed = 2800;
+  const jump = 760;
+  const gravity = 1750;
+  const inputs = player.inputs || {};
+
+  player.kickTimer = Math.max(0, Number(player.kickTimer || 0) - dt);
+  player.kickCooldown = Math.max(0, Number(player.kickCooldown || 0) - dt);
+
+  if (inputs.left) player.vx -= speed * dt;
+  if (inputs.right) player.vx += speed * dt;
+  if (inputs.jump && player.y >= HEAD_SOCCER_FIELD.playerGround - 1) {
+    player.vy = -jump;
+  }
+
+  player.vy += gravity * dt;
+  player.x += player.vx * dt;
+  player.y += player.vy * dt;
+  player.vx *= 0.74;
+
+  if (player.y > HEAD_SOCCER_FIELD.playerGround) {
+    player.y = HEAD_SOCCER_FIELD.playerGround;
+    player.vy = 0;
+  }
+
+  player.x = clampNumber(player.x, 115, HEAD_SOCCER_FIELD.width - 115);
+}
+
+function resolveHeadSoccerPlayerCollisions(room) {
+  for (let i = 0; i < room.players.length; i += 1) {
+    for (let j = i + 1; j < room.players.length; j += 1) {
+      const a = room.players[i];
+      const b = room.players[j];
+      const ax = a.x;
+      const ay = a.y - a.radius;
+      const bx = b.x;
+      const by = b.y - b.radius;
+      const dx = bx - ax;
+      const dy = by - ay;
+      const dist = Math.hypot(dx, dy) || 1;
+      const minDist = a.radius + b.radius - 8;
+      if (dist >= minDist) continue;
+
+      const nx = dx / dist;
+      const ny = dy / dist;
+      const push = (minDist - dist) / 2;
+      a.x -= nx * push;
+      b.x += nx * push;
+      a.y -= ny * push * 0.25;
+      b.y += ny * push * 0.25;
+      const avx = a.vx;
+      a.vx = b.vx * 0.38;
+      b.vx = avx * 0.38;
+      a.x = clampNumber(a.x, 115, HEAD_SOCCER_FIELD.width - 115);
+      b.x = clampNumber(b.x, 115, HEAD_SOCCER_FIELD.width - 115);
+    }
+  }
+}
+
+function collideHeadSoccerBallWithPlayer(room, player) {
+  const ball = room.ball;
+  const headX = player.x;
+  const headY = player.y - player.radius;
+  const dx = ball.x - headX;
+  const dy = ball.y - headY;
+  const minDist = ball.radius + player.radius;
+  const dist = Math.hypot(dx, dy) || 1;
+
+  if (dist < minDist) {
+    const nx = dx / dist;
+    const ny = dy / dist;
+    ball.x = headX + nx * minDist;
+    ball.y = headY + ny * minDist;
+    ball.vx = nx * 450 + player.vx * 0.42;
+    ball.vy = ny * 450 - 90;
+  }
+
+  if (player.inputs?.kick && player.kickCooldown <= 0) {
+    const footX = player.x + player.side * 76;
+    const footY = player.y - 4;
+    const footDx = ball.x - footX;
+    const footDy = ball.y - footY;
+    const footDist = Math.hypot(footDx, footDy) || 1;
+    const inFront = (ball.x - player.x) * player.side > -16;
+
+    player.kickTimer = 0.24;
+    player.kickCooldown = 0.28;
+
+    if (inFront && footDist < ball.radius + 72) {
+      ball.x = footX + player.side * (ball.radius + 32);
+      ball.vx = player.side * 1120 + player.vx * 0.22;
+      ball.vy = Math.min(ball.vy, ball.y > player.y - player.radius ? -330 : -190);
+    }
+  }
+}
+
+function updateHeadSoccerBall(room, dt) {
+  const ball = room.ball;
+  const gravity = 1160;
+
+  ball.vy += gravity * dt;
+  ball.x += ball.vx * dt;
+  ball.y += ball.vy * dt;
+  ball.vx *= 0.995;
+
+  if (ball.y + ball.radius > HEAD_SOCCER_FIELD.ground) {
+    ball.y = HEAD_SOCCER_FIELD.ground - ball.radius;
+    ball.vy *= -0.68;
+    ball.vx *= 0.86;
+  }
+
+  if (ball.y - ball.radius < 30) {
+    ball.y = 30 + ball.radius;
+    ball.vy *= -0.72;
+  }
+
+  room.players.forEach(player => collideHeadSoccerBallWithPlayer(room, player));
+
+  if (ball.x - ball.radius < 10 && ball.y > HEAD_SOCCER_FIELD.goalTop && ball.y < HEAD_SOCCER_FIELD.goalBottom) {
+    return "red";
+  }
+
+  if (ball.x + ball.radius > HEAD_SOCCER_FIELD.width - 10 && ball.y > HEAD_SOCCER_FIELD.goalTop && ball.y < HEAD_SOCCER_FIELD.goalBottom) {
+    return "blue";
+  }
+
+  if (ball.x - ball.radius < 0 || ball.x + ball.radius > HEAD_SOCCER_FIELD.width) {
+    ball.x = clampNumber(ball.x, ball.radius, HEAD_SOCCER_FIELD.width - ball.radius);
+    ball.vx *= -0.76;
+  }
+
+  return null;
+}
+
+function scoreHeadSoccerGoal(room, team) {
+  room.scores[team] = Number(room.scores[team] || 0) + 1;
+  room.message = `Gol dos ${headSoccerTeamName(team)}!`;
+
+  if (room.scores[team] >= HEAD_SOCCER_GOALS_TO_WIN) {
+    finishHeadSoccerRoom(room, "Placar maximo atingido.");
+    return true;
+  }
+
+  resetHeadSoccerPositions(room);
+  return false;
+}
+
+function tickHeadSoccerRoom(room) {
+  if (!room || !headSoccerRooms.has(room.roomId) || room.status !== "playing") return;
+
+  const now = Date.now();
+  const dt = Math.min((now - (room.lastTick || now)) / 1000, 0.05);
+  room.lastTick = now;
+
+  room.players.forEach(player => updateHeadSoccerPlayer(player, dt));
+  resolveHeadSoccerPlayerCollisions(room);
+  const scoringTeam = updateHeadSoccerBall(room, dt);
+
+  if (scoringTeam && scoreHeadSoccerGoal(room, scoringTeam)) return;
+
+  if (now >= Number(room.gameEndsAt || 0)) {
+    finishHeadSoccerRoom(room, "Tempo encerrado.");
+    return;
+  }
+
+  emitHeadSoccerUpdate(room);
+}
+
+function finishHeadSoccerRoom(room, reason = "") {
+  if (!room || room.status === "finished") return;
+
+  clearInterval(room.tickTimer);
+  room.tickTimer = null;
+  room.status = "finished";
+  room.gameEndsAt = null;
+
+  let winnerTeam = null;
+  if (room.scores.blue > room.scores.red) winnerTeam = "blue";
+  if (room.scores.red > room.scores.blue) winnerTeam = "red";
+  room.winnerTeam = winnerTeam;
+
+  const totalPot = room.players.reduce((sum, player) => sum + Number(player.bet || room.bet || 0), 0);
+  if (winnerTeam) {
+    const winners = room.players.filter(player => player.team === winnerTeam);
+    const share = winners.length ? Math.floor(totalPot / winners.length) : 0;
+    winners.forEach(player => {
+      const user = db.findUser("id", player.userId);
+      if (user) {
+        db.updateUser(player.userId, {
+          bet_credits: Number(user.bet_credits || 0) + share
+        });
+        addExchangeWin(player.userId);
+      }
+    });
+    room.message = `${reason ? `${reason} ` : ""}${headSoccerTeamName(winnerTeam)} venceram por ${room.scores.blue} x ${room.scores.red}.`;
+  } else {
+    room.players.forEach(player => {
+      const user = db.findUser("id", player.userId);
+      if (user) {
+        db.updateUser(player.userId, {
+          bet_credits: Number(user.bet_credits || 0) + Number(player.bet || room.bet || 0)
+        });
+      }
+    });
+    room.message = `${reason ? `${reason} ` : ""}Empate em ${room.scores.blue} x ${room.scores.red}. Apostas devolvidas.`;
+  }
+
+  room.players.forEach(player => {
+    io.to(player.socketId).emit("head:finished", {
+      room: serializeHeadSoccerRoom(room, player.socketId),
+      updatedUser: safeUser(db.findUser("id", player.userId))
+    });
+    const online = onlinePlayers.get(player.socketId);
+    if (online) { online.inGame = false; online.roomId = null; }
+    const liveSocket = io.sockets.sockets.get(player.socketId);
+    if (liveSocket) liveSocket.leave(room.roomId);
+  });
+
+  headSoccerRooms.delete(room.roomId);
+  broadcastOnlineList();
+}
+
+function cancelHeadSoccerRoom(room, reason = "Mesa de Head Soccer cancelada.") {
+  if (!room) return;
+
+  clearInterval(room.tickTimer);
+
+  if (room.status === "playing") {
+    room.players.forEach(player => {
+      const user = db.findUser("id", player.userId);
+      if (user) {
+        db.updateUser(player.userId, {
+          bet_credits: Number(user.bet_credits || 0) + Number(player.bet || room.bet || 0)
+        });
+      }
+    });
+  }
+
+  room.players.forEach(player => {
+    io.to(player.socketId).emit("head:cancelled", { message: reason });
+    const online = onlinePlayers.get(player.socketId);
+    if (online) { online.inGame = false; online.roomId = null; }
+    const liveSocket = io.sockets.sockets.get(player.socketId);
+    if (liveSocket) liveSocket.leave(room.roomId);
+  });
+
+  headSoccerRooms.delete(room.roomId);
+  broadcastOnlineList();
+}
+
+function removeHeadSoccerPlayer(room, socketId, reason = "") {
+  const player = room.players.find(item => item.socketId === socketId);
+  if (!player) return;
+
+  if (room.status === "playing") {
+    cancelHeadSoccerRoom(room, reason || `${player.username} saiu da partida.`);
+    return;
+  }
+
+  room.players = room.players.filter(item => item.socketId !== socketId);
+  const online = onlinePlayers.get(socketId);
+  if (online) { online.inGame = false; online.roomId = null; }
+
+  const liveSocket = io.sockets.sockets.get(socketId);
+  if (liveSocket) liveSocket.leave(room.roomId);
+
+  if (!room.players.length) {
+    headSoccerRooms.delete(room.roomId);
+    broadcastOnlineList();
+    return;
+  }
+
+  if (room.hostSocketId === socketId) {
+    room.hostSocketId = room.players[0].socketId;
+    room.hostUsername = room.players[0].username;
+  }
+
+  assignHeadSoccerTeams(room);
+  resetHeadSoccerPositions(room);
+  room.message = reason || `${player.username} saiu da mesa.`;
+  emitHeadSoccerUpdate(room);
+  broadcastOnlineList();
+}
+
+function findHeadSoccerRoomBySocket(socketId) {
+  for (const room of headSoccerRooms.values()) {
+    if (room.players.some(player => player.socketId === socketId)) return room;
+  }
+  return null;
+}
+
 io.on("connection", (socket) => {
   console.log(`[+] ${socket.username} conectado`);
   const connectedUser = normalizeUserProgress(db.findUser("id", socket.userId));
@@ -1614,6 +2098,11 @@ io.on("connection", (socket) => {
       buttonRoom.players.forEach(player => targets.add(player.socketId));
     }
 
+    const headRoom = findHeadSoccerRoomBySocket(socket.id);
+    if (headRoom) {
+      headRoom.players.forEach(player => targets.add(player.socketId));
+    }
+
     const blackjackRoom = findBlackjackRoomBySocket(socket.id);
     if (blackjackRoom) {
       blackjackRoom.players.forEach(player => targets.add(player.socketId));
@@ -1712,6 +2201,110 @@ io.on("connection", (socket) => {
   });
 
   // ── Blackjack ───────────────────────────────────────────────────────────
+  // Head Soccer em sala
+  socket.on("head:create", ({ bet }) => {
+    const tableBet = clampNumber(bet || 10, 5, 50);
+    const user = db.findUser("id", socket.userId);
+    const player = onlinePlayers.get(socket.id);
+    if (!user || Number(user.bet_credits || 0) < tableBet)
+      return socket.emit("head:error", "Creditos de aposta insuficientes.");
+    if (player?.inGame)
+      return socket.emit("head:error", "Voce ja esta em uma partida.");
+
+    const roomId = `head-${Date.now()}-${socket.id}`;
+    const room = {
+      roomId,
+      hostSocketId: socket.id,
+      hostUsername: socket.username,
+      bet: tableBet,
+      status: "waiting",
+      scores: { blue: 0, red: 0 },
+      ball: {
+        x: HEAD_SOCCER_FIELD.width / 2,
+        y: 276,
+        vx: 0,
+        vy: 0,
+        radius: HEAD_SOCCER_FIELD.ballRadius
+      },
+      gameEndsAt: null,
+      winnerTeam: null,
+      tickTimer: null,
+      lastTick: Date.now(),
+      message: "Sala aberta. Cada pessoa que entrar vira um jogador.",
+      players: [makeHeadSoccerPlayer(socket, 0, tableBet)]
+    };
+    resetHeadSoccerPositions(room);
+    headSoccerRooms.set(roomId, room);
+    socket.join(roomId);
+    if (player) { player.inGame = true; player.roomId = roomId; }
+
+    for (const [, target] of onlinePlayers) {
+      if (target.socketId !== socket.id && !target.inGame) {
+        io.to(target.socketId).emit("head:invite", { roomId, fromUsername: socket.username, bet: tableBet });
+      }
+    }
+
+    emitHeadSoccerUpdate(room);
+    broadcastOnlineList();
+  });
+
+  socket.on("head:join", ({ roomId }) => {
+    const room = headSoccerRooms.get(roomId);
+    if (!room || room.status !== "waiting")
+      return socket.emit("head:error", "Sala indisponivel.");
+    if (room.players.some(player => player.socketId === socket.id))
+      return emitHeadSoccerUpdate(room);
+    if (room.players.length >= HEAD_SOCCER_MAX_PLAYERS)
+      return socket.emit("head:error", `Sala cheia (max. ${HEAD_SOCCER_MAX_PLAYERS} jogadores).`);
+
+    const maxBet = room.players.length >= 2 ? 20 : 50;
+    if (room.bet > maxBet) {
+      return socket.emit("head:error", `Esta sala teria ${room.players.length + 1} jogadores. Aposta maxima: ${maxBet} creditos.`);
+    }
+
+    const user = db.findUser("id", socket.userId);
+    const player = onlinePlayers.get(socket.id);
+    if (!user || Number(user.bet_credits || 0) < room.bet)
+      return socket.emit("head:error", "Creditos de aposta insuficientes.");
+    if (player?.inGame)
+      return socket.emit("head:error", "Voce ja esta em uma partida.");
+
+    room.players.push(makeHeadSoccerPlayer(socket, room.players.length, room.bet));
+    resetHeadSoccerPositions(room);
+    room.message = `${socket.username} entrou no Head Soccer.`;
+    socket.join(roomId);
+    if (player) { player.inGame = true; player.roomId = roomId; }
+    emitHeadSoccerUpdate(room);
+    broadcastOnlineList();
+  });
+
+  socket.on("head:start", ({ roomId }) => {
+    const room = headSoccerRooms.get(roomId);
+    if (!room || room.status !== "waiting") return;
+    if (room.hostSocketId !== socket.id)
+      return socket.emit("head:error", "So o dono da sala pode iniciar.");
+    startHeadSoccerRound(room, room.bet);
+  });
+
+  socket.on("head:input", ({ roomId, inputs }) => {
+    const room = headSoccerRooms.get(roomId);
+    if (!room || room.status !== "playing") return;
+    const player = room.players.find(item => item.socketId === socket.id);
+    if (!player) return;
+    player.inputs = {
+      left: Boolean(inputs?.left),
+      right: Boolean(inputs?.right),
+      jump: Boolean(inputs?.jump),
+      kick: Boolean(inputs?.kick)
+    };
+  });
+
+  socket.on("head:leave", ({ roomId }) => {
+    const room = headSoccerRooms.get(roomId);
+    if (!room) return;
+    removeHeadSoccerPlayer(room, socket.id, `${socket.username} saiu da sala.`);
+  });
+
   socket.on("blackjack:create", ({ bet }) => {
     const tableBet = Math.max(5, Math.min(50, Number(bet) || 10));
     const user = db.findUser("id", socket.userId);
@@ -2178,6 +2771,11 @@ io.on("connection", (socket) => {
     const buttonRoom = findButtonSoccerRoomBySocket(socket.id);
     if (buttonRoom) {
       removeButtonSoccerPlayer(buttonRoom, socket.id, `${socket.username} desconectou.`);
+    }
+
+    const headRoom = findHeadSoccerRoomBySocket(socket.id);
+    if (headRoom) {
+      removeHeadSoccerPlayer(headRoom, socket.id, `${socket.username} desconectou.`);
     }
 
     const blackjackRoom = findBlackjackRoomBySocket(socket.id);

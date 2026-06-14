@@ -1,22 +1,14 @@
-# This workspace has other projects. Keep Git focused on the Album app.
-*
+node_modules/
 
-!.gitignore
-!README.md
-!COMO_RODAR_SERVIDOR.md
+.env
+.env.*
 !.env.example
-!db.example.json
 
-!package.json
-!package-lock.json
-!server.js
-!hitboll.mp3
-!jump.mp3
+db.json
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 
-!Album/
-!Album/index.html
-
-!assets/
-!assets/album-copa/
-!assets/album-copa/figurinhas/
-!assets/album-copa/figurinhas/**
+.DS_Store
+Thumbs.db

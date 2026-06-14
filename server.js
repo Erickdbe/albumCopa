@@ -377,20 +377,14 @@ function refreshDailyAlbumCredits(user) {
 
   if (!user.last_album_credit_day) {
     return db.updateUser(user.id, {
-      credits: DAILY_ALBUM_CREDITS,
-      last_album_credit_day: today
-    });
-  }
-
-  if (user.last_album_credit_day !== today && currentCredits < DAILY_ALBUM_CREDITS) {
-    return db.updateUser(user.id, {
-      credits: DAILY_ALBUM_CREDITS,
+      credits: currentCredits + DAILY_ALBUM_CREDITS,
       last_album_credit_day: today
     });
   }
 
   if (user.last_album_credit_day !== today) {
     return db.updateUser(user.id, {
+      credits: currentCredits + DAILY_ALBUM_CREDITS,
       last_album_credit_day: today
     });
   }

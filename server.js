@@ -41,17 +41,21 @@ function loadLocalEnv() {
 
 loadLocalEnv();
 
+function resolveConfiguredPath(value) {
+  return path.isAbsolute(value) ? value : path.resolve(__dirname, value);
+}
+
 // ─── Config ────────────────────────────────────────────────────────────────
 const PORT        = process.env.PORT || 3000;
 const JWT_SECRET  = process.env.JWT_SECRET || "albumcopa_secret_mude_em_producao";
 const SALT_ROUNDS = 10;
 const DB_PATH_CONFIGURED = Boolean(process.env.DB_FILE || process.env.DATA_DIR);
-const DATA_DIR    = process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : null;
+const DATA_DIR    = process.env.DATA_DIR ? resolveConfiguredPath(process.env.DATA_DIR) : null;
 const DB_FILE     = process.env.DB_FILE
-  ? path.resolve(process.env.DB_FILE)
+  ? resolveConfiguredPath(process.env.DB_FILE)
   : path.join(DATA_DIR || __dirname, "db.json");
 const DB_BACKUP_DIR = process.env.DB_BACKUP_DIR
-  ? path.resolve(process.env.DB_BACKUP_DIR)
+  ? resolveConfiguredPath(process.env.DB_BACKUP_DIR)
   : path.join(path.dirname(DB_FILE), "backups");
 const MAX_DB_BACKUPS = Math.max(1, Number(process.env.MAX_DB_BACKUPS || 20));
 const DAILY_ALBUM_CREDITS = 30;
@@ -2273,5 +2277,9 @@ function broadcastOnlineList() {
 // ─── Start ─────────────────────────────────────────────────────────────────
 server.listen(PORT, () => {
   console.log(`[db] Dados em: ${DB_FILE}`);
+  console.log(`[db] Backups em: ${DB_BACKUP_DIR}`);
+  if (!DB_PATH_CONFIGURED && process.env.NODE_ENV === "production") {
+    console.warn("[db] AVISO: configure DB_FILE ou DATA_DIR em um volume persistente para nao perder dados no deploy.");
+  }
   console.log(`\n🏟️  Servidor Álbum da Copa rodando em http://localhost:${PORT}\n`);
 });

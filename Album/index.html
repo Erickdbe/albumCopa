@@ -3465,6 +3465,212 @@
       font-size: .82rem;
       font-weight: 950;
     }
+    .market-merchant {
+      grid-column: 1 / -1;
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
+      gap: 14px;
+      align-items: end;
+      padding: 14px;
+      border: 1px solid rgba(216, 173, 63, 0.34);
+      border-radius: var(--radius);
+      background:
+        linear-gradient(180deg, rgba(255, 248, 232, 0.74), rgba(241, 226, 184, 0.78)),
+        repeating-linear-gradient(90deg, rgba(37, 49, 45, 0.04) 0 12px, transparent 12px 24px);
+      overflow: hidden;
+    }
+    .merchant-figure {
+      position: relative;
+      width: 86px;
+      height: 112px;
+      display: grid;
+      place-items: end center;
+    }
+    .merchant-head {
+      position: absolute;
+      top: 8px;
+      width: 48px;
+      height: 48px;
+      border: 3px solid #25312d;
+      border-radius: 50%;
+      background:
+        radial-gradient(circle at 34% 42%, #25312d 0 4px, transparent 5px),
+        radial-gradient(circle at 66% 42%, #25312d 0 4px, transparent 5px),
+        linear-gradient(180deg, #f4d3a3, #dfaa70);
+      box-shadow: inset 0 -9px 0 rgba(122, 64, 34, 0.16);
+      animation: merchantNod 2200ms ease-in-out infinite;
+    }
+    .merchant-head::before {
+      content: "";
+      position: absolute;
+      left: 7px;
+      right: 7px;
+      top: -10px;
+      height: 17px;
+      border-radius: 18px 18px 5px 5px;
+      background: #24312d;
+    }
+    .merchant-body {
+      width: 66px;
+      height: 58px;
+      border: 3px solid #25312d;
+      border-radius: 16px 16px 8px 8px;
+      background:
+        linear-gradient(90deg, transparent 45%, rgba(255,255,255,.34) 46% 54%, transparent 55%),
+        linear-gradient(135deg, #0d6a47, #16689f);
+    }
+    .merchant-hand {
+      position: absolute;
+      right: 4px;
+      top: 62px;
+      width: 28px;
+      height: 18px;
+      border-radius: 999px;
+      background: #dfaa70;
+      transform-origin: left center;
+    }
+    .merchant-speech {
+      position: relative;
+      min-height: 42px;
+      padding: 10px 12px;
+      border: 1px solid rgba(37, 49, 45, 0.14);
+      border-radius: var(--radius);
+      color: #25312d;
+      background: rgba(255, 255, 255, 0.72);
+      font-size: .86rem;
+      font-weight: 900;
+    }
+    .merchant-speech::before {
+      content: "";
+      position: absolute;
+      left: -8px;
+      top: 18px;
+      border-top: 8px solid transparent;
+      border-bottom: 8px solid transparent;
+      border-right: 8px solid rgba(255, 255, 255, 0.72);
+    }
+    .market-exchange-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 10px;
+      align-items: center;
+      margin-top: 10px;
+    }
+    .market-exchange-status {
+      color: var(--muted);
+      font-size: .78rem;
+      font-weight: 850;
+    }
+    .market-exchange-btn {
+      width: auto;
+      min-width: 190px;
+      padding: 10px 14px;
+      background: linear-gradient(135deg, #25312d, #0d6a47);
+      white-space: normal;
+    }
+    .merchant-counter {
+      position: relative;
+      grid-column: 1 / -1;
+      min-height: 86px;
+      margin-top: 4px;
+      padding: 12px 12px 18px;
+      border-radius: 8px;
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.24), transparent 38%),
+        linear-gradient(180deg, #7d4f2b, #4b2d1a);
+      box-shadow: inset 0 8px 0 rgba(255,255,255,.12), 0 8px 18px rgba(52, 31, 14, 0.18);
+    }
+    .market-counter-stickers {
+      display: flex;
+      gap: 8px;
+      min-height: 58px;
+      align-items: end;
+      overflow-x: auto;
+      padding-bottom: 2px;
+    }
+    .counter-sticker {
+      width: 42px;
+      height: 58px;
+      flex: 0 0 auto;
+      border: 2px solid rgba(255,255,255,.84);
+      border-radius: 6px;
+      background:
+        linear-gradient(135deg, rgba(255,255,255,.42), transparent 34%),
+        linear-gradient(145deg, var(--c1, #a8293f), var(--c2, #16689f));
+      box-shadow: 0 9px 0 rgba(0,0,0,.14);
+      animation: counterCardBob 1800ms ease-in-out infinite;
+      overflow: hidden;
+    }
+    .counter-sticker img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      display: block;
+      background: #16231f;
+    }
+    .counter-empty {
+      color: rgba(255, 249, 232, 0.82);
+      font-size: .8rem;
+      font-weight: 900;
+      align-self: center;
+    }
+    .trade-chip {
+      position: absolute;
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      opacity: 0;
+      pointer-events: none;
+    }
+    .trade-chip.bet {
+      left: 50%;
+      bottom: 22px;
+      background: linear-gradient(135deg, #6947b8, #2d86d3);
+    }
+    .trade-chip.album {
+      right: 26px;
+      bottom: 22px;
+      background: linear-gradient(135deg, #f4d35e, #d8ad3f);
+    }
+    .market-card.is-trading .merchant-hand {
+      animation: merchantTradeHand 760ms ease-in-out both;
+    }
+    .market-card.is-trading .trade-chip.bet {
+      animation: betChipToMerchant 820ms ease-in-out both;
+    }
+    .market-card.is-trading .trade-chip.album {
+      animation: albumChipToPlayer 900ms 160ms ease-in-out both;
+    }
+    .market-card.is-listing .counter-sticker:first-child {
+      animation: listedCardDrop 620ms cubic-bezier(.22, 1, .36, 1) both;
+    }
+    @keyframes merchantNod {
+      0%, 100% { transform: translateY(0) rotate(0deg); }
+      45% { transform: translateY(2px) rotate(-2deg); }
+    }
+    @keyframes counterCardBob {
+      0%, 100% { transform: translateY(0) rotate(-1deg); }
+      50% { transform: translateY(-5px) rotate(1deg); }
+    }
+    @keyframes merchantTradeHand {
+      0%, 100% { transform: rotate(0deg) translateX(0); }
+      35% { transform: rotate(-18deg) translateX(10px); }
+      70% { transform: rotate(16deg) translateX(-8px); }
+    }
+    @keyframes betChipToMerchant {
+      0% { opacity: 0; transform: translate(0, 0) scale(.72); }
+      20% { opacity: 1; }
+      100% { opacity: 0; transform: translate(-92px, -50px) scale(1); }
+    }
+    @keyframes albumChipToPlayer {
+      0% { opacity: 0; transform: translate(-76px, -48px) scale(.72); }
+      20% { opacity: 1; }
+      100% { opacity: 0; transform: translate(26px, 2px) scale(1.08); }
+    }
+    @keyframes listedCardDrop {
+      0% { opacity: 0; transform: translateY(-34px) rotate(12deg) scale(.8); }
+      100% { opacity: 1; transform: translateY(0) rotate(-1deg) scale(1); }
+    }
 
     .button-soccer-open-btn {
       width: auto;
@@ -4226,9 +4432,9 @@
             </span>
           </div>
           <div class="rarity-odds" aria-label="Chances por raridade">
-            <span class="odd-chip common">Comum 73,7%</span>
+            <span class="odd-chip common">Comum 74,7%</span>
             <span class="odd-chip rare">Rara 24%</span>
-            <span class="odd-chip legendary">Lendária 2,3%</span>
+            <span class="odd-chip legendary">Lendária 1,3%</span>
           </div>
           <button class="pack-button" id="openPack" type="button">
             <span id="packButtonText">Comprar pacote</span>
@@ -4402,6 +4608,25 @@
         <button class="mp-btn" style="width:auto;padding:7px 18px;font-size:.82rem" id="closeMarket" type="button">Fechar</button>
       </div>
       <div class="market-grid">
+        <section class="market-merchant" id="marketMerchant">
+          <div class="merchant-figure" aria-hidden="true">
+            <span class="merchant-head"></span>
+            <span class="merchant-body"></span>
+            <span class="merchant-hand"></span>
+          </div>
+          <div>
+            <div class="merchant-speech" id="merchantSpeech">Tenho repetidas no balcao e faco troca de creditos.</div>
+            <div class="market-exchange-row">
+              <span class="market-exchange-status" id="marketExchangeStatus">Vitorias seguidas: 0/2.</span>
+              <button class="mp-btn market-exchange-btn" id="exchangeBetCredits" type="button">Trocar 10 apostas por 10 creditos</button>
+            </div>
+          </div>
+          <div class="merchant-counter">
+            <div class="market-counter-stickers" id="marketCounterStickers"></div>
+            <span class="trade-chip bet" aria-hidden="true"></span>
+            <span class="trade-chip album" aria-hidden="true"></span>
+          </div>
+        </section>
         <section class="market-panel">
           <h4>Anunciar repetida</h4>
           <select id="marketStickerSelect"></select>
@@ -4815,7 +5040,7 @@
             </div>
             <div class="game-stat">
               <strong id="betMatchesLabel">0/2</strong>
-              <span>Vitórias troca</span>
+              <span>Vitorias seguidas</span>
             </div>
           </div>
 
@@ -4831,7 +5056,6 @@
 
           <div class="game-actions">
             <button class="game-action" id="startMatch" type="button">Começar partida</button>
-            <button class="game-action secondary" id="exchangeBetCredits" type="button">Trocar 10 por créditos do álbum</button>
           </div>
 
           <div style="margin-top:10px">
@@ -4974,7 +5198,7 @@
     const raritySettings = {
       common: {
         label: "Comum",
-        chance: 73.7,
+        chance: 74.7,
         duplicateChance: 0.46
       },
       rare: {
@@ -4984,7 +5208,7 @@
       },
       legendary: {
         label: "Lendária",
-        chance: 2.3,
+        chance: 1.3,
         duplicateChance: 0.10
       }
     };
@@ -5088,6 +5312,10 @@
     const marketListButton = document.getElementById("marketListButton");
     const marketListings = document.getElementById("marketListings");
     const marketSellHint = document.getElementById("marketSellHint");
+    const marketCard = marketOverlay?.querySelector(".market-card");
+    const merchantSpeech = document.getElementById("merchantSpeech");
+    const marketExchangeStatus = document.getElementById("marketExchangeStatus");
+    const marketCounterStickers = document.getElementById("marketCounterStickers");
     const onlineStripList = document.getElementById("onlineStripList");
     const onlineCountLabel = document.getElementById("onlineCountLabel");
     const openLobbyFromBoard = document.getElementById("openLobbyFromBoard");
@@ -5209,9 +5437,16 @@
       betCreditsLabel.textContent = state.betCredits;
       betMatchesLabel.textContent = `${Math.min(state.exchangeWins, 2)}/2`;
       wagerInput.max = Math.max(5, state.betCredits);
-      // Troca liberada a cada 2 vitórias no blackjack
-      const canExchange = state.exchangeWins >= 2 && state.betCredits >= 10;
-      exchangeBetCredits.disabled = !canExchange || game.running;
+      const winsLeft = Math.max(0, 2 - state.exchangeWins);
+      if (exchangeBetCredits) {
+        exchangeBetCredits.disabled = false;
+        exchangeBetCredits.textContent = state.exchangeWins >= 2
+          ? "Trocar 10 apostas por 10 creditos"
+          : `Faltam ${winsLeft} vitoria${winsLeft === 1 ? "" : "s"}`;
+      }
+      if (marketExchangeStatus) {
+        marketExchangeStatus.textContent = `Vitorias seguidas: ${Math.min(state.exchangeWins, 2)}/2. Apostas: ${state.betCredits}.`;
+      }
       startMatch.disabled = game.running || state.betCredits < 5;
     }
 
@@ -5330,19 +5565,41 @@
       document.getElementById("tauntBar").style.display = "none";
     }
 
+    let merchantSpeechTimer;
+
+    function merchantSay(message) {
+      if (!merchantSpeech) return;
+      window.clearTimeout(merchantSpeechTimer);
+      merchantSpeech.textContent = message;
+      merchantSpeechTimer = window.setTimeout(() => {
+        merchantSpeech.textContent = "Tenho repetidas no balcao e faco troca de creditos.";
+      }, 3600);
+    }
+
+    function pulseMarketClass(className, duration = 900) {
+      if (!marketCard) return;
+      marketCard.classList.remove(className);
+      void marketCard.offsetWidth;
+      marketCard.classList.add(className);
+      window.setTimeout(() => marketCard.classList.remove(className), duration);
+    }
+
     async function exchangeCredits() {
       if (!mp.token) {
+        merchantSay("Faz login primeiro que eu separo a troca pra voce.");
         showToast("Faca login para trocar creditos.");
         document.getElementById("authOverlay").classList.remove("hidden");
         return;
       }
 
       if (state.exchangeWins < 2) {
-        showToast("Ganhe 2 partidas em qualquer jogo para liberar a troca.");
+        merchantSay("Ainda nao, campeao. Precisa de 2 vitorias seguidas para eu liberar a troca.");
+        showToast("Ganhe 2 partidas seguidas em qualquer jogo para liberar a troca.");
         return;
       }
 
       if (state.betCredits < 10) {
+        merchantSay("Faltam creditos de aposta. Traga pelo menos 10 que eu viro em creditos do album.");
         showToast("Voce precisa de pelo menos 10 creditos de aposta para trocar.");
         return;
       }
@@ -5360,31 +5617,16 @@
         if (!res.ok) throw new Error(data.error || "Nao foi possivel trocar.");
         applyServerData(data.user);
         updateLobbyHeader();
+        renderMarketplace();
+        merchantSay("Fechado. Recebi 10 apostas e te passei 10 creditos do album.");
+        pulseMarketClass("is-trading", 1100);
         showToast("10 creditos de aposta viraram creditos do album.");
       } catch (err) {
+        merchantSay(err.message);
         showToast(err.message);
       } finally {
         renderBetPanel();
       }
-      return;
-
-      if (state.bjWins === 0 || state.bjWins % 2 !== 0) {
-        showToast("Ganhe 2 partidas de 21 para liberar a troca de créditos.");
-        return;
-      }
-
-      if (state.betCredits < 10) {
-        showToast("Você precisa de pelo menos 10 créditos de aposta para trocar.");
-        return;
-      }
-
-      state.betCredits -= 10;
-      state.credits += 10;
-      // Consome o "par de vitórias" — precisa ganhar mais 2 para trocar de novo
-      state.bjWins += 1; // deixa ímpar novamente
-      renderBetPanel();
-      renderProgress();
-      showToast("10 créditos de aposta viraram créditos do álbum!");
     }
 
     function formatMatchTime(seconds) {
@@ -7254,7 +7496,7 @@
 
         const iWon = table.winnerSocketId && table.winnerSocketId === mySocketId;
         if (iWon && state.exchangeWins >= 2 && previousExchangeWins < 2) {
-          showToast("Duas vitorias acumuladas! Troca de creditos liberada.");
+          showToast("Duas vitorias seguidas! Troca liberada na loja.");
         }
 
         renderBlackjackTable(table);
@@ -7537,10 +7779,48 @@
       return marketPrices[sticker.rarity] || 0;
     }
 
+    function renderMarketCounter(duplicateStickers) {
+      if (!marketCounterStickers) return;
+
+      const rarityColors = {
+        common: ["#0d6a47", "#16689f"],
+        rare: ["#16689f", "#6b48a8"],
+        legendary: ["#d8ad3f", "#a8293f"]
+      };
+      const listed = state.marketListings.slice(0, 10).map((listing) => ({
+        image: listing.image,
+        label: `${listing.code} - ${listing.price}`,
+        colors: rarityColors[listing.rarity] || rarityColors.common
+      }));
+      const mine = duplicateStickers.slice(0, 8).map((sticker) => ({
+        image: sticker.image,
+        label: `${sticker.code} (${getDuplicateCount(sticker.id)}x)`,
+        colors: sticker.colors || rarityColors[sticker.rarity] || rarityColors.common
+      }));
+      const items = listed.length ? listed : mine;
+
+      if (!items.length) {
+        marketCounterStickers.innerHTML = `<span class="counter-empty">O balcao esta esperando repetidas.</span>`;
+        return;
+      }
+
+      marketCounterStickers.innerHTML = items.map((item, index) => `
+        <span
+          class="counter-sticker"
+          title="${escHtml(item.label)}"
+          style="--c1:${item.colors[0]}; --c2:${item.colors[1]}; animation-delay:${(index % 5) * 120}ms;"
+        >
+          ${item.image ? `<img src="${escHtml(item.image)}" alt="${escHtml(item.label)}">` : ""}
+        </span>
+      `).join("");
+    }
+
     function renderMarketplace() {
       const duplicateStickers = getCollectibleStickers()
         .filter((sticker) => getDuplicateCount(sticker.id) > 0)
         .sort((a, b) => a.id - b.id);
+      renderBetPanel();
+      renderMarketCounter(duplicateStickers);
 
       if (!duplicateStickers.length) {
         marketStickerSelect.innerHTML = `<option value="">Sem repetidas para vender</option>`;
@@ -7624,6 +7904,7 @@
     async function announceDuplicate() {
       const sticker = stickers.find((item) => item.id === Number(marketStickerSelect.value));
       if (!sticker) {
+        merchantSay("Escolhe uma repetida primeiro que eu coloco no balcao.");
         showToast("Escolha uma figurinha repetida.");
         return;
       }
@@ -7644,8 +7925,11 @@
         if (!res.ok) throw new Error(data.error || "Nao foi possivel anunciar.");
         applyServerData(data.user);
         await refreshMarketplace();
+        merchantSay(`${sticker.code} ja esta no balcao. Vamos ver quem compra.`);
+        pulseMarketClass("is-listing", 800);
         showToast("Figurinha anunciada na loja.");
       } catch (err) {
+        merchantSay(err.message);
         showToast(err.message);
         renderMarketplace();
       }
@@ -7668,8 +7952,10 @@
         renderProgress();
         const sellerName = data.seller?.username ? ` de ${data.seller.username}` : "";
         const stickerCode = data.listing?.code ? ` ${data.listing.code}` : "";
+        merchantSay(`Boa compra. ${stickerCode.trim() || "A figurinha"} ja foi para o seu album.`);
         showToast(`Voce comprou${stickerCode}${sellerName}. Figurinha adicionada ao album.`);
       } catch (err) {
+        merchantSay(err.message);
         showToast(err.message);
       }
     }

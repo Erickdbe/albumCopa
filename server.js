@@ -70,9 +70,9 @@ const MARKET_PRICES = {
   legendary: 30
 };
 const RARITY_SETTINGS = {
-  common: { chance: 73.7, duplicateChance: 0.46 },
+  common: { chance: 74.7, duplicateChance: 0.46 },
   rare: { chance: 24, duplicateChance: 0.22 },
-  legendary: { chance: 2.3, duplicateChance: 0.10 }
+  legendary: { chance: 1.3, duplicateChance: 0.10 }
 };
 const RARITY_ORDER = ["common", "rare", "legendary"];
 const SERVER_STICKER_OVERRIDES = {
@@ -363,6 +363,28 @@ function addExchangeWin(userId) {
   return db.updateUser(userId, {
     exchange_wins: wins,
     bj_wins: wins
+  });
+}
+
+function resetExchangeWinStreak(userId) {
+  const user = normalizeUserProgress(db.findUser("id", userId));
+  if (!user) return null;
+
+  if (!Number(user.exchange_wins || 0) && !Number(user.bj_wins || 0)) return user;
+  return db.updateUser(userId, {
+    exchange_wins: 0,
+    bj_wins: 0
+  });
+}
+
+function resetExchangeLosses(participantIds, winnerIds = []) {
+  const winners = new Set(winnerIds.map(Number).filter(Number.isFinite));
+  const seen = new Set();
+
+  participantIds.map(Number).filter(Number.isFinite).forEach((userId) => {
+    if (seen.has(userId)) return;
+    seen.add(userId);
+    if (!winners.has(userId)) resetExchangeWinStreak(userId);
   });
 }
 
@@ -657,7 +679,7 @@ app.post("/api/exchange-credits", authMiddleware, (req, res) => {
     const exchangeWins = Math.max(0, Number(user.exchange_wins || 0) || 0);
     const betCredits = Math.max(0, Number(user.bet_credits || 0) || 0);
     if (exchangeWins < 2) {
-      return res.status(400).json({ error: "Ganhe 2 partidas para liberar a troca." });
+      return res.status(400).json({ error: "Ganhe 2 partidas seguidas para liberar a troca." });
     }
     if (betCredits < 10) {
       return res.status(400).json({ error: "Voce precisa de 10 creditos de aposta." });
@@ -1087,6 +1109,7 @@ function finishBlackjackRoom(room) {
   if (winner?.userId) {
     addExchangeWin(winner.userId);
   }
+  resetExchangeLosses(room.players.map(player => player.userId), winner ? [winner.userId] : []);
 
   room.players.forEach(player => {
     const updated = db.findUser("id", player.userId);
@@ -1403,6 +1426,10 @@ function finishButtonSoccerRoom(room, reason = "") {
     });
     room.message = `${reason ? `${reason} ` : ""}Empate em ${room.scores.red} x ${room.scores.white}. Apostas devolvidas.`;
   }
+  resetExchangeLosses(
+    room.players.map(player => player.userId),
+    winnerTeam ? room.players.filter(player => player.team === winnerTeam).map(player => player.userId) : []
+  );
 
   room.players.forEach(player => {
     io.to(player.socketId).emit("button:finished", {
@@ -2072,6 +2099,10 @@ function finishHeadSoccerRoom(room, reason = "") {
     });
     room.message = `${reason ? `${reason} ` : ""}Empate em ${room.scores.blue} x ${room.scores.red}. Apostas devolvidas.`;
   }
+  resetExchangeLosses(
+    room.players.map(player => player.userId),
+    winnerTeam ? room.players.filter(player => player.team === winnerTeam).map(player => player.userId) : []
+  );
 
   room.players.forEach(player => {
     io.to(player.socketId).emit("head:finished", {
@@ -2509,6 +2540,7 @@ function finishSlitherRoom(room, reason = "") {
     });
     room.message = `${reason ? `${reason} ` : ""}Slither encerrado sem vencedor. Apostas devolvidas.`;
   }
+  resetExchangeLosses(room.players.map(player => player.userId), winner ? [winner.userId] : []);
 
   const targets = new Set(room.players.map(player => player.socketId));
   for (const spectatorId of room.spectators || []) targets.add(spectatorId);
@@ -2715,7 +2747,7 @@ function tickSlitherRoom(room) {
 const CRASH_TICK_MS = 100;
 const CRASH_MAX_MULTIPLIER = 300;
 const CRASH_RATE = 0.075;
-const CRASH_HOUSE_EDGE = 0.97;
+const CRASH_HOUSE_EDGE = 0.76;
 
 function crashRandomFloat() {
   return crypto.randomInt(1, 1_000_000) / 1_000_000;
@@ -2813,6 +2845,10 @@ function finishCrashRoom(room, reason = "") {
       houseWins += Number(player.bet || room.bet || 0);
     }
   });
+  resetExchangeLosses(
+    room.players.filter(player => player.status === "crashed").map(player => player.userId),
+    []
+  );
 
   room.message = reason || (houseWins > 0
     ? `Crash em ${room.multiplier.toFixed(2)}x. A casa ficou com ${houseWins} creditos.`
@@ -2897,6 +2933,7 @@ function cashoutCrashPlayer(room, socket) {
     db.updateUser(player.userId, {
       bet_credits: Number(user.bet_credits || 0) + payout
     });
+    addExchangeWin(player.userId);
   }
 
   const cashout = {
@@ -2964,6 +3001,7 @@ function removeCrashPlayer(room, socketId, reason = "") {
   if (room.status === "playing") {
     if (player.status === "flying") {
       player.status = "crashed";
+      resetExchangeWinStreak(player.userId);
       room.message = reason || `${player.username} saiu e perdeu a aposta.`;
     }
     const online = onlinePlayers.get(socketId);
@@ -3238,6 +3276,7 @@ io.on("connection", (socket) => {
     if (winnerId) {
       addExchangeWin(winnerId);
     }
+    resetExchangeLosses([p1?.userId, p2?.userId], winnerId ? [winnerId] : []);
 
     // Envia resultado com saldo atualizado para cada jogador
     [[room.player1SocketId, p1?.userId], [room.player2SocketId, p2?.userId]].forEach(([sid, uid]) => {
@@ -4099,6 +4138,7 @@ io.on("connection", (socket) => {
       } else {
         room.message = `🏆 ${HORSES.find(h=>h.id===winnerHorseId).name} venceu! Ninguém apostou nele.`;
       }
+      resetExchangeLosses(room.players.map(p => p.userId), winners.map(w => w.userId));
 
       room.players.forEach(p => {
         const updated = db.findUser("id", p.userId);

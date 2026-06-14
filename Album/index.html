@@ -2541,13 +2541,45 @@
       font-size: .88rem;
     }
     .online-list li:last-child { border-bottom: none; }
-    .online-list .player-name { font-weight: 700; }
+    .online-list .player-name {
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      font-weight: 700;
+    }
     .online-list .status-badge {
       font-size: .72rem; font-weight: 700; padding: 2px 8px;
       border-radius: 20px;
     }
     .status-badge.available { background: #d4edda; color: #155724; }
     .status-badge.in-game   { background: #ffeeba; color: #856404; }
+
+    .watcher-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      min-width: 30px;
+      min-height: 20px;
+      padding: 2px 7px;
+      border: 1px solid rgba(210, 40, 54, 0.34);
+      border-radius: 999px;
+      color: #c21f32;
+      background: rgba(210, 40, 54, 0.12);
+      font-size: .68rem;
+      font-weight: 950;
+      line-height: 1;
+      white-space: nowrap;
+    }
+
+    .online-pill .watcher-badge {
+      justify-self: start;
+      margin-top: 3px;
+      color: #ff6b75;
+      border-color: rgba(255, 107, 117, .35);
+      background: rgba(255, 107, 117, .13);
+    }
 
     .lobby-chat {
       display: grid;
@@ -3644,6 +3676,23 @@
       color: #f9e8a8;
       font-size: .72rem;
       text-transform: uppercase;
+    }
+
+    .slither-side-badges {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 6px;
+      min-width: 0;
+    }
+
+    .slither-side-badges .watcher-badge {
+      min-width: 26px;
+      min-height: 18px;
+      padding: 2px 6px;
+      color: #ff6b75;
+      border-color: rgba(255, 107, 117, .38);
+      background: rgba(255, 107, 117, .14);
     }
 
     @media (max-width: 980px) {
@@ -4925,6 +4974,12 @@
 
     function closeGame() {
       if (mp.headRoomId) {
+        if (mp.headRoom?.isSpectator) {
+          mp.socket?.emit("head:unwatch", { roomId: mp.headRoomId });
+          closeHeadSoccerRoom(false);
+          return;
+        }
+
         if (mp.headRoom?.status === "playing") {
           showToast("Termine a partida antes de fechar.");
           return;
@@ -7036,6 +7091,22 @@
       return `<div class="online-avatar">${avatar ? `<img src="${escHtml(avatar)}" alt="${escHtml(label)}">` : ""}</div>`;
     }
 
+    function getLobbyGameLabel(game) {
+      const labels = {
+        head: "Head Soccer",
+        button: "Botao",
+        blackjack: "Mesa 21",
+        slither: "Slither",
+        horse: "Corrida"
+      };
+      return labels[game] || "Em jogo";
+    }
+
+    function renderWatcherBadge(count) {
+      const total = Math.max(0, Number(count || 0) || 0);
+      return total ? `<span class="watcher-badge" title="${total} assistindo">&#128065; ${total}</span>` : "";
+    }
+
     function renderOnlineStrip(list) {
       state.onlinePlayers = Array.isArray(list) ? list : [];
       if (!onlineStripList || !onlineCountLabel) return;
@@ -7059,7 +7130,8 @@
           ${renderAvatar(player.avatar, player.username)}
           <span>
             <strong>${escHtml(player.username)}${player.socketId === self ? " (voce)" : ""}</strong>
-            <small>${player.inGame ? (player.game === "slither" ? "Slither" : "Em jogo") : "Disponivel"}</small>
+            <small>${player.inGame ? getLobbyGameLabel(player.game) : "Disponivel"}</small>
+            ${renderWatcherBadge(player.watcherCount)}
           </span>
         </div>
       `).join("");
@@ -7079,16 +7151,16 @@
       ul.innerHTML = others.map(p => `
         <li>
           ${renderAvatar(p.avatar, p.username)}
-          <span class="player-name">${escHtml(p.username)}</span>
+          <span class="player-name">${escHtml(p.username)}${renderWatcherBadge(p.watcherCount)}</span>
           <span class="status-badge ${p.inGame ? "in-game" : "available"}">
-            ${p.inGame ? (p.game === "slither" ? "Slither" : "Em jogo") : "Disponível"}
+            ${p.inGame ? getLobbyGameLabel(p.game) : "Disponível"}
           </span>
           ${!p.inGame ? `
             <button class="challenge-btn" onclick="sendChallenge('${p.socketId}','${escHtml(p.username)}')">
               Desafiar
             </button>` : p.spectatable && p.roomId ? `
-            <button class="challenge-btn" onclick="spectateSlitherRoom('${escHtml(p.roomId)}')">
-              Assistir
+            <button class="challenge-btn" onclick="spectateGame('${escHtml(p.game)}','${escHtml(p.roomId)}')">
+              Assistir partida
             </button>` : ""}
         </li>
       `).join("");
@@ -7366,6 +7438,7 @@
       const isWaiting = table.status === "waiting";
       const isPlaying = table.status === "playing";
       const isFinished = table.status === "finished";
+      const isSpectator = Boolean(table.isSpectator);
 
       document.getElementById("blackjackOverlay").classList.remove("hidden");
       document.getElementById("blackjackBetLabel").textContent = `Aposta: ${table.bet} créditos`;
@@ -7391,11 +7464,11 @@
       }).join("");
 
       document.getElementById("blackjackStartBtn").textContent = isFinished ? "Jogar novamente" : "Começar";
-      document.getElementById("blackjackStartBtn").disabled = !(isFinished || (isWaiting && isHost));
-      document.getElementById("blackjackHitBtn").disabled = !(isPlaying && me?.status === "playing");
-      document.getElementById("blackjackStandBtn").disabled = !(isPlaying && me?.status === "playing");
-      document.getElementById("blackjackLeaveBtn").disabled = !(isWaiting || isFinished);
-      document.getElementById("blackjackLeaveBtn").textContent = isFinished ? "Fechar" : "Sair da mesa";
+      document.getElementById("blackjackStartBtn").disabled = isSpectator || !(isFinished || (isWaiting && isHost));
+      document.getElementById("blackjackHitBtn").disabled = isSpectator || !(isPlaying && me?.status === "playing");
+      document.getElementById("blackjackStandBtn").disabled = isSpectator || !(isPlaying && me?.status === "playing");
+      document.getElementById("blackjackLeaveBtn").disabled = !(isSpectator || isWaiting || isFinished);
+      document.getElementById("blackjackLeaveBtn").textContent = isSpectator ? "Sair da transmissao" : isFinished ? "Fechar" : "Sair da mesa";
     }
 
     function createBlackjackRoom() {
@@ -7451,6 +7524,12 @@
         return;
       }
 
+      if (mp.blackjackTable.isSpectator) {
+        mp.socket?.emit("blackjack:unwatch", { roomId: mp.blackjackRoomId });
+        closeBlackjackTable(true);
+        return;
+      }
+
       if (mp.blackjackTable.status === "playing") {
         showToast("Termine sua mÃ£o antes de fechar a mesa.");
         return;
@@ -7462,9 +7541,9 @@
       closeBlackjackTable();
     }
 
-    function closeBlackjackTable() {
+    function closeBlackjackTable(force = false) {
       document.getElementById("blackjackOverlay").classList.add("hidden");
-      if (!mp.blackjackTable || mp.blackjackTable.status === "finished") {
+      if (force || !mp.blackjackTable || mp.blackjackTable.status === "finished") {
         mp.blackjackRoomId = null;
         mp.blackjackTable = null;
       }
@@ -7976,7 +8055,7 @@
 
     function leaveButtonSoccerRoom() {
       if (mp.buttonRoomId) {
-        mp.socket?.emit("button:leave", { roomId: mp.buttonRoomId });
+        mp.socket?.emit(mp.buttonRoom?.isSpectator ? "button:unwatch" : "button:leave", { roomId: mp.buttonRoomId });
       }
       closeButtonSoccerOverlay(false);
     }
@@ -8086,14 +8165,15 @@
       const isFinished = room.status === "finished";
       const isHost = room.hostSocketId === mp.socket?.id;
       const me = getButtonSoccerMe();
+      const isSpectator = Boolean(room.isSpectator);
       const isMyTurn = isPlaying && room.turnSocketId === mp.socket?.id && me;
       const shootBtn = document.getElementById("buttonShootBtn");
-      shootBtn.disabled = !isMyTurn || mp.buttonShotAnimating || buttonCharge.active;
+      shootBtn.disabled = isSpectator || !isMyTurn || mp.buttonShotAnimating || buttonCharge.active;
       shootBtn.textContent = buttonCharge.active ? "Carregando" : "Bater";
-      document.getElementById("buttonStartBtn").disabled = !(isWaiting && isHost && (room.players?.length || 0) >= 2);
-      document.getElementById("buttonReadyBtn").disabled = !(isFinished && me && !me.ready);
-      document.getElementById("buttonReplayBet").disabled = !isFinished;
-      buttonPower.disabled = !isMyTurn || mp.buttonShotAnimating || buttonCharge.active;
+      document.getElementById("buttonStartBtn").disabled = isSpectator || !(isWaiting && isHost && (room.players?.length || 0) >= 2);
+      document.getElementById("buttonReadyBtn").disabled = isSpectator || !(isFinished && me && !me.ready);
+      document.getElementById("buttonReplayBet").disabled = isSpectator || !isFinished;
+      buttonPower.disabled = isSpectator || !isMyTurn || mp.buttonShotAnimating || buttonCharge.active;
     }
 
     function isButtonSoccerMyTurn(room = mp.buttonRoom) {
@@ -8476,13 +8556,16 @@
       gameMessage.textContent = room.message || "";
 
       const isHost = room.hostSocketId === mp.socket?.id;
+      const isSpectator = Boolean(room.isSpectator);
       const canStart = room.status === "waiting" && isHost && (room.players?.length || 0) >= 2;
       startMatch.textContent = room.status === "waiting"
         ? "Comecar online"
         : room.status === "finished"
           ? "Jogar novamente"
-          : "Em campo";
-      startMatch.disabled = !(canStart || room.status === "finished");
+          : isSpectator
+            ? "Assistindo"
+            : "Em campo";
+      startMatch.disabled = isSpectator || !(canStart || room.status === "finished");
 
       drawHeadSoccerRoom(room);
       ensureHeadSoccerRenderLoop();
@@ -8531,7 +8614,7 @@
     }
 
     function sendHeadSoccerInput(now) {
-      if (!mp.headRoomId || mp.headRoom?.status !== "playing" || !mp.socket?.connected) return;
+      if (!mp.headRoomId || mp.headRoom?.isSpectator || mp.headRoom?.status !== "playing" || !mp.socket?.connected) return;
       const input = currentHeadInput();
       const previous = mp.headLastInput;
       const changed = !previous
@@ -8894,14 +8977,29 @@
       document.getElementById("slitherInviteToast").classList.add("hidden");
     }
 
-    function spectateSlitherRoom(roomId) {
+    function spectateGame(game, roomId) {
       if (!mp.socket?.connected) {
         showToast("Entre online para assistir partidas.");
         return;
       }
-      if (!roomId) return;
+      const events = {
+        head: "head:spectate",
+        button: "button:spectate",
+        blackjack: "blackjack:spectate",
+        slither: "slither:spectate",
+        horse: "horse:spectate"
+      };
+      const eventName = events[game];
+      if (!roomId || !eventName) {
+        showToast("Esta partida ainda nao pode ser assistida.");
+        return;
+      }
       document.getElementById("lobbyOverlay").classList.add("hidden");
-      mp.socket.emit("slither:spectate", { roomId });
+      mp.socket.emit(eventName, { roomId });
+    }
+
+    function spectateSlitherRoom(roomId) {
+      spectateGame("slither", roomId);
     }
 
     function startSlither() {
@@ -8917,7 +9015,7 @@
 
     function leaveSlitherRoom() {
       if (mp.slitherRoomId && mp.slitherRoom?.status !== "finished") {
-        mp.socket?.emit("slither:leave", { roomId: mp.slitherRoomId });
+        mp.socket?.emit(mp.slitherRoom?.isSpectator ? "slither:unwatch" : "slither:leave", { roomId: mp.slitherRoomId });
       }
       closeSlitherOverlay(false);
     }
@@ -9030,6 +9128,10 @@
     function followSlitherPlayer(socketId) {
       if (!socketId) return;
       mp.slitherFollowSocketId = socketId;
+      const me = getSlitherMe();
+      if (mp.slitherRoomId && mp.slitherRoom?.status === "playing" && (!me || !me.alive || me.eliminated)) {
+        mp.socket?.emit("slither:watching", { roomId: mp.slitherRoomId, targetSocketId: socketId });
+      }
       renderSlitherRoom(mp.slitherRoom);
     }
 
@@ -9068,7 +9170,10 @@
             <strong>${escHtml(player.username)}${player.isMe ? " (voce)" : ""}</strong>
             <small>${player.eliminated ? "eliminado" : player.alive ? `${Math.round(player.length || 0)} pts` : "renascendo"}${boostLabel}${followLabel}${player.isHost ? " | dono" : ""}</small>
           </span>
-          <span class="slither-life-badge">${"&hearts;".repeat(Math.max(0, Number(player.lives || 0)))}</span>
+          <span class="slither-side-badges">
+            ${renderWatcherBadge(player.watchers)}
+            <span class="slither-life-badge">${"&hearts;".repeat(Math.max(0, Number(player.lives || 0)))}</span>
+          </span>
         </button>
       `;
       }).join("");
@@ -9294,12 +9399,16 @@
     }
 
     function pickHorse(horseId) {
-      if (!mp.horseRoomId) return;
+      if (!mp.horseRoomId || mp.horseRoom?.isSpectator) return;
       mp.socket.emit("horse:pick", { roomId: mp.horseRoomId, horseId });
     }
 
     function startHorseRace() {
       if (!mp.horseRoomId) return;
+      if (mp.horseRoom?.isSpectator) {
+        showToast("Voce esta assistindo esta corrida.");
+        return;
+      }
       if (mp.horseRoom?.status === "finished") {
         const bet = Number(mp.horseRoom.bet || document.getElementById("myBetInput").value || 10);
         closeHorseOverlay();
@@ -9310,8 +9419,12 @@
     }
 
     function leaveHorseRoom() {
-      if (mp.horseRoomId && mp.horseRoom?.status === "waiting") {
-        mp.socket.emit("horse:leave", { roomId: mp.horseRoomId });
+      if (mp.horseRoomId) {
+        if (mp.horseRoom?.isSpectator) {
+          mp.socket.emit("horse:unwatch", { roomId: mp.horseRoomId });
+        } else if (mp.horseRoom?.status === "waiting") {
+          mp.socket.emit("horse:leave", { roomId: mp.horseRoomId });
+        }
       }
       closeHorseOverlay();
     }
@@ -9330,6 +9443,7 @@
       const isHost = room.hostSocketId === mp.socket?.id;
       const isWaiting = room.status === "waiting";
       const isFinished = room.status === "finished";
+      const isSpectator = Boolean(room.isSpectator);
       const me = room.players.find(p => p.isMe);
 
       document.getElementById("horseOverlay").classList.remove("hidden");
@@ -9360,6 +9474,7 @@
       if (isWaiting) {
         document.getElementById("horsePickButtons").innerHTML = room.horses.map(h => `
           <button class="horse-pick-btn ${me?.pickedHorse===h.id?'is-picked':''}"
+                  ${isSpectator ? "disabled" : ""}
                   style="border-color:${me?.pickedHorse===h.id?h.color:'rgba(255,255,255,0.2)'}"
                   onclick="pickHorse(${h.id})">
             ${HORSE_EMOJIS[h.id-1]} ${h.name}
@@ -9378,8 +9493,8 @@
 
       // Buttons
       document.getElementById("horseStartBtn").textContent = isFinished ? "Jogar novamente" : "🏁 Largar!";
-      document.getElementById("horseStartBtn").disabled = !(isFinished || (isHost && isWaiting));
-      document.getElementById("horseLeaveBtn").textContent = isFinished ? "Fechar" : "Sair";
+      document.getElementById("horseStartBtn").disabled = isSpectator || !(isFinished || (isHost && isWaiting));
+      document.getElementById("horseLeaveBtn").textContent = isSpectator ? "Sair da transmissao" : isFinished ? "Fechar" : "Sair";
 
       // Winner banner
       const banner = document.getElementById("horseWinnerBanner");

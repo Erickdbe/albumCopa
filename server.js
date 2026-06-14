@@ -877,6 +877,44 @@ const buttonSoccerRooms  = new Map();   // roomId -> futebol de botao
 const headSoccerRooms    = new Map();   // roomId -> head soccer em sala
 const slitherRooms       = new Map();   // roomId -> cobrinhas estilo slither
 
+function ensureSpectators(room) {
+  if (!room.spectators) room.spectators = new Set();
+  return room.spectators;
+}
+
+function roomSpectatorCount(room) {
+  return room?.spectators?.size || 0;
+}
+
+function clearSpectator(room, socketId) {
+  if (!room?.spectators) return false;
+  const removed = room.spectators.delete(socketId);
+  const liveSocket = io.sockets.sockets.get(socketId);
+  if (removed && liveSocket) liveSocket.leave(room.roomId);
+  return removed;
+}
+
+function clearSocketFromSpectatorRooms(socketId) {
+  for (const room of blackjackRooms.values()) {
+    if (clearSpectator(room, socketId)) emitBlackjackUpdate(room);
+  }
+  for (const room of buttonSoccerRooms.values()) {
+    if (clearSpectator(room, socketId)) emitButtonSoccerUpdate(room);
+  }
+  for (const room of headSoccerRooms.values()) {
+    if (clearSpectator(room, socketId)) emitHeadSoccerUpdate(room);
+  }
+  for (const room of slitherRooms.values()) {
+    if (clearSpectator(room, socketId)) {
+      clearSlitherWatcher(room, socketId);
+      emitSlitherUpdate(room);
+    }
+  }
+  for (const room of horseRooms.values()) {
+    if (clearSpectator(room, socketId)) emitHorseUpdate(room);
+  }
+}
+
 io.use((socket, next) => {
   const token   = socket.handshake.auth.token;
   const payload = verifyToken(token);
@@ -928,6 +966,7 @@ function drawBlackjackCard(room) {
 function serializeBlackjackRoom(room, viewerSocketId) {
   const revealDealer = room.status === "finished";
   const dealerCards = revealDealer ? room.dealerCards : room.dealerCards.map((card, index) => index === 0 ? card : null);
+  const isSpectator = !room.players.some(player => player.socketId === viewerSocketId);
   return {
     roomId: room.roomId,
     hostSocketId: room.hostSocketId,
@@ -937,6 +976,8 @@ function serializeBlackjackRoom(room, viewerSocketId) {
     message: room.message,
     winnerSocketId: room.winnerSocketId || null,
     houseWon: Boolean(room.houseWon),
+    isSpectator,
+    spectatorCount: roomSpectatorCount(room),
     dealerCards,
     dealerTotal: revealDealer ? handTotal(room.dealerCards) : null,
     players: room.players.map((player, index) => {
@@ -961,6 +1002,9 @@ function emitBlackjackUpdate(room) {
   room.players.forEach(player => {
     io.to(player.socketId).emit("blackjack:update", serializeBlackjackRoom(room, player.socketId));
   });
+  for (const spectatorId of room.spectators || []) {
+    io.to(spectatorId).emit("blackjack:update", serializeBlackjackRoom(room, spectatorId));
+  }
 }
 
 function allBlackjackPlayersDone(room) {
@@ -1047,8 +1091,17 @@ function finishBlackjackRoom(room) {
     });
 
     const online = onlinePlayers.get(player.socketId);
-    if (online) { online.inGame = false; online.roomId = null; }
+    if (online && online.roomId === room.roomId) { online.inGame = false; online.roomId = null; online.game = null; }
   });
+
+  for (const spectatorId of room.spectators || []) {
+    io.to(spectatorId).emit("blackjack:finished", {
+      table: serializeBlackjackRoom(room, spectatorId),
+      updatedUser: null
+    });
+    const liveSocket = io.sockets.sockets.get(spectatorId);
+    if (liveSocket) liveSocket.leave(room.roomId);
+  }
 
   blackjackRooms.delete(room.roomId);
   broadcastOnlineList();
@@ -1059,8 +1112,13 @@ function cancelBlackjackRoom(room, reason = "Mesa de 21 cancelada.") {
   room.players.forEach(player => {
     io.to(player.socketId).emit("blackjack:cancelled", { message: reason });
     const online = onlinePlayers.get(player.socketId);
-    if (online) { online.inGame = false; online.roomId = null; }
+    if (online && online.roomId === room.roomId) { online.inGame = false; online.roomId = null; online.game = null; }
   });
+  for (const spectatorId of room.spectators || []) {
+    io.to(spectatorId).emit("blackjack:cancelled", { message: reason });
+    const liveSocket = io.sockets.sockets.get(spectatorId);
+    if (liveSocket) liveSocket.leave(room.roomId);
+  }
   blackjackRooms.delete(room.roomId);
   broadcastOnlineList();
 }
@@ -1153,6 +1211,7 @@ function makeButtonSoccerPlayer(socket, index, bet) {
 
 function serializeButtonSoccerRoom(room, viewerSocketId) {
   const now = Date.now();
+  const isSpectator = !room.players.some(player => player.socketId === viewerSocketId);
   return {
     roomId: room.roomId,
     hostSocketId: room.hostSocketId,
@@ -1169,6 +1228,8 @@ function serializeButtonSoccerRoom(room, viewerSocketId) {
     gameEndsAt: room.gameEndsAt || null,
     gameLeftMs: room.status === "playing" ? Math.max(0, (room.gameEndsAt || now) - now) : 0,
     winnerTeam: room.winnerTeam || null,
+    isSpectator,
+    spectatorCount: roomSpectatorCount(room),
     lastGoal: room.lastGoal || null,
     lastShot: room.lastShot || null,
     players: room.players.map((player, index) => ({
@@ -1194,6 +1255,9 @@ function emitButtonSoccerUpdate(room) {
   room.players.forEach(player => {
     io.to(player.socketId).emit("button:update", serializeButtonSoccerRoom(room, player.socketId));
   });
+  for (const spectatorId of room.spectators || []) {
+    io.to(spectatorId).emit("button:update", serializeButtonSoccerRoom(room, spectatorId));
+  }
 }
 
 function scheduleButtonTurnTimeout(room) {
@@ -1267,6 +1331,7 @@ function startButtonSoccerRound(room, requestedBet = room.bet) {
   });
 
   room.bet = tableBet;
+  room.pot = room.players.reduce((sum, player) => sum + Number(player.bet || tableBet || 0), 0);
   room.status = "playing";
   room.scores = { red: 0, white: 0 };
   room.winnerTeam = null;
@@ -1308,7 +1373,7 @@ function finishButtonSoccerRoom(room, reason = "") {
   if (room.scores.white > room.scores.red) winnerTeam = "white";
   room.winnerTeam = winnerTeam;
 
-  const totalPot = room.players.reduce((sum, player) => sum + Number(player.bet || room.bet || 0), 0);
+  const totalPot = Number(room.pot || 0) || room.players.reduce((sum, player) => sum + Number(player.bet || room.bet || 0), 0);
   if (winnerTeam) {
     const winners = room.players.filter(player => player.team === winnerTeam);
     const share = winners.length ? Math.floor(totalPot / winners.length) : 0;
@@ -1340,6 +1405,12 @@ function finishButtonSoccerRoom(room, reason = "") {
       updatedUser: safeUser(db.findUser("id", player.userId))
     });
   });
+  for (const spectatorId of room.spectators || []) {
+    io.to(spectatorId).emit("button:finished", {
+      room: serializeButtonSoccerRoom(room, spectatorId),
+      updatedUser: null
+    });
+  }
   broadcastOnlineList();
 }
 
@@ -1363,8 +1434,13 @@ function cancelButtonSoccerRoom(room, reason = "Mesa de futebol de botao cancela
   room.players.forEach(player => {
     io.to(player.socketId).emit("button:cancelled", { message: reason });
     const online = onlinePlayers.get(player.socketId);
-    if (online) { online.inGame = false; online.roomId = null; }
+    if (online && online.roomId === room.roomId) { online.inGame = false; online.roomId = null; online.game = null; }
   });
+  for (const spectatorId of room.spectators || []) {
+    io.to(spectatorId).emit("button:cancelled", { message: reason });
+    const liveSocket = io.sockets.sockets.get(spectatorId);
+    if (liveSocket) liveSocket.leave(room.roomId);
+  }
   buttonSoccerRooms.delete(room.roomId);
   broadcastOnlineList();
 }
@@ -1380,7 +1456,7 @@ function removeButtonSoccerPlayer(room, socketId, reason = "") {
 
   room.players = room.players.filter(item => item.socketId !== socketId);
   const online = onlinePlayers.get(socketId);
-  if (online) { online.inGame = false; online.roomId = null; }
+  if (online && online.roomId === room.roomId) { online.inGame = false; online.roomId = null; online.game = null; }
 
   if (!room.players.length) {
     buttonSoccerRooms.delete(room.roomId);
@@ -1666,6 +1742,7 @@ function resetHeadSoccerPositions(room) {
 
 function serializeHeadSoccerRoom(room, viewerSocketId) {
   const now = Date.now();
+  const isSpectator = !room.players.some(player => player.socketId === viewerSocketId);
   return {
     roomId: room.roomId,
     hostSocketId: room.hostSocketId,
@@ -1679,6 +1756,8 @@ function serializeHeadSoccerRoom(room, viewerSocketId) {
     gameEndsAt: room.gameEndsAt || null,
     gameLeftMs: room.status === "playing" ? Math.max(0, (room.gameEndsAt || now) - now) : 0,
     winnerTeam: room.winnerTeam || null,
+    isSpectator,
+    spectatorCount: roomSpectatorCount(room),
     players: room.players.map((player, index) => ({
       socketId: player.socketId,
       username: player.username,
@@ -1707,6 +1786,9 @@ function emitHeadSoccerUpdate(room) {
   room.players.forEach(player => {
     io.to(player.socketId).emit("head:update", serializeHeadSoccerRoom(room, player.socketId));
   });
+  for (const spectatorId of room.spectators || []) {
+    io.to(spectatorId).emit("head:update", serializeHeadSoccerRoom(room, spectatorId));
+  }
 }
 
 function startHeadSoccerRound(room, requestedBet = room.bet) {
@@ -1992,10 +2074,19 @@ function finishHeadSoccerRoom(room, reason = "") {
       updatedUser: safeUser(db.findUser("id", player.userId))
     });
     const online = onlinePlayers.get(player.socketId);
-    if (online) { online.inGame = false; online.roomId = null; }
+    if (online && online.roomId === room.roomId) { online.inGame = false; online.roomId = null; online.game = null; }
     const liveSocket = io.sockets.sockets.get(player.socketId);
     if (liveSocket) liveSocket.leave(room.roomId);
   });
+
+  for (const spectatorId of room.spectators || []) {
+    io.to(spectatorId).emit("head:finished", {
+      room: serializeHeadSoccerRoom(room, spectatorId),
+      updatedUser: null
+    });
+    const liveSocket = io.sockets.sockets.get(spectatorId);
+    if (liveSocket) liveSocket.leave(room.roomId);
+  }
 
   headSoccerRooms.delete(room.roomId);
   broadcastOnlineList();
@@ -2020,10 +2111,16 @@ function cancelHeadSoccerRoom(room, reason = "Mesa de Head Soccer cancelada.") {
   room.players.forEach(player => {
     io.to(player.socketId).emit("head:cancelled", { message: reason });
     const online = onlinePlayers.get(player.socketId);
-    if (online) { online.inGame = false; online.roomId = null; }
+    if (online && online.roomId === room.roomId) { online.inGame = false; online.roomId = null; online.game = null; }
     const liveSocket = io.sockets.sockets.get(player.socketId);
     if (liveSocket) liveSocket.leave(room.roomId);
   });
+
+  for (const spectatorId of room.spectators || []) {
+    io.to(spectatorId).emit("head:cancelled", { message: reason });
+    const liveSocket = io.sockets.sockets.get(spectatorId);
+    if (liveSocket) liveSocket.leave(room.roomId);
+  }
 
   headSoccerRooms.delete(room.roomId);
   broadcastOnlineList();
@@ -2040,7 +2137,7 @@ function removeHeadSoccerPlayer(room, socketId, reason = "") {
 
   room.players = room.players.filter(item => item.socketId !== socketId);
   const online = onlinePlayers.get(socketId);
-  if (online) { online.inGame = false; online.roomId = null; }
+  if (online && online.roomId === room.roomId) { online.inGame = false; online.roomId = null; online.game = null; }
 
   const liveSocket = io.sockets.sockets.get(socketId);
   if (liveSocket) liveSocket.leave(room.roomId);
@@ -2158,8 +2255,71 @@ function fillSlitherPellets(room) {
   }
 }
 
+function ensureSlitherWatchMap(room) {
+  if (!room.watchingBySocket) room.watchingBySocket = new Map();
+  return room.watchingBySocket;
+}
+
+function pickSlitherWatchTarget(room, excludedSocketId = "") {
+  return room.players.find(player => player.socketId !== excludedSocketId && player.alive && !player.eliminated)
+    || room.players.find(player => player.socketId !== excludedSocketId && !player.eliminated)
+    || room.players.find(player => player.socketId !== excludedSocketId)
+    || null;
+}
+
+function canSocketWatchSlither(room, socketId) {
+  const participant = room.players.find(player => player.socketId === socketId);
+  if (participant) return !participant.alive || participant.eliminated;
+  return Boolean(room.spectators?.has(socketId));
+}
+
+function setSlitherWatcher(room, watcherSocketId, targetSocketId) {
+  if (!room || !canSocketWatchSlither(room, watcherSocketId)) return false;
+  const target = room.players.find(player => player.socketId === targetSocketId && !player.eliminated)
+    || pickSlitherWatchTarget(room, watcherSocketId);
+  const watching = ensureSlitherWatchMap(room);
+  if (!target) {
+    watching.delete(watcherSocketId);
+    return false;
+  }
+  watching.set(watcherSocketId, target.socketId);
+  return true;
+}
+
+function clearSlitherWatcher(room, socketId) {
+  const watching = ensureSlitherWatchMap(room);
+  watching.delete(socketId);
+  for (const [watcherSocketId, targetSocketId] of watching) {
+    if (targetSocketId === socketId) {
+      const nextTarget = pickSlitherWatchTarget(room, watcherSocketId);
+      if (nextTarget) watching.set(watcherSocketId, nextTarget.socketId);
+      else watching.delete(watcherSocketId);
+    }
+  }
+}
+
+function getSlitherWatcherCounts(room) {
+  const counts = {};
+  const watching = ensureSlitherWatchMap(room);
+  for (const [watcherSocketId, targetSocketId] of watching) {
+    if (!canSocketWatchSlither(room, watcherSocketId)) {
+      watching.delete(watcherSocketId);
+      continue;
+    }
+    const target = room.players.find(player => player.socketId === targetSocketId && !player.eliminated);
+    if (!target) {
+      watching.delete(watcherSocketId);
+      continue;
+    }
+    counts[target.socketId] = (counts[target.socketId] || 0) + 1;
+  }
+  return counts;
+}
+
 function serializeSlitherRoom(room, viewerSocketId) {
   const now = Date.now();
+  const watcherCounts = getSlitherWatcherCounts(room);
+  const isSpectator = !room.players.some(player => player.socketId === viewerSocketId);
   return {
     roomId: room.roomId,
     hostSocketId: room.hostSocketId,
@@ -2171,6 +2331,8 @@ function serializeSlitherRoom(room, viewerSocketId) {
     pellets: room.pellets,
     winnerSocketId: room.winnerSocketId || null,
     startedAt: room.startedAt || null,
+    isSpectator,
+    spectatorCount: roomSpectatorCount(room),
     players: room.players.map((player, index) => ({
       socketId: player.socketId,
       username: player.username,
@@ -2181,6 +2343,7 @@ function serializeSlitherRoom(room, viewerSocketId) {
       lives: Math.max(0, SLITHER_LIVES - Number(player.deaths || 0)),
       length: Math.round(player.targetLength),
       boosting: Boolean(player.boosting),
+      watchers: watcherCounts[player.socketId] || 0,
       pelletsEaten: player.pelletsEaten || 0,
       respawnLeftMs: !player.alive && !player.eliminated ? Math.max(0, Number(player.respawnAt || now) - now) : 0,
       body: (player.body || []).filter((_, bodyIndex) => bodyIndex % 2 === 0),
@@ -2236,6 +2399,7 @@ function respawnSlitherPlayer(room, player) {
   player.boosting = false;
   player.body = makeSlitherBody(point.x, point.y, angle);
   player.respawnAt = 0;
+  clearSlitherWatcher(room, player.socketId);
   room.message = `${player.username} voltou para a partida.`;
 }
 
@@ -2251,6 +2415,7 @@ function killSlitherPlayer(room, player, reason = "bateu em uma cobra") {
   if (player.deaths >= SLITHER_LIVES) {
     player.eliminated = true;
     player.respawnAt = 0;
+    setSlitherWatcher(room, player.socketId, pickSlitherWatchTarget(room, player.socketId)?.socketId);
     room.message = `${player.username} ${reason} e foi eliminado.`;
   } else {
     player.respawnAt = Date.now() + SLITHER_RESPAWN_MS;
@@ -2294,6 +2459,7 @@ function startSlitherRound(room, requestedBet = room.bet) {
   room.status = "playing";
   room.startedAt = Date.now();
   room.winnerSocketId = null;
+  room.watchingBySocket = new Map();
   room.pellets = [];
   room.message = "Partida iniciada. Coma bolinhas, cresca e faca a cabeca dos rivais bater no seu corpo.";
   fillSlitherPellets(room);
@@ -2351,7 +2517,7 @@ function finishSlitherRoom(room, reason = "") {
 
   room.players.forEach(player => {
     const online = onlinePlayers.get(player.socketId);
-    if (online) { online.inGame = false; online.roomId = null; online.game = null; }
+    if (online && online.roomId === room.roomId) { online.inGame = false; online.roomId = null; online.game = null; }
     const liveSocket = io.sockets.sockets.get(player.socketId);
     if (liveSocket) liveSocket.leave(room.roomId);
   });
@@ -2384,7 +2550,7 @@ function cancelSlitherRoom(room, reason = "Sala de Slither cancelada.") {
   targets.forEach(socketId => {
     io.to(socketId).emit("slither:cancelled", { message: reason });
     const online = onlinePlayers.get(socketId);
-    if (online && room.players.some(player => player.socketId === socketId)) {
+    if (online && online.roomId === room.roomId && room.players.some(player => player.socketId === socketId)) {
       online.inGame = false;
       online.roomId = null;
       online.game = null;
@@ -2400,25 +2566,54 @@ function cancelSlitherRoom(room, reason = "Sala de Slither cancelada.") {
 function removeSlitherPlayer(room, socketId, reason = "") {
   const player = room.players.find(item => item.socketId === socketId);
   if (!player) {
-    room.spectators?.delete(socketId);
+    clearSpectator(room, socketId);
+    clearSlitherWatcher(room, socketId);
     emitSlitherUpdate(room);
+    broadcastOnlineList();
     return;
   }
 
   if (room.status === "playing") {
-    player.deaths = SLITHER_LIVES - 1;
-    killSlitherPlayer(room, player, reason || "saiu da partida");
+    if (player.alive && !player.eliminated) {
+      player.deaths = SLITHER_LIVES - 1;
+      killSlitherPlayer(room, player, reason || "saiu da partida");
+    }
+
+    room.players = room.players.filter(item => item.socketId !== socketId);
+    clearSlitherWatcher(room, socketId);
+    const online = onlinePlayers.get(socketId);
+    if (online && online.roomId === room.roomId) {
+      online.inGame = false;
+      online.roomId = null;
+      online.game = null;
+    }
+    const liveSocket = io.sockets.sockets.get(socketId);
+    if (liveSocket) liveSocket.leave(room.roomId);
+
+    if (room.hostSocketId === socketId && room.players.length) {
+      room.hostSocketId = room.players[0].socketId;
+      room.hostUsername = room.players[0].username;
+    }
+
+    if (!room.players.length) {
+      slitherRooms.delete(room.roomId);
+      broadcastOnlineList();
+      return;
+    }
+
     if (getSlitherLiveContenders(room).length <= 1) {
       finishSlitherRoom(room, reason || `${player.username} saiu da partida.`);
       return;
     }
     emitSlitherUpdate(room);
+    broadcastOnlineList();
     return;
   }
 
   room.players = room.players.filter(item => item.socketId !== socketId);
+  clearSlitherWatcher(room, socketId);
   const online = onlinePlayers.get(socketId);
-  if (online) { online.inGame = false; online.roomId = null; online.game = null; }
+  if (online && online.roomId === room.roomId) { online.inGame = false; online.roomId = null; online.game = null; }
   const liveSocket = io.sockets.sockets.get(socketId);
   if (liveSocket) liveSocket.leave(room.roomId);
 
@@ -2790,13 +2985,14 @@ io.on("connection", (socket) => {
       winnerTeam: null,
       tickTimer: null,
       lastTick: Date.now(),
+      spectators: new Set(),
       message: "Sala aberta. Cada pessoa que entrar vira um jogador.",
       players: [makeHeadSoccerPlayer(socket, 0, tableBet)]
     };
     resetHeadSoccerPositions(room);
     headSoccerRooms.set(roomId, room);
     socket.join(roomId);
-    if (player) { player.inGame = true; player.roomId = roomId; }
+    if (player) { player.inGame = true; player.roomId = roomId; player.game = "head"; }
 
     for (const [, target] of onlinePlayers) {
       if (target.socketId !== socket.id && !target.inGame) {
@@ -2833,7 +3029,7 @@ io.on("connection", (socket) => {
     resetHeadSoccerPositions(room);
     room.message = `${socket.username} entrou no Head Soccer.`;
     socket.join(roomId);
-    if (player) { player.inGame = true; player.roomId = roomId; }
+    if (player) { player.inGame = true; player.roomId = roomId; player.game = "head"; }
     emitHeadSoccerUpdate(room);
     broadcastOnlineList();
   });
@@ -2864,7 +3060,36 @@ io.on("connection", (socket) => {
   socket.on("head:leave", ({ roomId }) => {
     const room = headSoccerRooms.get(roomId);
     if (!room) return;
+    if (room.spectators?.has(socket.id)) {
+      clearSpectator(room, socket.id);
+      emitHeadSoccerUpdate(room);
+      broadcastOnlineList();
+      return;
+    }
     removeHeadSoccerPlayer(room, socket.id, `${socket.username} saiu da sala.`);
+  });
+
+  socket.on("head:spectate", ({ roomId }) => {
+    const room = headSoccerRooms.get(roomId);
+    if (!room || room.status !== "playing")
+      return socket.emit("head:error", "Partida indisponivel para assistir.");
+    if (room.players.some(player => player.socketId === socket.id))
+      return emitHeadSoccerUpdate(room);
+    const online = onlinePlayers.get(socket.id);
+    if (online?.inGame)
+      return socket.emit("head:error", "Termine sua partida antes de assistir outra.");
+    ensureSpectators(room).add(socket.id);
+    socket.join(roomId);
+    emitHeadSoccerUpdate(room);
+    broadcastOnlineList();
+  });
+
+  socket.on("head:unwatch", ({ roomId }) => {
+    const room = headSoccerRooms.get(roomId);
+    if (!room) return;
+    clearSpectator(room, socket.id);
+    emitHeadSoccerUpdate(room);
+    broadcastOnlineList();
   });
 
   socket.on("blackjack:create", ({ bet }) => {
@@ -2887,6 +3112,7 @@ io.on("connection", (socket) => {
       dealerCards: [],
       winnerSocketId: null,
       houseWon: false,
+      spectators: new Set(),
       message: "Mesa aberta. Aguarde jogadores entrarem ou comece contra a casa.",
       players: [{
         socketId: socket.id,
@@ -2902,7 +3128,7 @@ io.on("connection", (socket) => {
 
     blackjackRooms.set(roomId, room);
     socket.join(roomId);
-    if (player) { player.inGame = true; player.roomId = roomId; }
+    if (player) { player.inGame = true; player.roomId = roomId; player.game = "blackjack"; }
 
     for (const [, target] of onlinePlayers) {
       if (target.socketId !== socket.id && !target.inGame) {
@@ -2949,7 +3175,7 @@ io.on("connection", (socket) => {
       joinedAt: Date.now()
     });
     socket.join(roomId);
-    if (player) { player.inGame = true; player.roomId = roomId; }
+    if (player) { player.inGame = true; player.roomId = roomId; player.game = "blackjack"; }
 
     room.message = `${socket.username} entrou na mesa.`;
     emitBlackjackUpdate(room);
@@ -2958,6 +3184,12 @@ io.on("connection", (socket) => {
 
   socket.on("blackjack:leave", ({ roomId }) => {
     const room = blackjackRooms.get(roomId);
+    if (room?.spectators?.has(socket.id)) {
+      clearSpectator(room, socket.id);
+      emitBlackjackUpdate(room);
+      broadcastOnlineList();
+      return;
+    }
     if (!room || room.status !== "waiting") return;
     if (room.hostSocketId === socket.id) {
       cancelBlackjackRoom(room, "O dono da mesa cancelou o 21.");
@@ -2967,8 +3199,31 @@ io.on("connection", (socket) => {
     room.players = room.players.filter(player => player.socketId !== socket.id);
     socket.leave(roomId);
     const online = onlinePlayers.get(socket.id);
-    if (online) { online.inGame = false; online.roomId = null; }
+    if (online && online.roomId === room.roomId) { online.inGame = false; online.roomId = null; online.game = null; }
     room.message = `${socket.username} saiu da mesa.`;
+    emitBlackjackUpdate(room);
+    broadcastOnlineList();
+  });
+
+  socket.on("blackjack:spectate", ({ roomId }) => {
+    const room = blackjackRooms.get(roomId);
+    if (!room || room.status !== "playing")
+      return socket.emit("blackjack:error", "Mesa indisponivel para assistir.");
+    if (room.players.some(player => player.socketId === socket.id))
+      return emitBlackjackUpdate(room);
+    const online = onlinePlayers.get(socket.id);
+    if (online?.inGame)
+      return socket.emit("blackjack:error", "Termine sua partida antes de assistir outra.");
+    ensureSpectators(room).add(socket.id);
+    socket.join(roomId);
+    emitBlackjackUpdate(room);
+    broadcastOnlineList();
+  });
+
+  socket.on("blackjack:unwatch", ({ roomId }) => {
+    const room = blackjackRooms.get(roomId);
+    if (!room) return;
+    clearSpectator(room, socket.id);
     emitBlackjackUpdate(room);
     broadcastOnlineList();
   });
@@ -3049,13 +3304,14 @@ io.on("connection", (socket) => {
       lastShot: null,
       shotSeq: 0,
       goalSeq: 0,
+      spectators: new Set(),
       message: "Mesa aberta. Jogadores entram como botoes alternando times.",
       players: [makeButtonSoccerPlayer(socket, 0, tableBet)]
     };
     resetButtonSoccerPositions(room);
     buttonSoccerRooms.set(roomId, room);
     socket.join(roomId);
-    if (player) { player.inGame = true; player.roomId = roomId; }
+    if (player) { player.inGame = true; player.roomId = roomId; player.game = "button"; }
 
     for (const [, target] of onlinePlayers) {
       if (target.socketId !== socket.id && !target.inGame) {
@@ -3087,7 +3343,7 @@ io.on("connection", (socket) => {
     resetButtonSoccerPositions(room);
     room.message = `${socket.username} entrou como botao.`;
     socket.join(roomId);
-    if (player) { player.inGame = true; player.roomId = roomId; }
+    if (player) { player.inGame = true; player.roomId = roomId; player.game = "button"; }
     emitButtonSoccerUpdate(room);
     broadcastOnlineList();
   });
@@ -3155,8 +3411,37 @@ io.on("connection", (socket) => {
   socket.on("button:leave", ({ roomId }) => {
     const room = buttonSoccerRooms.get(roomId);
     if (!room) return;
+    if (room.spectators?.has(socket.id)) {
+      clearSpectator(room, socket.id);
+      emitButtonSoccerUpdate(room);
+      broadcastOnlineList();
+      return;
+    }
     removeButtonSoccerPlayer(room, socket.id, `${socket.username} saiu da mesa.`);
     socket.leave(roomId);
+  });
+
+  socket.on("button:spectate", ({ roomId }) => {
+    const room = buttonSoccerRooms.get(roomId);
+    if (!room || room.status !== "playing")
+      return socket.emit("button:error", "Partida indisponivel para assistir.");
+    if (room.players.some(player => player.socketId === socket.id))
+      return emitButtonSoccerUpdate(room);
+    const online = onlinePlayers.get(socket.id);
+    if (online?.inGame)
+      return socket.emit("button:error", "Termine sua partida antes de assistir outra.");
+    ensureSpectators(room).add(socket.id);
+    socket.join(roomId);
+    emitButtonSoccerUpdate(room);
+    broadcastOnlineList();
+  });
+
+  socket.on("button:unwatch", ({ roomId }) => {
+    const room = buttonSoccerRooms.get(roomId);
+    if (!room) return;
+    clearSpectator(room, socket.id);
+    emitButtonSoccerUpdate(room);
+    broadcastOnlineList();
   });
 
   // Slither
@@ -3175,10 +3460,12 @@ io.on("connection", (socket) => {
       hostSocketId: socket.id,
       hostUsername: socket.username,
       bet: tableBet,
+      pot: tableBet,
       status: "waiting",
       message: "Sala aberta. Cada jogador tem 2 vidas.",
       pellets: [],
       spectators: new Set(),
+      watchingBySocket: new Map(),
       winnerSocketId: null,
       tickTimer: null,
       lastTick: Date.now(),
@@ -3265,14 +3552,26 @@ io.on("connection", (socket) => {
       return socket.emit("slither:error", "Termine sua partida antes de assistir outra.");
     room.spectators.add(socket.id);
     socket.join(roomId);
-    socket.emit("slither:update", serializeSlitherRoom(room, socket.id));
+    setSlitherWatcher(room, socket.id, pickSlitherWatchTarget(room, socket.id)?.socketId);
+    emitSlitherUpdate(room);
+    broadcastOnlineList();
+  });
+
+  socket.on("slither:watching", ({ roomId, targetSocketId }) => {
+    const room = slitherRooms.get(roomId);
+    if (!room || room.status !== "playing") return;
+    if (!setSlitherWatcher(room, socket.id, targetSocketId)) return;
+    emitSlitherUpdate(room);
+    broadcastOnlineList();
   });
 
   socket.on("slither:unwatch", ({ roomId }) => {
     const room = slitherRooms.get(roomId);
     if (!room) return;
-    room.spectators?.delete(socket.id);
-    socket.leave(roomId);
+    clearSpectator(room, socket.id);
+    clearSlitherWatcher(room, socket.id);
+    emitSlitherUpdate(room);
+    broadcastOnlineList();
   });
 
   // ── Corrida de Cavalos ─────────────────────────────────────────────────
@@ -3289,12 +3588,13 @@ io.on("connection", (socket) => {
     const room = {
       roomId, hostSocketId: socket.id, hostUsername: socket.username,
       bet: tableBet, status: "waiting", finishOrder: null,
+      spectators: new Set(),
       message: "Mesa aberta. Aguarde jogadores ou inicie a corrida.",
       players: [{ socketId: socket.id, userId: socket.userId, username: socket.username, avatar: socket.avatar || "", bet: tableBet, pickedHorse: null, joinedAt: Date.now() }]
     };
     horseRooms.set(roomId, room);
     socket.join(roomId);
-    if (player) { player.inGame = true; player.roomId = roomId; }
+    if (player) { player.inGame = true; player.roomId = roomId; player.game = "horse"; }
 
     // Notify others
     for (const [, target] of onlinePlayers) {
@@ -3324,7 +3624,7 @@ io.on("connection", (socket) => {
 
     room.players.push({ socketId: socket.id, userId: socket.userId, username: socket.username, avatar: socket.avatar || "", bet: room.bet, pickedHorse: null, joinedAt: Date.now() });
     socket.join(roomId);
-    if (player) { player.inGame = true; player.roomId = roomId; }
+    if (player) { player.inGame = true; player.roomId = roomId; player.game = "horse"; }
     room.message = `${socket.username} entrou na corrida.`;
     emitHorseUpdate(room);
     broadcastOnlineList();
@@ -3389,8 +3689,16 @@ io.on("connection", (socket) => {
           updatedUser: safeUser(updated)
         });
         const online = onlinePlayers.get(p.socketId);
-        if (online) { online.inGame = false; online.roomId = null; }
+        if (online && online.roomId === room.roomId) { online.inGame = false; online.roomId = null; online.game = null; }
       });
+      for (const spectatorId of room.spectators || []) {
+        io.to(spectatorId).emit("horse:finished", {
+          room: serializeHorseRoom(room, spectatorId),
+          updatedUser: null
+        });
+        const liveSocket = io.sockets.sockets.get(spectatorId);
+        if (liveSocket) liveSocket.leave(room.roomId);
+      }
       horseRooms.delete(roomId);
       broadcastOnlineList();
     }, 8000);
@@ -3398,13 +3706,24 @@ io.on("connection", (socket) => {
 
   socket.on("horse:leave", ({ roomId }) => {
     const room = horseRooms.get(roomId);
+    if (room?.spectators?.has(socket.id)) {
+      clearSpectator(room, socket.id);
+      emitHorseUpdate(room);
+      broadcastOnlineList();
+      return;
+    }
     if (!room || room.status !== "waiting") return;
     if (room.hostSocketId === socket.id) {
       room.players.forEach(p => {
         io.to(p.socketId).emit("horse:cancelled", { message: "O dono cancelou a corrida." });
         const online = onlinePlayers.get(p.socketId);
-        if (online) { online.inGame = false; online.roomId = null; }
+        if (online && online.roomId === room.roomId) { online.inGame = false; online.roomId = null; online.game = null; }
       });
+      for (const spectatorId of room.spectators || []) {
+        io.to(spectatorId).emit("horse:cancelled", { message: "O dono cancelou a corrida." });
+        const liveSocket = io.sockets.sockets.get(spectatorId);
+        if (liveSocket) liveSocket.leave(room.roomId);
+      }
       horseRooms.delete(roomId);
       broadcastOnlineList();
       return;
@@ -3412,8 +3731,31 @@ io.on("connection", (socket) => {
     room.players = room.players.filter(p => p.socketId !== socket.id);
     socket.leave(roomId);
     const online = onlinePlayers.get(socket.id);
-    if (online) { online.inGame = false; online.roomId = null; }
+    if (online && online.roomId === room.roomId) { online.inGame = false; online.roomId = null; online.game = null; }
     room.message = `${socket.username} saiu da corrida.`;
+    emitHorseUpdate(room);
+    broadcastOnlineList();
+  });
+
+  socket.on("horse:spectate", ({ roomId }) => {
+    const room = horseRooms.get(roomId);
+    if (!room || room.status !== "racing")
+      return socket.emit("horse:error", "Corrida indisponivel para assistir.");
+    if (room.players.some(player => player.socketId === socket.id))
+      return emitHorseUpdate(room);
+    const online = onlinePlayers.get(socket.id);
+    if (online?.inGame)
+      return socket.emit("horse:error", "Termine sua partida antes de assistir outra.");
+    ensureSpectators(room).add(socket.id);
+    socket.join(roomId);
+    emitHorseUpdate(room);
+    broadcastOnlineList();
+  });
+
+  socket.on("horse:unwatch", ({ roomId }) => {
+    const room = horseRooms.get(roomId);
+    if (!room) return;
+    clearSpectator(room, socket.id);
     emitHorseUpdate(room);
     broadcastOnlineList();
   });
@@ -3421,6 +3763,7 @@ io.on("connection", (socket) => {
   socket.on("disconnect", () => {
     console.log(`[-] ${socket.username} desconectado`);
     const player = onlinePlayers.get(socket.id);
+    clearSocketFromSpectatorRooms(socket.id);
 
     if (player?.roomId) {
       const room = activeRooms.get(player.roomId);
@@ -3441,7 +3784,7 @@ io.on("connection", (socket) => {
       horseRoom.players.forEach(p => {
         io.to(p.socketId).emit("horse:cancelled", { message: `${socket.username} desconectou.` });
         const online = onlinePlayers.get(p.socketId);
-        if (online) { online.inGame = false; online.roomId = null; }
+        if (online && online.roomId === horseRoom.roomId) { online.inGame = false; online.roomId = null; online.game = null; }
       });
       horseRooms.delete(horseRoom.roomId);
     }
@@ -3507,6 +3850,7 @@ function makeFinishOrder() {
 }
 
 function serializeHorseRoom(room, viewerSocketId) {
+  const isSpectator = !room.players.some(player => player.socketId === viewerSocketId);
   return {
     roomId: room.roomId,
     hostSocketId: room.hostSocketId,
@@ -3515,6 +3859,8 @@ function serializeHorseRoom(room, viewerSocketId) {
     message: room.message,
     horses: HORSES,
     finishOrder: room.status === "finished" ? room.finishOrder : null,
+    isSpectator,
+    spectatorCount: roomSpectatorCount(room),
     players: room.players.map(p => ({
       socketId: p.socketId,
       username: p.username,
@@ -3530,6 +3876,9 @@ function emitHorseUpdate(room) {
   room.players.forEach(p => {
     io.to(p.socketId).emit("horse:update", serializeHorseRoom(room, p.socketId));
   });
+  for (const spectatorId of room.spectators || []) {
+    io.to(spectatorId).emit("horse:update", serializeHorseRoom(room, spectatorId));
+  }
 }
 
 function findHorseRoomBySocket(socketId) {
@@ -3539,12 +3888,37 @@ function findHorseRoomBySocket(socketId) {
   return null;
 }
 
+function getSpectatableRoom(game, roomId) {
+  if (!roomId) return null;
+  if (game === "blackjack") return blackjackRooms.get(roomId) || null;
+  if (game === "button") return buttonSoccerRooms.get(roomId) || null;
+  if (game === "head") return headSoccerRooms.get(roomId) || null;
+  if (game === "slither") return slitherRooms.get(roomId) || null;
+  if (game === "horse") return horseRooms.get(roomId) || null;
+  return null;
+}
+
+function isRoomSpectatable(game, room) {
+  if (!room) return false;
+  if (game === "horse") return room.status === "racing";
+  return room.status === "playing";
+}
+
+function getRoomWatcherCountForPlayer(game, room, socketId) {
+  if (!room) return 0;
+  if (game === "slither") {
+    const counts = getSlitherWatcherCounts(room);
+    return counts[socketId] || 0;
+  }
+  return isRoomSpectatable(game, room) ? roomSpectatorCount(room) : 0;
+}
+
 function broadcastOnlineList() {
   const list = [];
   for (const [, p] of onlinePlayers) {
     const user = db.findUser("id", p.userId);
     p.avatar = user?.avatar || p.avatar || "";
-    const slitherRoom = p.game === "slither" && p.roomId ? slitherRooms.get(p.roomId) : null;
+    const gameRoom = getSpectatableRoom(p.game, p.roomId);
     list.push({
       socketId: p.socketId,
       username: p.username,
@@ -3552,7 +3926,8 @@ function broadcastOnlineList() {
       avatar: p.avatar,
       game: p.game || null,
       roomId: p.roomId || null,
-      spectatable: slitherRoom?.status === "playing"
+      spectatable: isRoomSpectatable(p.game, gameRoom),
+      watcherCount: getRoomWatcherCountForPlayer(p.game, gameRoom, p.socketId)
     });
   }
   io.emit("online:list", list);

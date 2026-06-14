@@ -1492,14 +1492,14 @@ function simulateButtonSoccerShot(room, player, angle, power) {
 const HEAD_SOCCER_FIELD = {
   width: 1500,
   height: 675,
-  pitchTop: 305,
-  ground: 570,
-  playerGround: 548,
-  goalTop: 190,
-  goalBottom: 570,
-  goalWidth: 98,
-  playerRadius: 46,
-  ballRadius: 21
+  pitchTop: 0,
+  ground: 675,
+  playerGround: 337,
+  goalTop: 250,
+  goalBottom: 425,
+  goalWidth: 54,
+  playerRadius: 32,
+  ballRadius: 15
 };
 const HEAD_SOCCER_MAX_PLAYERS = 8;
 const HEAD_SOCCER_GAME_MS = 180000;
@@ -1542,7 +1542,9 @@ function makeHeadSoccerPlayer(socket, index, bet) {
     vx: 0,
     vy: 0,
     radius: HEAD_SOCCER_FIELD.playerRadius,
-    inputs: { left: false, right: false, jump: false, kick: false },
+    faceX: team === "blue" ? 1 : -1,
+    faceY: 0,
+    inputs: { left: false, right: false, up: false, down: false, jump: false, kick: false },
     kickTimer: 0,
     kickCooldown: 0,
     joinedAt: Date.now()
@@ -1565,30 +1567,46 @@ function assignHeadSoccerTeams(room) {
 function resetHeadSoccerPositions(room) {
   const blue = room.players.filter(player => player.team === "blue");
   const red = room.players.filter(player => player.team === "red");
+  const spots = [
+    { x: 360, y: 338 },
+    { x: 235, y: 220 },
+    { x: 235, y: 455 },
+    { x: 505, y: 338 },
+    { x: 405, y: 150 },
+    { x: 405, y: 525 },
+    { x: 620, y: 245 },
+    { x: 620, y: 430 }
+  ];
 
   blue.forEach((player, index) => {
-    player.x = 330 + (index % 4) * 78;
-    player.y = HEAD_SOCCER_FIELD.playerGround;
+    const spot = spots[index % spots.length];
+    player.x = spot.x;
+    player.y = spot.y;
     player.vx = 0;
     player.vy = 0;
+    player.faceX = 1;
+    player.faceY = 0;
     player.kickTimer = 0;
     player.kickCooldown = 0;
   });
 
   red.forEach((player, index) => {
-    player.x = HEAD_SOCCER_FIELD.width - 330 - (index % 4) * 78;
-    player.y = HEAD_SOCCER_FIELD.playerGround;
+    const spot = spots[index % spots.length];
+    player.x = HEAD_SOCCER_FIELD.width - spot.x;
+    player.y = spot.y;
     player.vx = 0;
     player.vy = 0;
+    player.faceX = -1;
+    player.faceY = 0;
     player.kickTimer = 0;
     player.kickCooldown = 0;
   });
 
   room.ball = {
     x: HEAD_SOCCER_FIELD.width / 2,
-    y: 276,
-    vx: (Math.random() > 0.5 ? 1 : -1) * 140,
-    vy: -80,
+    y: HEAD_SOCCER_FIELD.height / 2,
+    vx: (Math.random() > 0.5 ? 1 : -1) * 120,
+    vy: (Math.random() - 0.5) * 70,
     radius: HEAD_SOCCER_FIELD.ballRadius
   };
 }
@@ -1622,6 +1640,8 @@ function serializeHeadSoccerRoom(room, viewerSocketId) {
       vx: Math.round(player.vx),
       vy: Math.round(player.vy),
       radius: player.radius,
+      faceX: Number.isFinite(player.faceX) ? player.faceX : player.side,
+      faceY: Number.isFinite(player.faceY) ? player.faceY : 0,
       kickTimer: player.kickTimer,
       isHost: player.socketId === room.hostSocketId,
       isMe: player.socketId === viewerSocketId,
@@ -1660,7 +1680,7 @@ function startHeadSoccerRound(room, requestedBet = room.bet) {
       bet_credits: Math.max(0, Number(user.bet_credits || 0) - tableBet)
     });
     player.bet = tableBet;
-    player.inputs = { left: false, right: false, jump: false, kick: false };
+    player.inputs = { left: false, right: false, up: false, down: false, jump: false, kick: false };
   });
 
   room.bet = tableBet;
@@ -1682,31 +1702,39 @@ function startHeadSoccerRound(room, requestedBet = room.bet) {
 }
 
 function updateHeadSoccerPlayer(player, dt) {
-  const speed = 2800;
-  const jump = 760;
-  const gravity = 1750;
+  const acceleration = 3000;
+  const maxSpeed = 430;
   const inputs = player.inputs || {};
 
   player.kickTimer = Math.max(0, Number(player.kickTimer || 0) - dt);
   player.kickCooldown = Math.max(0, Number(player.kickCooldown || 0) - dt);
 
-  if (inputs.left) player.vx -= speed * dt;
-  if (inputs.right) player.vx += speed * dt;
-  if (inputs.jump && player.y >= HEAD_SOCCER_FIELD.playerGround - 1) {
-    player.vy = -jump;
+  let ax = (inputs.right ? 1 : 0) - (inputs.left ? 1 : 0);
+  let ay = (inputs.down ? 1 : 0) - ((inputs.up || inputs.jump) ? 1 : 0);
+  const inputLength = Math.hypot(ax, ay);
+  if (inputLength > 0) {
+    ax /= inputLength;
+    ay /= inputLength;
+    player.faceX = ax;
+    player.faceY = ay;
+    player.vx += ax * acceleration * dt;
+    player.vy += ay * acceleration * dt;
+  } else {
+    player.vx *= 0.84;
+    player.vy *= 0.84;
   }
 
-  player.vy += gravity * dt;
+  const speed = Math.hypot(player.vx, player.vy);
+  if (speed > maxSpeed) {
+    player.vx = (player.vx / speed) * maxSpeed;
+    player.vy = (player.vy / speed) * maxSpeed;
+  }
+
   player.x += player.vx * dt;
   player.y += player.vy * dt;
-  player.vx *= 0.74;
 
-  if (player.y > HEAD_SOCCER_FIELD.playerGround) {
-    player.y = HEAD_SOCCER_FIELD.playerGround;
-    player.vy = 0;
-  }
-
-  player.x = clampNumber(player.x, 115, HEAD_SOCCER_FIELD.width - 115);
+  player.x = clampNumber(player.x, 72, HEAD_SOCCER_FIELD.width - 72);
+  player.y = clampNumber(player.y, 52, HEAD_SOCCER_FIELD.height - 52);
 }
 
 function resolveHeadSoccerPlayerCollisions(room) {
@@ -1715,13 +1743,13 @@ function resolveHeadSoccerPlayerCollisions(room) {
       const a = room.players[i];
       const b = room.players[j];
       const ax = a.x;
-      const ay = a.y - a.radius;
+      const ay = a.y;
       const bx = b.x;
-      const by = b.y - b.radius;
+      const by = b.y;
       const dx = bx - ax;
       const dy = by - ay;
       const dist = Math.hypot(dx, dy) || 1;
-      const minDist = a.radius + b.radius - 8;
+      const minDist = a.radius + b.radius - 6;
       if (dist >= minDist) continue;
 
       const nx = dx / dist;
@@ -1729,13 +1757,18 @@ function resolveHeadSoccerPlayerCollisions(room) {
       const push = (minDist - dist) / 2;
       a.x -= nx * push;
       b.x += nx * push;
-      a.y -= ny * push * 0.25;
-      b.y += ny * push * 0.25;
+      a.y -= ny * push;
+      b.y += ny * push;
       const avx = a.vx;
+      const avy = a.vy;
       a.vx = b.vx * 0.38;
+      a.vy = b.vy * 0.38;
       b.vx = avx * 0.38;
-      a.x = clampNumber(a.x, 115, HEAD_SOCCER_FIELD.width - 115);
-      b.x = clampNumber(b.x, 115, HEAD_SOCCER_FIELD.width - 115);
+      b.vy = avy * 0.38;
+      a.x = clampNumber(a.x, 72, HEAD_SOCCER_FIELD.width - 72);
+      b.x = clampNumber(b.x, 72, HEAD_SOCCER_FIELD.width - 72);
+      a.y = clampNumber(a.y, 52, HEAD_SOCCER_FIELD.height - 52);
+      b.y = clampNumber(b.y, 52, HEAD_SOCCER_FIELD.height - 52);
     }
   }
 }
@@ -1743,7 +1776,7 @@ function resolveHeadSoccerPlayerCollisions(room) {
 function collideHeadSoccerBallWithPlayer(room, player) {
   const ball = room.ball;
   const headX = player.x;
-  const headY = player.y - player.radius;
+  const headY = player.y;
   const dx = ball.x - headX;
   const dy = ball.y - headY;
   const minDist = ball.radius + player.radius;
@@ -1754,61 +1787,73 @@ function collideHeadSoccerBallWithPlayer(room, player) {
     const ny = dy / dist;
     ball.x = headX + nx * minDist;
     ball.y = headY + ny * minDist;
-    ball.vx = nx * 450 + player.vx * 0.42;
-    ball.vy = ny * 450 - 90;
+    ball.vx = nx * 380 + player.vx * 0.48;
+    ball.vy = ny * 380 + player.vy * 0.48;
   }
 
   if (player.inputs?.kick && player.kickCooldown <= 0) {
-    const footX = player.x + player.side * 76;
-    const footY = player.y - 4;
+    let dirX = Number(player.faceX || player.side || 1);
+    let dirY = Number(player.faceY || 0);
+    const dirLength = Math.hypot(dirX, dirY) || 1;
+    dirX /= dirLength;
+    dirY /= dirLength;
+    const ballDirX = ball.x - player.x;
+    const ballDirY = ball.y - player.y;
+    const ballDirLength = Math.hypot(ballDirX, ballDirY) || 1;
+    const dot = (ballDirX / ballDirLength) * dirX + (ballDirY / ballDirLength) * dirY;
+    if (dot > 0.22) {
+      dirX = ballDirX / ballDirLength;
+      dirY = ballDirY / ballDirLength;
+    }
+
+    const footX = player.x + dirX * (player.radius + 18);
+    const footY = player.y + dirY * (player.radius + 18);
     const footDx = ball.x - footX;
     const footDy = ball.y - footY;
     const footDist = Math.hypot(footDx, footDy) || 1;
-    const inFront = (ball.x - player.x) * player.side > -16;
+    const inFront = (ball.x - player.x) * dirX + (ball.y - player.y) * dirY > -12;
 
     player.kickTimer = 0.24;
     player.kickCooldown = 0.28;
 
-    if (inFront && footDist < ball.radius + 72) {
-      ball.x = footX + player.side * (ball.radius + 32);
-      ball.vx = player.side * 1120 + player.vx * 0.22;
-      ball.vy = Math.min(ball.vy, ball.y > player.y - player.radius ? -330 : -190);
+    if (inFront && footDist < ball.radius + player.radius + 50) {
+      ball.x = footX + dirX * (ball.radius + 10);
+      ball.y = footY + dirY * (ball.radius + 10);
+      ball.vx = dirX * 980 + player.vx * 0.22;
+      ball.vy = dirY * 980 + player.vy * 0.22;
     }
   }
 }
 
 function updateHeadSoccerBall(room, dt) {
   const ball = room.ball;
-  const gravity = 1160;
-
-  ball.vy += gravity * dt;
   ball.x += ball.vx * dt;
   ball.y += ball.vy * dt;
-  ball.vx *= 0.995;
+  ball.vx *= 0.986;
+  ball.vy *= 0.986;
 
-  if (ball.y + ball.radius > HEAD_SOCCER_FIELD.ground) {
-    ball.y = HEAD_SOCCER_FIELD.ground - ball.radius;
-    ball.vy *= -0.68;
-    ball.vx *= 0.86;
+  if (ball.y - ball.radius < 18) {
+    ball.y = 18 + ball.radius;
+    ball.vy *= -0.78;
   }
 
-  if (ball.y - ball.radius < 30) {
-    ball.y = 30 + ball.radius;
-    ball.vy *= -0.72;
+  if (ball.y + ball.radius > HEAD_SOCCER_FIELD.height - 18) {
+    ball.y = HEAD_SOCCER_FIELD.height - 18 - ball.radius;
+    ball.vy *= -0.78;
   }
 
   room.players.forEach(player => collideHeadSoccerBallWithPlayer(room, player));
 
-  if (ball.x - ball.radius < 10 && ball.y > HEAD_SOCCER_FIELD.goalTop && ball.y < HEAD_SOCCER_FIELD.goalBottom) {
+  if (ball.x - ball.radius <= 12 && ball.y > HEAD_SOCCER_FIELD.goalTop && ball.y < HEAD_SOCCER_FIELD.goalBottom) {
     return "red";
   }
 
-  if (ball.x + ball.radius > HEAD_SOCCER_FIELD.width - 10 && ball.y > HEAD_SOCCER_FIELD.goalTop && ball.y < HEAD_SOCCER_FIELD.goalBottom) {
+  if (ball.x + ball.radius >= HEAD_SOCCER_FIELD.width - 12 && ball.y > HEAD_SOCCER_FIELD.goalTop && ball.y < HEAD_SOCCER_FIELD.goalBottom) {
     return "blue";
   }
 
-  if (ball.x - ball.radius < 0 || ball.x + ball.radius > HEAD_SOCCER_FIELD.width) {
-    ball.x = clampNumber(ball.x, ball.radius, HEAD_SOCCER_FIELD.width - ball.radius);
+  if (ball.x - ball.radius < 12 || ball.x + ball.radius > HEAD_SOCCER_FIELD.width - 12) {
+    ball.x = clampNumber(ball.x, 12 + ball.radius, HEAD_SOCCER_FIELD.width - 12 - ball.radius);
     ball.vx *= -0.76;
   }
 
@@ -2080,7 +2125,7 @@ io.on("connection", (socket) => {
   // ── Emoji Taunts ───────────────────────────────────────────────────────
   socket.on("game:taunt", ({ emoji, x, y, game }) => {
     const p = onlinePlayers.get(socket.id);
-    const cleanEmoji = String(emoji || "").slice(0, 12);
+    const cleanEmoji = Array.from(String(emoji || "").trim()).filter(char => char.trim()).slice(0, 4).join("");
     if (!cleanEmoji) return;
 
     const payload = {
@@ -2121,7 +2166,6 @@ io.on("connection", (socket) => {
       }
     }
 
-    targets.delete(socket.id);
     if (targets.size) {
       targets.forEach(targetSocketId => io.to(targetSocketId).emit("game:taunt", payload));
     } else if (p?.roomId) {
@@ -2221,7 +2265,7 @@ io.on("connection", (socket) => {
       scores: { blue: 0, red: 0 },
       ball: {
         x: HEAD_SOCCER_FIELD.width / 2,
-        y: 276,
+        y: HEAD_SOCCER_FIELD.height / 2,
         vx: 0,
         vy: 0,
         radius: HEAD_SOCCER_FIELD.ballRadius
@@ -2294,6 +2338,8 @@ io.on("connection", (socket) => {
     player.inputs = {
       left: Boolean(inputs?.left),
       right: Boolean(inputs?.right),
+      up: Boolean(inputs?.up || inputs?.jump),
+      down: Boolean(inputs?.down),
       jump: Boolean(inputs?.jump),
       kick: Boolean(inputs?.kick)
     };

@@ -75,6 +75,44 @@ const RARITY_SETTINGS = {
   legendary: { chance: 1.3, duplicateChance: 0.10 }
 };
 const RARITY_ORDER = ["common", "rare", "legendary"];
+const FARM_MAP = {
+  width: 3200,
+  height: 2400,
+  tile: 32,
+  merchant: { x: 1600, y: 1200, radius: 190 }
+};
+const FARM_ROTTEN_MS = 2 * 60 * 60 * 1000;
+const FARM_FEED_MS = 4 * 60 * 60 * 1000;
+const FARM_TOOL_TIERS = ["wood", "copper", "iron", "gold", "diamond"];
+const FARM_TOOL_UPGRADE_COSTS = {
+  copper: { wood: 8, copper: 6 },
+  iron: { wood: 10, copper: 4, iron: 8 },
+  gold: { iron: 10, gold: 6 },
+  diamond: { gold: 8, diamond: 4 }
+};
+const FARM_CROPS = {
+  turnip: { name: "Nabo", rarity: "common", seedKey: "seed_turnip", itemKey: "turnip", seedPrice: 4, sellPrice: 9, growMs: 90 * 1000, yield: 2 },
+  carrot: { name: "Cenoura", rarity: "common", seedKey: "seed_carrot", itemKey: "carrot", seedPrice: 6, sellPrice: 13, growMs: 120 * 1000, yield: 2 },
+  corn: { name: "Milho", rarity: "rare", seedKey: "seed_corn", itemKey: "corn", seedPrice: 18, sellPrice: 42, growMs: 12 * 60 * 1000, yield: 3 },
+  grape: { name: "Uva", rarity: "rare", seedKey: "seed_grape", itemKey: "grape", seedPrice: 28, sellPrice: 72, growMs: 24 * 60 * 1000, yield: 3 },
+  crystalBerry: { name: "Fruta Cristal", rarity: "legendary", seedKey: "seed_crystalBerry", itemKey: "crystalBerry", seedPrice: 80, sellPrice: 240, growMs: 60 * 60 * 1000, yield: 2 }
+};
+const FARM_ANIMALS = {
+  chicken: { name: "Galinha", rarity: "common", price: 45, feedCost: 1, itemKey: "egg", itemName: "Ovo", sellPrice: 8, produceMs: 2 * 60 * 1000, yield: 1 },
+  goat: { name: "Cabra", rarity: "common", price: 90, feedCost: 1, itemKey: "goatMilk", itemName: "Leite de cabra", sellPrice: 18, produceMs: 8 * 60 * 1000, yield: 1 },
+  fish: { name: "Peixe", rarity: "rare", price: 140, feedCost: 1, itemKey: "fishFillet", itemName: "File de peixe", sellPrice: 32, produceMs: 18 * 60 * 1000, yield: 1 },
+  cow: { name: "Vaca", rarity: "rare", price: 220, feedCost: 2, itemKey: "milk", itemName: "Leite", sellPrice: 44, produceMs: 30 * 60 * 1000, yield: 1, fertilizer: 1 },
+  pig: { name: "Porco", rarity: "rare", price: 180, feedCost: 2, itemKey: "truffle", itemName: "Trufa", sellPrice: 36, produceMs: 22 * 60 * 1000, yield: 1, fertilizer: 1 },
+  horse: { name: "Cavalo", rarity: "legendary", price: 430, feedCost: 2, itemKey: "horsehair", itemName: "Crina rara", sellPrice: 95, produceMs: 60 * 60 * 1000, yield: 1, fertilizer: 2 }
+};
+const FARM_RESOURCES = {
+  tree: { name: "Arvore", itemKey: "wood", amount: 4, tool: "axe", tier: "wood", xp: 1 },
+  stone: { name: "Pedra", itemKey: "stone", amount: 3, tool: "pickaxe", tier: "wood", xp: 1 },
+  copper: { name: "Cobre", itemKey: "copper", amount: 2, tool: "pickaxe", tier: "wood", xp: 2 },
+  iron: { name: "Ferro", itemKey: "iron", amount: 2, tool: "pickaxe", tier: "copper", xp: 3 },
+  gold: { name: "Ouro", itemKey: "gold", amount: 1, tool: "pickaxe", tier: "iron", xp: 5 },
+  diamond: { name: "Diamante", itemKey: "diamond", amount: 1, tool: "pickaxe", tier: "gold", xp: 9 }
+};
 const SERVER_STICKER_OVERRIDES = {
   55: { name: "Fabinho Cocorico", image: "assets/album-copa/figurinhas/fabinho%20cocorico.png" },
   56: { name: "Juiz", rarity: "rare", image: "assets/album-copa/figurinhas/Juiz.png" },
@@ -205,10 +243,51 @@ function backupDbIfNeeded() {
   lastBackupDate = date;
 }
 
+function makeFarmLands() {
+  const lands = [];
+  const cols = 6;
+  const rows = 4;
+  const width = 210;
+  const height = 160;
+  const gap = 34;
+  const startX = 700;
+  const startY = 360;
+
+  for (let row = 0; row < rows; row += 1) {
+    for (let col = 0; col < cols; col += 1) {
+      const index = row * cols + col;
+      lands.push({
+        id: `land-${index + 1}`,
+        x: startX + col * (width + gap),
+        y: startY + row * (height + gap),
+        w: width,
+        h: height,
+        price: 70 + Math.floor(index / 3) * 18,
+        ownerId: null,
+        crop: null,
+        animal: null,
+        buildings: [],
+        storage: {}
+      });
+    }
+  }
+
+  return lands;
+}
+
+function makeDefaultFarmWorld() {
+  return {
+    version: 1,
+    map: FARM_MAP,
+    lands: makeFarmLands(),
+    created_at: new Date().toISOString()
+  };
+}
+
 function loadDb() {
   ensureDbDir();
   if (!fs.existsSync(DB_FILE)) {
-    saveDb({ users: [], matches: [], market_listings: [], nextUserId: 1, nextMatchId: 1, nextMarketId: 1 });
+    saveDb({ users: [], matches: [], market_listings: [], farm_world: makeDefaultFarmWorld(), nextUserId: 1, nextMatchId: 1, nextMarketId: 1 });
   }
   const data = JSON.parse(fs.readFileSync(DB_FILE, "utf8"));
   backupDbIfNeeded();
@@ -224,6 +303,10 @@ function loadDb() {
   }
   if (!Array.isArray(data.market_listings)) {
     data.market_listings = [];
+    changed = true;
+  }
+  if (!data.farm_world || !Array.isArray(data.farm_world.lands)) {
+    data.farm_world = makeDefaultFarmWorld();
     changed = true;
   }
   if (!Number.isFinite(Number(data.nextUserId))) {
@@ -269,6 +352,7 @@ const db = {
       stickers:         [],
       duplicates:       {},
       pending_stickers: [],
+      farm:             makeDefaultFarmState(),
       last_sale_day:    "",
       initial_bet_credits_granted: INITIAL_BET_CREDITS,
       last_album_credit_day: todayKey(),
@@ -430,6 +514,387 @@ function normalizeInitialBetCredits(user) {
 }
 
 // ─── App ───────────────────────────────────────────────────────────────────
+function makeDefaultFarmState() {
+  return {
+    coins: 90,
+    xp: 0,
+    level: 1,
+    position: { x: FARM_MAP.merchant.x + 90, y: FARM_MAP.merchant.y + 60 },
+    tools: {
+      pickaxe: "wood",
+      axe: "wood",
+      shovel: "wood",
+      sword: "wood",
+      bow: false,
+      shield: false
+    },
+    inventory: {
+      seed_turnip: 4,
+      seed_carrot: 2,
+      fertilizer: 1,
+      feed: 5,
+      wood: 0,
+      stone: 0,
+      copper: 0,
+      iron: 0,
+      gold: 0,
+      diamond: 0
+    },
+    storage: {},
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  };
+}
+
+function clampFarmNumber(value, min, max, fallback = min) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return fallback;
+  return Math.max(min, Math.min(max, number));
+}
+
+function normalizeFarmState(farm) {
+  const base = makeDefaultFarmState();
+  const next = farm && typeof farm === "object" ? farm : {};
+  return {
+    ...base,
+    ...next,
+    position: {
+      x: clampFarmNumber(next.position?.x, 0, FARM_MAP.width, base.position.x),
+      y: clampFarmNumber(next.position?.y, 0, FARM_MAP.height, base.position.y)
+    },
+    tools: { ...base.tools, ...(next.tools || {}) },
+    inventory: { ...base.inventory, ...(next.inventory || {}) },
+    storage: { ...(next.storage || {}) },
+    updated_at: next.updated_at || base.updated_at
+  };
+}
+
+function ensureFarmData(data, user) {
+  let changed = false;
+  if (!data.farm_world || !Array.isArray(data.farm_world.lands)) {
+    data.farm_world = makeDefaultFarmWorld();
+    changed = true;
+  }
+
+  data.farm_world.map = FARM_MAP;
+  data.farm_world.lands.forEach((land, index) => {
+    if (!land.id) {
+      land.id = `land-${index + 1}`;
+      changed = true;
+    }
+    if (!land.storage || typeof land.storage !== "object") land.storage = {};
+    if (!Array.isArray(land.buildings)) land.buildings = [];
+  });
+
+  if (user) {
+    const normalized = normalizeFarmState(user.farm);
+    if (JSON.stringify(normalized) !== JSON.stringify(user.farm || {})) {
+      user.farm = normalized;
+      changed = true;
+    }
+  }
+
+  return changed;
+}
+
+function farmToolRank(tier) {
+  return Math.max(0, FARM_TOOL_TIERS.indexOf(tier));
+}
+
+function farmHasToolTier(farm, tool, requiredTier) {
+  const current = tool === "axe" ? farm.tools.axe : farm.tools.pickaxe;
+  return farmToolRank(current) >= farmToolRank(requiredTier);
+}
+
+function farmDistance(a, b) {
+  return Math.hypot(Number(a?.x || 0) - Number(b?.x || 0), Number(a?.y || 0) - Number(b?.y || 0));
+}
+
+function computeFarmCrop(crop, now = Date.now()) {
+  if (!crop || !FARM_CROPS[crop.type]) return null;
+  const catalog = FARM_CROPS[crop.type];
+  const plantedAt = Number(crop.plantedAt || now);
+  const wateredAt = Number(crop.wateredAt || 0);
+  const speed = crop.fertilizedAt ? 0.65 : 1;
+  const growMs = Math.max(1000, Math.floor(catalog.growMs * speed));
+  const readyAt = wateredAt ? wateredAt + growMs : plantedAt + growMs;
+  const rottenAt = readyAt + FARM_ROTTEN_MS;
+  const progress = wateredAt
+    ? clampFarmNumber((now - wateredAt) / growMs, 0, 1, 0)
+    : Math.min(0.12, clampFarmNumber((now - plantedAt) / catalog.growMs, 0, 0.12, 0));
+  const rotten = Boolean(wateredAt && now >= rottenAt);
+  const ready = Boolean(wateredAt && now >= readyAt && !rotten);
+  const status = rotten ? "rotten" : ready ? "ready" : wateredAt ? "growing" : "needs_water";
+
+  return {
+    ...crop,
+    name: catalog.name,
+    rarity: catalog.rarity,
+    itemKey: catalog.itemKey,
+    sellPrice: catalog.sellPrice,
+    yield: catalog.yield,
+    progress,
+    ready,
+    rotten,
+    status,
+    readyAt,
+    rottenAt,
+    remainingMs: Math.max(0, readyAt - now)
+  };
+}
+
+function computeFarmAnimal(animal, now = Date.now()) {
+  if (!animal || !FARM_ANIMALS[animal.type]) return null;
+  const catalog = FARM_ANIMALS[animal.type];
+  const fedUntil = Number(animal.fedUntil || 0);
+  const lastProducedAt = Number(animal.lastProducedAt || animal.boughtAt || now);
+  const productiveUntil = Math.min(now, fedUntil);
+  const pending = fedUntil > now || productiveUntil > lastProducedAt
+    ? Math.max(0, Math.floor((productiveUntil - lastProducedAt) / catalog.produceMs))
+    : 0;
+
+  return {
+    ...animal,
+    name: catalog.name,
+    rarity: catalog.rarity,
+    itemKey: catalog.itemKey,
+    itemName: catalog.itemName,
+    sellPrice: catalog.sellPrice,
+    yield: catalog.yield,
+    fertilizer: catalog.fertilizer || 0,
+    pending,
+    hungry: fedUntil <= now,
+    fedUntil,
+    nextProduceAt: fedUntil > now ? lastProducedAt + catalog.produceMs : null
+  };
+}
+
+function buildFarmPayload(data, user) {
+  const now = Date.now();
+  const userMap = {};
+  data.users.forEach(item => {
+    userMap[item.id] = item.username;
+  });
+
+  return {
+    user: { id: user.id, username: user.username, avatar: user.avatar || "" },
+    farm: normalizeFarmState(user.farm),
+    world: {
+      map: FARM_MAP,
+      lands: data.farm_world.lands.map(land => ({
+        ...land,
+        ownerUsername: land.ownerId ? (userMap[land.ownerId] || "?") : "",
+        isMine: land.ownerId === user.id,
+        cropState: computeFarmCrop(land.crop, now),
+        animalState: computeFarmAnimal(land.animal, now)
+      }))
+    },
+    catalog: {
+      crops: FARM_CROPS,
+      animals: FARM_ANIMALS,
+      resources: FARM_RESOURCES,
+      toolTiers: FARM_TOOL_TIERS,
+      toolUpgradeCosts: FARM_TOOL_UPGRADE_COSTS
+    },
+    now
+  };
+}
+
+function addFarmItem(farm, key, amount) {
+  farm.inventory[key] = Math.max(0, Number(farm.inventory[key] || 0) + amount);
+}
+
+function spendFarmItem(farm, key, amount) {
+  const current = Math.max(0, Number(farm.inventory[key] || 0));
+  if (current < amount) return false;
+  farm.inventory[key] = current - amount;
+  return true;
+}
+
+function findFarmLand(world, landId) {
+  return world.lands.find(land => land.id === String(landId));
+}
+
+function itemLabelsForServer(itemKey) {
+  return {
+    wood: "madeira",
+    stone: "pedra",
+    copper: "cobre",
+    iron: "ferro",
+    gold: "ouro",
+    diamond: "diamante",
+    fertilizer: "adubo",
+    feed: "racao"
+  }[itemKey] || itemKey;
+}
+
+function runFarmAction(data, user, action, body) {
+  const farm = user.farm;
+  const world = data.farm_world;
+  const now = Date.now();
+  let message = "Acao salva.";
+
+  if (action === "save_position") {
+    farm.position = {
+      x: clampFarmNumber(body.x, 0, FARM_MAP.width, farm.position.x),
+      y: clampFarmNumber(body.y, 0, FARM_MAP.height, farm.position.y)
+    };
+    message = "Posicao salva.";
+  } else if (action === "buy_land") {
+    const land = findFarmLand(world, body.landId);
+    if (!land) throw new Error("Terreno nao encontrado.");
+    if (land.ownerId) throw new Error("Este terreno ja tem dono.");
+    if (farm.coins < land.price) throw new Error("Moedas insuficientes para comprar este terreno.");
+    farm.coins -= land.price;
+    land.ownerId = user.id;
+    message = "Terreno comprado e salvo.";
+  } else if (action === "buy_seed") {
+    const crop = FARM_CROPS[body.cropType];
+    const quantity = Math.max(1, Math.min(20, Math.floor(Number(body.quantity || 1))));
+    if (!crop) throw new Error("Semente invalida.");
+    const cost = crop.seedPrice * quantity;
+    if (farm.coins < cost) throw new Error("Moedas insuficientes para comprar sementes.");
+    farm.coins -= cost;
+    addFarmItem(farm, crop.seedKey, quantity);
+    message = `${quantity} sementes compradas.`;
+  } else if (action === "buy_feed") {
+    const quantity = Math.max(1, Math.min(30, Math.floor(Number(body.quantity || 5))));
+    const cost = quantity * 3;
+    if (farm.coins < cost) throw new Error("Moedas insuficientes para comprar racao.");
+    farm.coins -= cost;
+    addFarmItem(farm, "feed", quantity);
+    message = `${quantity} racoes compradas.`;
+  } else if (action === "plant") {
+    const land = findFarmLand(world, body.landId);
+    const crop = FARM_CROPS[body.cropType];
+    if (!land || land.ownerId !== user.id) throw new Error("Voce precisa ser dono do terreno para plantar.");
+    if (!crop) throw new Error("Plantacao invalida.");
+    if (land.crop) throw new Error("Este terreno ja tem plantacao.");
+    if (land.animal) throw new Error("Este terreno esta ocupado por animal.");
+    if (!spendFarmItem(farm, crop.seedKey, 1)) throw new Error("Voce nao tem essa semente.");
+    land.crop = { type: body.cropType, ownerId: user.id, plantedAt: now, wateredAt: null, fertilizedAt: null };
+    farm.xp += 1;
+    message = `${crop.name} plantado. Regue para crescer.`;
+  } else if (action === "water") {
+    const land = findFarmLand(world, body.landId);
+    if (!land || land.ownerId !== user.id || !land.crop) throw new Error("Nao ha plantacao sua para regar.");
+    const state = computeFarmCrop(land.crop, now);
+    if (state?.rotten) throw new Error("Esta plantacao ja apodreceu.");
+    land.crop.wateredAt = now;
+    message = "Terra regada. Crescimento iniciado.";
+  } else if (action === "fertilize") {
+    const land = findFarmLand(world, body.landId);
+    if (!land || land.ownerId !== user.id || !land.crop) throw new Error("Nao ha plantacao sua para adubar.");
+    if (land.crop.fertilizedAt) throw new Error("Esta plantacao ja foi adubada.");
+    if (!spendFarmItem(farm, "fertilizer", 1)) throw new Error("Voce nao tem adubo.");
+    land.crop.fertilizedAt = now;
+    message = "Adubo aplicado. A plantacao vai crescer mais rapido.";
+  } else if (action === "harvest") {
+    const land = findFarmLand(world, body.landId);
+    if (!land || !land.crop) throw new Error("Nao ha plantacao para colher.");
+    const state = computeFarmCrop(land.crop, now);
+    if (!state?.ready && !state?.rotten) throw new Error("A plantacao ainda nao esta pronta.");
+    if (state.rotten) {
+      land.crop = null;
+      message = "A plantacao estava podre e foi removida.";
+    } else {
+      addFarmItem(farm, state.itemKey, state.yield);
+      if (land.ownerId === user.id) farm.xp += 3;
+      land.crop = null;
+      message = land.ownerId === user.id
+        ? `${state.name} colhido. Venda no comerciante central.`
+        : `${state.name} roubado de uma fazenda rival.`;
+    }
+  } else if (action === "buy_animal") {
+    const land = findFarmLand(world, body.landId);
+    const animal = FARM_ANIMALS[body.animalType];
+    if (!land || land.ownerId !== user.id) throw new Error("Voce precisa ser dono do terreno para criar animal.");
+    if (!animal) throw new Error("Animal invalido.");
+    if (land.crop || land.animal) throw new Error("Este terreno ja esta ocupado.");
+    if (farm.coins < animal.price) throw new Error("Moedas insuficientes para comprar este animal.");
+    farm.coins -= animal.price;
+    land.animal = { type: body.animalType, ownerId: user.id, boughtAt: now, fedUntil: 0, lastProducedAt: now };
+    farm.xp += 4;
+    message = `${animal.name} comprado. Alimente para produzir.`;
+  } else if (action === "feed_animal") {
+    const land = findFarmLand(world, body.landId);
+    if (!land || land.ownerId !== user.id || !land.animal) throw new Error("Nao ha animal seu nesse terreno.");
+    const animal = FARM_ANIMALS[land.animal.type];
+    if (!spendFarmItem(farm, "feed", animal.feedCost)) throw new Error("Racao insuficiente.");
+    const base = Math.max(now, Number(land.animal.fedUntil || 0));
+    land.animal.fedUntil = base + FARM_FEED_MS;
+    if (!land.animal.lastProducedAt) land.animal.lastProducedAt = now;
+    message = `${animal.name} alimentado. Ele vai produzir enquanto estiver alimentado.`;
+  } else if (action === "collect_animal") {
+    const land = findFarmLand(world, body.landId);
+    if (!land || !land.animal) throw new Error("Nao ha producao animal aqui.");
+    const state = computeFarmAnimal(land.animal, now);
+    if (!state?.pending) throw new Error(state?.hungry ? "O animal esta com fome e nao produziu." : "Nada pronto ainda.");
+    const total = state.pending * state.yield;
+    addFarmItem(farm, state.itemKey, total);
+    if (state.fertilizer) addFarmItem(farm, "fertilizer", state.pending * state.fertilizer);
+    land.animal.lastProducedAt = Number(land.animal.lastProducedAt || now) + state.pending * FARM_ANIMALS[land.animal.type].produceMs;
+    if (land.ownerId === user.id) farm.xp += 2 * state.pending;
+    message = land.ownerId === user.id
+      ? `${state.itemName} coletado.`
+      : `${state.itemName} roubado de uma fazenda rival.`;
+  } else if (action === "gather") {
+    const resource = FARM_RESOURCES[body.resourceType];
+    if (!resource) throw new Error("Recurso invalido.");
+    if (!farmHasToolTier(farm, resource.tool, resource.tier)) {
+      throw new Error(`Precisa de ${resource.tool === "axe" ? "machado" : "picareta"} ${resource.tier} ou melhor.`);
+    }
+    addFarmItem(farm, resource.itemKey, resource.amount);
+    farm.xp += resource.xp;
+    message = `${resource.name} coletado.`;
+  } else if (action === "upgrade_tool") {
+    const tool = String(body.tool || "");
+    if (!["pickaxe", "axe", "shovel", "sword"].includes(tool)) throw new Error("Ferramenta invalida.");
+    const currentTier = farm.tools[tool] || "wood";
+    const currentIndex = FARM_TOOL_TIERS.indexOf(currentTier);
+    if (currentIndex < 0 || currentIndex >= FARM_TOOL_TIERS.length - 1) throw new Error("Ferramenta ja esta no nivel maximo.");
+    const nextTier = FARM_TOOL_TIERS[currentIndex + 1];
+    const cost = FARM_TOOL_UPGRADE_COSTS[nextTier] || {};
+    Object.entries(cost).forEach(([itemKey, amount]) => {
+      if (Number(farm.inventory[itemKey] || 0) < amount) {
+        throw new Error(`Faltam recursos para ${nextTier}: ${itemLabelsForServer(itemKey)} x${amount}.`);
+      }
+    });
+    Object.entries(cost).forEach(([itemKey, amount]) => spendFarmItem(farm, itemKey, amount));
+    farm.tools[tool] = nextTier;
+    farm.xp += 8 + currentIndex * 4;
+    message = `${tool} melhorada para ${nextTier}.`;
+  } else if (action === "sell_all") {
+    if (farmDistance(farm.position, FARM_MAP.merchant) > FARM_MAP.merchant.radius + 80) {
+      throw new Error("Venda apenas no comerciante do centro.");
+    }
+    let total = 0;
+    Object.values(FARM_CROPS).forEach(crop => {
+      const amount = Math.max(0, Number(farm.inventory[crop.itemKey] || 0));
+      if (amount) {
+        total += amount * crop.sellPrice;
+        farm.inventory[crop.itemKey] = 0;
+      }
+    });
+    Object.values(FARM_ANIMALS).forEach(animal => {
+      const amount = Math.max(0, Number(farm.inventory[animal.itemKey] || 0));
+      if (amount) {
+        total += amount * animal.sellPrice;
+        farm.inventory[animal.itemKey] = 0;
+      }
+    });
+    if (!total) throw new Error("Voce nao tem produtos para vender.");
+    farm.coins += total;
+    message = `Venda feita: +${total} moedas.`;
+  } else {
+    throw new Error("Acao de fazenda invalida.");
+  }
+
+  farm.level = Math.max(1, Math.floor(Math.sqrt(Math.max(0, farm.xp)) / 2) + 1);
+  farm.updated_at = new Date(now).toISOString();
+  return { message };
+}
+
 const app    = express();
 const server = http.createServer(app);
 const io     = new Server(server, {
@@ -569,6 +1034,36 @@ app.post("/api/save", authMiddleware, (req, res) => {
   } catch (err) {
     console.error("[save] erro:", err);
     res.status(500).json({ error: err.message });
+  }
+});
+
+app.get("/api/farm/state", authMiddleware, (req, res) => {
+  try {
+    const data = loadDb();
+    const user = data.users.find(item => item.id === req.userId);
+    if (!user) return res.status(404).json({ error: "Usuario nao encontrado" });
+    const changed = ensureFarmData(data, user);
+    if (changed) saveDb(data);
+    res.json(buildFarmPayload(data, user));
+  } catch (err) {
+    console.error("[farm:state] erro:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/api/farm/action", authMiddleware, (req, res) => {
+  try {
+    const { action, ...body } = req.body || {};
+    const data = loadDb();
+    const user = data.users.find(item => item.id === req.userId);
+    if (!user) return res.status(404).json({ error: "Usuario nao encontrado" });
+    ensureFarmData(data, user);
+    const result = runFarmAction(data, user, String(action || ""), body);
+    saveDb(data);
+    res.json({ ok: true, ...result, ...buildFarmPayload(data, user) });
+  } catch (err) {
+    console.error("[farm:action] erro:", err.message);
+    res.status(400).json({ error: err.message });
   }
 });
 

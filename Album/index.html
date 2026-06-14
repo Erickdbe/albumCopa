@@ -703,6 +703,61 @@
       font-weight: 900;
     }
 
+    .farm-side-button {
+      position: relative;
+      width: 100%;
+      min-height: 72px;
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 10px;
+      margin-top: 8px;
+      padding: 12px;
+      overflow: hidden;
+      border: 0;
+      border-radius: var(--radius);
+      color: #fff9e8;
+      background:
+        linear-gradient(90deg, rgba(255,255,255,.46) 0 3px, transparent 3px),
+        repeating-linear-gradient(90deg, rgba(255,255,255,.10) 0 46px, transparent 46px 92px),
+        linear-gradient(0deg, #7b4f2a 0 34%, #1d7a4c 35% 100%);
+      box-shadow: 0 14px 28px rgba(45, 91, 46, 0.25);
+      cursor: pointer;
+      font-weight: 950;
+      text-align: left;
+    }
+
+    .farm-side-button::after {
+      content: "";
+      position: absolute;
+      right: 18px;
+      bottom: 17px;
+      width: 88px;
+      height: 42px;
+      background:
+        linear-gradient(90deg, #f4d35e 0 12px, transparent 12px 22px, #f4d35e 22px 34px, transparent 34px 44px, #f4d35e 44px 56px, transparent 56px),
+        linear-gradient(180deg, transparent 0 18px, #6b3f21 18px 42px);
+      image-rendering: pixelated;
+      opacity: .95;
+    }
+
+    .farm-side-button span,
+    .farm-side-button small {
+      position: relative;
+      z-index: 2;
+    }
+
+    .farm-side-button span {
+      font-size: 1.02rem;
+      text-transform: uppercase;
+    }
+
+    .farm-side-button small {
+      color: rgba(255, 249, 232, 0.82);
+      font-size: 0.72rem;
+      font-weight: 900;
+    }
+
     .filter-group {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
@@ -2816,6 +2871,7 @@
     .horse-open-btn { background: #9b59b6; }
     .slither-open-btn { background: #3b4f96; }
     .crash-open-btn { background: linear-gradient(135deg, #c0392b, #f39c12); }
+    .farm-open-btn { background: linear-gradient(135deg, #1d7a4c, #7b4f2a); }
     .lobby-limit-note {
       display: block;
       margin: 0 0 8px;
@@ -4460,6 +4516,10 @@
             <span>Crash</span>
             <small>Avião online</small>
           </button>
+          <button class="farm-side-button" type="button" onclick="openFarmGameMode()">
+            <span>Fazenda Pixel</span>
+            <small>Modo persistente</small>
+          </button>
           <button class="blackjack-side-button" id="openBlackjackGame" type="button">
             <span>Mesa 21</span>
             <small>Cartas online</small>
@@ -4569,6 +4629,7 @@
         <button class="mp-btn button-soccer-open-btn" type="button" onclick="createButtonSoccerRoom()">Botao</button>
         <button class="mp-btn slither-open-btn" type="button" onclick="createSlitherRoom()">Slither</button>
         <button class="mp-btn crash-open-btn" type="button" onclick="createCrashRoom()">Crash</button>
+        <button class="mp-btn farm-open-btn" type="button" onclick="openFarmGameMode()">Fazenda</button>
         <button class="mp-btn blackjack-open-btn" type="button" onclick="createBlackjackRoom()">Mesa 21</button>
         <button class="mp-btn horse-open-btn" type="button" onclick="createHorseRoom()">🏇 Corrida</button>
       </div>
@@ -5505,6 +5566,16 @@
       gameModal.classList.add("is-open");
       gameModal.setAttribute("aria-hidden", "false");
       drawIdleField();
+    }
+
+    function openFarmGameMode() {
+      if (!mp.token) {
+        showToast("Faca login para jogar Fazenda Pixel com progresso salvo.");
+        document.getElementById("authOverlay").classList.remove("hidden");
+        return;
+      }
+
+      window.location.href = "/Album/farm-game/";
     }
 
     function openHeadSoccerFromSidebar() {

@@ -4188,12 +4188,25 @@
     const betCreditsLabel = document.getElementById("betCreditsLabel");
     const betMatchesLabel = document.getElementById("betMatchesLabel");
     const gameMessage = document.getElementById("gameMessage");
+    const gameHelp = document.querySelector(".game-help");
     const playerTeamName = document.getElementById("playerTeamName");
     const cpuTeamName = document.getElementById("cpuTeamName");
     const gameScore = document.getElementById("gameScore");
     const soccerCanvas = document.getElementById("soccerCanvas");
     const screenKick = document.getElementById("screenKick");
     const soccerCtx = soccerCanvas.getContext("2d");
+    const TAUNT_OPTIONS = [
+      { code: "\\u{1F602}", label: "&#128514;", title: "Riu" },
+      { code: "\\u{1F525}", label: "&#128293;", title: "Fogo" },
+      { code: "\\u{1F480}", label: "&#128128;", title: "Acabou" },
+      { code: "\\u{1F44F}", label: "&#128079;", title: "Aplauso ironico" },
+      { code: "\\u{1F3AF}", label: "&#127919;", title: "Alvo" },
+      { code: "\\u{1F921}", label: "&#129313;", title: "Palhaco" },
+      { code: "\\u{1F62D}", label: "&#128557;", title: "Chora" },
+      { code: "\\u{1F92B}", label: "&#129323;", title: "Silencio" },
+      { code: "\\u{1F976}", label: "&#129398;", title: "Frio" },
+      { code: "\\u{1F634}", label: "&#128564;", title: "Dormiu" }
+    ];
     const buttonSoccerCanvas = document.getElementById("buttonSoccerCanvas");
     const buttonSoccerCtx = buttonSoccerCanvas.getContext("2d");
     const buttonPower = document.getElementById("buttonPower");
@@ -6357,6 +6370,7 @@
       });
 
       mp.socket.on("game:taunt", (payload) => {
+        if (payload?.fromSocketId && payload.fromSocketId === mp.socket?.id) return;
         showTauntDisplay(payload?.emoji, payload);
       });
 
@@ -7081,9 +7095,29 @@
     }
 
     // ── Emoji Taunts ──────────────────────────────────────────────────────
+    function renderTauntBar() {
+      const bar = document.getElementById("tauntBar");
+      if (!bar) return;
+      bar.innerHTML = TAUNT_OPTIONS.map(item => `
+        <button class="taunt-btn" type="button" title="${item.title}" onclick="sendTaunt('${item.code}')">${item.label}</button>
+      `).join("") + `<button class="taunt-btn custom" type="button" title="Outro emoji" onclick="sendCustomTaunt()">+</button>`;
+    }
+
+    function normalizeTauntEmoji(value) {
+      return Array.from(String(value || "").trim()).filter(char => char.trim()).slice(0, 4).join("");
+    }
+
+    function sendCustomTaunt() {
+      const value = prompt("Digite um emoji ou provocacao curta:");
+      const emoji = normalizeTauntEmoji(value);
+      if (!emoji) return;
+      sendTaunt(emoji);
+    }
+
     function sendTaunt(emoji) {
+      emoji = normalizeTauntEmoji(emoji);
       const hasActiveRoom = mp.roomId || mp.blackjackRoomId || mp.horseRoomId || mp.buttonRoomId || mp.headRoomId;
-      if (!mp.socket?.connected || !hasActiveRoom) return;
+      if (!emoji || !mp.socket?.connected || !hasActiveRoom) return;
 
       const payload = { emoji };
       if (mp.headRoom && gameModal.classList.contains("is-open")) {
@@ -7181,9 +7215,14 @@
       }
 
       const el = document.getElementById("tauntDisplay");
-      el.innerHTML = `<span class="taunt-float">${emoji}</span>`;
-      setTimeout(() => { el.innerHTML = ""; }, 2100);
+      const span = document.createElement("span");
+      span.className = "taunt-float";
+      span.textContent = emoji;
+      el.replaceChildren(span);
+      setTimeout(() => { el.replaceChildren(); }, 2100);
     }
+
+    renderTauntBar();
 
     // ── Avatar Upload ─────────────────────────────────────────────────────
     // Futebol de Botao
@@ -7697,6 +7736,9 @@
       wagerInput.disabled = true;
       exchangeBetCredits.disabled = true;
       document.getElementById("tauntBar").style.display = "flex";
+      if (gameHelp) {
+        gameHelp.textContent = "Setas ou WASD movem pelo campo, Espaco chuta. Vence quem fizer 3 gols ou estiver na frente apos 3 minutos.";
+      }
 
       const blueCount = (room.players || []).filter(player => player.team === "blue").length;
       const redCount = (room.players || []).filter(player => player.team === "red").length;
@@ -7742,6 +7784,9 @@
       wagerInput.disabled = false;
       startMatch.textContent = "Comecar partida";
       document.getElementById("tauntBar").style.display = "none";
+      if (gameHelp) {
+        gameHelp.textContent = "Setas ou A/D movem, W/↑ pula, Espaco chuta. Vence quem fizer 3 gols ou estiver na frente apos 3 minutos. Empate vai para 1 minuto de gol de ouro.";
+      }
       renderBetPanel();
       if (!fromServer) updateLobbyHeader();
       drawIdleField();
@@ -7752,6 +7797,8 @@
       return {
         left: keys.has("ArrowLeft") || keys.has("a"),
         right: keys.has("ArrowRight") || keys.has("d"),
+        up: keys.has("ArrowUp") || keys.has("w"),
+        down: keys.has("ArrowDown") || keys.has("s"),
         jump: keys.has("ArrowUp") || keys.has("w"),
         kick
       };
@@ -7764,6 +7811,8 @@
       const changed = !previous
         || previous.left !== input.left
         || previous.right !== input.right
+        || previous.up !== input.up
+        || previous.down !== input.down
         || previous.jump !== input.jump
         || previous.kick !== input.kick;
 
@@ -7799,51 +7848,68 @@
     }
 
     function drawHeadSoccerRoom(room) {
-      const field = room.field || { width: soccerCanvas.width, height: soccerCanvas.height, pitchTop: 305, ground: 570, goalTop: 190, goalBottom: 570, goalWidth: 98 };
+      const field = room.field || { width: soccerCanvas.width, height: soccerCanvas.height, goalTop: 250, goalBottom: 425, goalWidth: 54, ballRadius: 15 };
       const ctx = soccerCtx;
-      ctx.clearRect(0, 0, field.width, field.height);
+      const width = field.width;
+      const height = field.height;
+      const inset = 18;
+      const centerY = height / 2;
+      ctx.clearRect(0, 0, width, height);
 
-      const sky = ctx.createLinearGradient(0, 0, 0, field.pitchTop);
-      sky.addColorStop(0, "#6db7e8");
-      sky.addColorStop(0.62, "#c6ecff");
-      sky.addColorStop(1, "#f5d47a");
-      ctx.fillStyle = sky;
-      ctx.fillRect(0, 0, field.width, field.pitchTop);
-
-      ctx.fillStyle = "#29374a";
-      ctx.fillRect(0, field.pitchTop - 54, field.width, 54);
-      for (let x = 0; x < field.width; x += 48) {
-        ctx.fillStyle = x % 96 === 0 ? "#f5d04e" : "#e95548";
-        ctx.fillRect(x, field.pitchTop - 42, 32, 30);
+      ctx.fillStyle = "#2dcc72";
+      ctx.fillRect(0, 0, width, height);
+      for (let x = 0; x < width; x += 92) {
+        ctx.fillStyle = x % 184 === 0 ? "rgba(22, 163, 91, .24)" : "rgba(78, 225, 133, .20)";
+        ctx.fillRect(x, 0, 92, height);
       }
 
-      const grass = getHeadAsset(HEAD_FIELD_ASSET);
-      if (grass?.complete && grass.naturalWidth) {
-        const pattern = ctx.createPattern(grass, "repeat");
-        if (pattern) {
-          ctx.fillStyle = pattern;
-          ctx.fillRect(0, field.pitchTop, field.width, field.height - field.pitchTop);
-        }
-      } else {
-        ctx.fillStyle = "#1f9b39";
-        ctx.fillRect(0, field.pitchTop, field.width, field.height - field.pitchTop);
-      }
-
-      ctx.fillStyle = "rgba(20, 104, 42, 0.28)";
-      for (let x = 0; x < field.width; x += 150) {
-        ctx.fillRect(x, field.pitchTop, 75, field.height - field.pitchTop);
-      }
-
-      ctx.strokeStyle = "rgba(255,255,255,.86)";
+      ctx.save();
+      ctx.strokeStyle = "rgba(255,255,255,.92)";
       ctx.lineWidth = 5;
-      ctx.strokeRect(90, 385, field.width - 180, 188);
+      ctx.lineCap = "round";
+      ctx.strokeRect(inset, inset, width - inset * 2, height - inset * 2);
+
       ctx.beginPath();
-      ctx.moveTo(field.width / 2, 360);
-      ctx.lineTo(field.width / 2, field.ground + 68);
+      ctx.moveTo(width / 2, inset);
+      ctx.lineTo(width / 2, height - inset);
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.arc(width / 2, centerY, 115, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.fillStyle = "rgba(255,255,255,.96)";
+      ctx.beginPath();
+      ctx.arc(width / 2, centerY, 7, 0, Math.PI * 2);
+      ctx.fill();
+
+      const boxDepth = 265;
+      const boxTop = 118;
+      const boxHeight = height - boxTop * 2;
+      const smallDepth = 72;
+      const smallTop = field.goalTop - 36;
+      const smallHeight = (field.goalBottom - field.goalTop) + 72;
+
+      ctx.strokeRect(inset, boxTop, boxDepth, boxHeight);
+      ctx.strokeRect(width - inset - boxDepth, boxTop, boxDepth, boxHeight);
+      ctx.strokeRect(inset, smallTop, smallDepth, smallHeight);
+      ctx.strokeRect(width - inset - smallDepth, smallTop, smallDepth, smallHeight);
+
+      ctx.beginPath();
+      ctx.arc(inset + boxDepth, centerY, 112, -Math.PI / 2, Math.PI / 2);
       ctx.stroke();
       ctx.beginPath();
-      ctx.arc(field.width / 2, 478, 88, 0, Math.PI * 2);
+      ctx.arc(width - inset - boxDepth, centerY, 112, Math.PI / 2, Math.PI * 1.5);
       ctx.stroke();
+
+      const cornerRadius = 28;
+      [[inset, inset, 0, Math.PI / 2], [width - inset, inset, Math.PI / 2, Math.PI], [inset, height - inset, -Math.PI / 2, 0], [width - inset, height - inset, Math.PI, Math.PI * 1.5]]
+        .forEach(([x, y, start, end]) => {
+          ctx.beginPath();
+          ctx.arc(x, y, cornerRadius, start, end);
+          ctx.stroke();
+        });
+      ctx.restore();
+
       drawHeadSoccerGoal(ctx, field, "left");
       drawHeadSoccerGoal(ctx, field, "right");
 
@@ -7853,76 +7919,84 @@
     }
 
     function drawHeadSoccerGoal(ctx, field, side) {
-      const x = side === "left" ? 6 : field.width - field.goalWidth - 6;
-      const width = field.goalWidth;
+      const depth = field.goalWidth || 54;
+      const top = field.goalTop;
       const height = field.goalBottom - field.goalTop;
+      const x = side === "left" ? 0 : field.width - depth;
       ctx.save();
-      ctx.fillStyle = "rgba(222, 245, 255, .38)";
-      ctx.fillRect(x, field.goalTop, width, height);
+      ctx.fillStyle = "rgba(234, 250, 255, .72)";
+      ctx.fillRect(x, top, depth, height);
+      for (let gx = x; gx < x + depth; gx += 13) {
+        for (let gy = top; gy < top + height; gy += 13) {
+          ctx.fillStyle = ((gx + gy) / 13) % 2 < 1 ? "rgba(23, 111, 83, .28)" : "rgba(255,255,255,.46)";
+          ctx.fillRect(gx, gy, 13, 13);
+        }
+      }
       ctx.strokeStyle = "#f8fbff";
-      ctx.lineWidth = 9;
-      ctx.strokeRect(x, field.goalTop, width, height);
-      ctx.lineWidth = 2;
-      ctx.strokeStyle = "rgba(37,49,45,.42)";
-      for (let gx = x + 16; gx < x + width; gx += 22) {
-        ctx.beginPath();
-        ctx.moveTo(gx, field.goalTop);
-        ctx.lineTo(gx, field.goalBottom);
-        ctx.stroke();
-      }
-      for (let gy = field.goalTop + 22; gy < field.goalBottom; gy += 28) {
-        ctx.beginPath();
-        ctx.moveTo(x, gy);
-        ctx.lineTo(x + width, gy);
-        ctx.stroke();
-      }
+      ctx.lineWidth = 7;
+      ctx.strokeRect(x + (side === "left" ? 2 : -2), top, depth, height);
       ctx.restore();
     }
 
     function drawHeadSoccerPlayer(ctx, player) {
-      const radius = player.radius || 46;
+      const radius = player.radius || 32;
       const img = getHeadAsset(player.sprite);
+      const faceX = Number.isFinite(Number(player.faceX)) ? Number(player.faceX) : Number(player.side || 1);
+      const faceY = Number.isFinite(Number(player.faceY)) ? Number(player.faceY) : 0;
+      const angle = Math.atan2(faceY, faceX) - Math.PI / 2;
       ctx.save();
-      ctx.fillStyle = "rgba(0,0,0,.24)";
+      ctx.fillStyle = "rgba(0,0,0,.22)";
       ctx.beginPath();
-      ctx.ellipse(player.x, player.y + 15, radius * 1.18, 14, 0, 0, Math.PI * 2);
+      ctx.ellipse(player.x + 3, player.y + radius * .42, radius * .92, radius * .28, 0, 0, Math.PI * 2);
       ctx.fill();
 
+      ctx.save();
+      ctx.translate(player.x, player.y);
+      ctx.rotate(angle);
       if (img?.complete && img.naturalWidth) {
-        const w = radius * 2.15;
-        const h = radius * 2.72;
-        ctx.drawImage(img, player.x - w / 2, player.y - h + 10, w, h);
+        const w = radius * 2.45;
+        const h = radius * 2.75;
+        ctx.drawImage(img, -w / 2, -h / 2, w, h);
       } else {
         ctx.fillStyle = player.color || "#2f8fd8";
         ctx.beginPath();
-        ctx.arc(player.x, player.y - radius, radius, 0, Math.PI * 2);
+        ctx.arc(0, 0, radius, 0, Math.PI * 2);
         ctx.fill();
+        ctx.strokeStyle = "#fff9e8";
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.moveTo(0, -radius * .8);
+        ctx.lineTo(0, -radius * 1.25);
+        ctx.stroke();
       }
+      ctx.restore();
 
       if (Number(player.kickTimer || 0) > 0) {
-        ctx.strokeStyle = "#f9e8a8";
+        const fx = Math.cos(angle + Math.PI / 2);
+        const fy = Math.sin(angle + Math.PI / 2);
+        ctx.strokeStyle = "#f9e06d";
         ctx.lineWidth = 7;
         ctx.beginPath();
-        ctx.moveTo(player.x + player.side * 18, player.y - 14);
-        ctx.lineTo(player.x + player.side * 82, player.y - 3);
+        ctx.moveTo(player.x + fx * radius * .55, player.y + fy * radius * .55);
+        ctx.lineTo(player.x + fx * (radius + 30), player.y + fy * (radius + 30));
         ctx.stroke();
       }
 
-      ctx.lineWidth = player.isMe ? 6 : 3;
+      ctx.lineWidth = player.isMe ? 5 : 3;
       ctx.strokeStyle = player.isMe ? "#f9e8a8" : player.color || "#ffffff";
       ctx.beginPath();
-      ctx.arc(player.x, player.y - radius, radius + 4, 0, Math.PI * 2);
+      ctx.arc(player.x, player.y, radius + 5, 0, Math.PI * 2);
       ctx.stroke();
 
-      ctx.font = "900 18px Segoe UI, Arial";
+      ctx.font = "900 13px Segoe UI, Arial";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      const label = String(player.username || "?").slice(0, 14);
+      const label = String(player.username || "?").slice(0, 12);
       const metrics = ctx.measureText(label);
-      const labelWidth = Math.max(68, metrics.width + 20);
-      const labelY = player.y - radius * 2.28;
+      const labelWidth = Math.max(48, metrics.width + 16);
+      const labelY = player.y - radius - 19;
       ctx.fillStyle = "rgba(23,33,31,.78)";
-      roundCanvasRect(ctx, player.x - labelWidth / 2, labelY - 15, labelWidth, 30, 8);
+      roundCanvasRect(ctx, player.x - labelWidth / 2, labelY - 11, labelWidth, 22, 7);
       ctx.fill();
       ctx.fillStyle = "#fff9e8";
       ctx.fillText(label, player.x, labelY);
@@ -7931,15 +8005,15 @@
 
     function drawHeadSoccerBall(ctx, ball, field) {
       if (!ball) return;
-      const radius = ball.radius || field.ballRadius || 21;
+      const radius = ball.radius || field.ballRadius || 15;
       const img = getHeadAsset(HEAD_BALL_ASSET);
       ctx.save();
-      ctx.fillStyle = "rgba(0,0,0,.22)";
+      ctx.fillStyle = "rgba(0,0,0,.24)";
       ctx.beginPath();
-      ctx.ellipse(ball.x, field.ground + 8, radius * 1.2, 7, 0, 0, Math.PI * 2);
+      ctx.ellipse(ball.x + 3, ball.y + radius * .72, radius * 1.06, radius * .34, 0, 0, Math.PI * 2);
       ctx.fill();
       if (img?.complete && img.naturalWidth) {
-        ctx.drawImage(img, ball.x - radius, ball.y - radius, radius * 2, radius * 2);
+        ctx.drawImage(img, ball.x - radius * 1.12, ball.y - radius * 1.12, radius * 2.24, radius * 2.24);
       } else {
         ctx.fillStyle = "#fffaf0";
         ctx.beginPath();

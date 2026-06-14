@@ -1,0 +1,19 @@
+{
+  "users": [
+    {
+      "id": 1,
+      "username": "Indiano67",
+      "password_hash": "$2a$10$rRMosebVhCAHtyBBTxG7vO3stfLrJQEr01T7o6tyz8eXPSq4204bW",
+      "credits": 30,
+      "bet_credits": 350,
+      "stickers": [],
+      "pending_stickers": [],
+      "initial_bet_credits_granted": 350,
+      "last_album_credit_day": "2026-06-12",
+      "created_at": "2026-06-11T20:38:21.030Z"
+    }
+  ],
+  "matches": [],
+  "nextUserId": 2,
+  "nextMatchId": 1
+}

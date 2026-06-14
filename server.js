@@ -3048,15 +3048,16 @@ function removeCrashPlayer(room, socketId, reason = "") {
 }
 
 const ARTILLERY_FIELD = {
-  width: 1200,
-  height: 680,
-  groundBase: 510,
+  width: 1800,
+  height: 720,
+  groundBase: 548,
   playerRadius: 18,
   projectileRadius: 6,
   blastRadius: 86
 };
 const ARTILLERY_MAX_PLAYERS = 8;
 const ARTILLERY_TURN_MS = 25000;
+const ARTILLERY_POWER_SCALE = 10.2;
 const ARTILLERY_COLORS = ["#f05a48", "#35a7ff", "#f7c948", "#8f7cff", "#37c978", "#ff8c42", "#e75eb7", "#f5f2df"];
 
 function makeArtilleryTerrain() {
@@ -3070,7 +3071,7 @@ function makeArtilleryTerrain() {
     const noise = (Math.random() - 0.5) * 26;
     points.push({
       x,
-      y: clampNumber(ARTILLERY_FIELD.groundBase + wave + noise, 380, 590)
+      y: clampNumber(ARTILLERY_FIELD.groundBase + wave + noise, 410, 646)
     });
   }
   return points;
@@ -3092,7 +3093,7 @@ function artilleryTerrainY(room, x) {
 }
 
 function artilleryWind() {
-  return Math.round((Math.random() * 2 - 1) * 70);
+  return Math.round((Math.random() * 2 - 1) * 95);
 }
 
 function makeArtilleryPlayer(socket, index, bet) {
@@ -3116,7 +3117,7 @@ function makeArtilleryPlayer(socket, index, bet) {
 function positionArtilleryPlayers(room) {
   const aliveSlots = Math.max(2, room.players.length);
   room.players.forEach((player, index) => {
-    const x = 92 + ((ARTILLERY_FIELD.width - 184) * index) / Math.max(1, aliveSlots - 1);
+    const x = 140 + ((ARTILLERY_FIELD.width - 280) * index) / Math.max(1, aliveSlots - 1);
     player.x = Math.round(x);
     player.y = Math.round(artilleryTerrainY(room, player.x) - ARTILLERY_FIELD.playerRadius);
     player.hp = 100;
@@ -3225,7 +3226,7 @@ function carveArtilleryCrater(room, x, radius) {
     const dist = Math.abs(Number(point.x || 0) - x);
     if (dist > radius) return;
     const cut = Math.cos((dist / radius) * Math.PI / 2) * 34;
-    point.y = clampNumber(Number(point.y || ARTILLERY_FIELD.groundBase) + cut, 360, ARTILLERY_FIELD.height - 34);
+    point.y = clampNumber(Number(point.y || ARTILLERY_FIELD.groundBase) + cut, 390, ARTILLERY_FIELD.height - 34);
   });
   room.players.forEach(player => {
     if (player.alive) {
@@ -3240,8 +3241,8 @@ function simulateArtilleryShot(room, shooter, angleDeg, power) {
   const rad = (angle * Math.PI) / 180;
   let x = Number(shooter.x || 0);
   let y = Number(shooter.y || 0) - ARTILLERY_FIELD.playerRadius - 6;
-  let vx = Math.cos(rad) * (shotPower * 7.8);
-  let vy = -Math.sin(rad) * (shotPower * 7.8);
+  let vx = Math.cos(rad) * (shotPower * ARTILLERY_POWER_SCALE);
+  let vy = -Math.sin(rad) * (shotPower * ARTILLERY_POWER_SCALE);
   const gravity = 470;
   const windAccel = Number(room.wind || 0) * 0.55;
   const path = [];

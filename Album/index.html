@@ -5036,7 +5036,7 @@
 
       <div class="artillery-main">
         <div class="artillery-field-shell" id="artilleryFieldShell">
-          <canvas class="artillery-canvas" id="artilleryCanvas" width="1200" height="680"></canvas>
+          <canvas class="artillery-canvas" id="artilleryCanvas" width="1800" height="720"></canvas>
           <div class="artillery-taunt-layer" id="artilleryTauntLayer"></div>
         </div>
 
@@ -8986,7 +8986,7 @@
       const artilleryOverlay = document.getElementById("artilleryOverlay");
       const artilleryLayer = document.getElementById("artilleryTauntLayer");
       if (artilleryLayer && mp.artilleryRoom && !artilleryOverlay.classList.contains("hidden")) {
-        const field = mp.artilleryRoom.field || { width: 1200, height: 680 };
+        const field = mp.artilleryRoom.field || { width: 1800, height: 720 };
         let x = Number(payload.x);
         let y = Number(payload.y);
         if (!Number.isFinite(x) || !Number.isFinite(y)) {
@@ -10343,7 +10343,7 @@
 
     function artilleryTerrainYClient(room, x) {
       const points = room?.terrain || [];
-      if (!points.length) return 510;
+      if (!points.length) return 548;
       if (x <= points[0].x) return points[0].y;
       for (let index = 1; index < points.length; index += 1) {
         const prev = points[index - 1];
@@ -10357,7 +10357,7 @@
     }
 
     function drawArtilleryRoom(room) {
-      const field = room.field || { width: 1200, height: 680, playerRadius: 18, blastRadius: 86 };
+      const field = room.field || { width: 1800, height: 720, playerRadius: 18, blastRadius: 86 };
       const ctx = artilleryCtx;
       ctx.clearRect(0, 0, artilleryCanvas.width, artilleryCanvas.height);
       ctx.save();
@@ -10372,7 +10372,7 @@
 
       ctx.fillStyle = "rgba(255,234,161,.18)";
       ctx.beginPath();
-      ctx.arc(1020, 92, 54, 0, Math.PI * 2);
+      ctx.arc(field.width - 190, 92, 54, 0, Math.PI * 2);
       ctx.fill();
 
       drawArtilleryTerrain(ctx, room, field);
@@ -10401,8 +10401,8 @@
         ctx.lineTo(points[0].x, points[0].y);
         points.forEach(point => ctx.lineTo(point.x, point.y));
       } else {
-        ctx.lineTo(0, 510);
-        ctx.lineTo(field.width, 510);
+        ctx.lineTo(0, 548);
+        ctx.lineTo(field.width, 548);
       }
       ctx.lineTo(field.width, field.height);
       ctx.closePath();
@@ -10419,8 +10419,8 @@
         ctx.moveTo(points[0].x, points[0].y);
         points.forEach(point => ctx.lineTo(point.x, point.y));
       } else {
-        ctx.moveTo(0, 510);
-        ctx.lineTo(field.width, 510);
+        ctx.moveTo(0, 548);
+        ctx.lineTo(field.width, 548);
       }
       ctx.stroke();
       ctx.restore();
@@ -10483,28 +10483,34 @@
       const power = Number(artilleryPower.value || 58);
       let x = Number(me.x || 0);
       let y = Number(me.y || 0) - 24;
-      let vx = Math.cos(angle) * power * 7.8;
-      let vy = -Math.sin(angle) * power * 7.8;
+      let vx = Math.cos(angle) * power * 10.2;
+      let vy = -Math.sin(angle) * power * 10.2;
       const gravity = 470;
       const wind = Number(room.wind || 0) * .55;
 
       ctx.save();
-      ctx.setLineDash([9, 9]);
-      ctx.strokeStyle = "rgba(255,249,232,.72)";
+      const guideLength = 54 + power * 1.05;
+      ctx.strokeStyle = "rgba(255,249,232,.82)";
       ctx.lineWidth = 3;
       ctx.beginPath();
       ctx.moveTo(x, y);
-      for (let step = 0; step < 58; step += 1) {
+      ctx.lineTo(x + Math.cos(angle) * guideLength, y - Math.sin(angle) * guideLength);
+      ctx.stroke();
+
+      ctx.fillStyle = "rgba(255,249,232,.48)";
+      for (let step = 0; step < 9; step += 1) {
         const dt = 1 / 30;
         vx += wind * dt;
         vy += gravity * dt;
         x += vx * dt;
         y += vy * dt;
-        ctx.lineTo(x, y);
-        if (x < -60 || x > field.width + 60 || y > field.height + 40) break;
-        if (x >= 0 && x <= field.width && y >= artilleryTerrainYClient(room, x)) break;
+        if (step < 3) continue;
+        ctx.globalAlpha = Math.max(.12, .5 - step * .045);
+        ctx.beginPath();
+        ctx.arc(x, y, 4, 0, Math.PI * 2);
+        ctx.fill();
       }
-      ctx.stroke();
+      ctx.globalAlpha = 1;
       ctx.restore();
     }
 

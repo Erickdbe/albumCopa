@@ -2435,20 +2435,31 @@
     }
 
     /* Lobby */
+    .lobby-card {
+      width: min(760px, 96vw);
+    }
     .lobby-header {
       display: flex; align-items: center; justify-content: space-between;
+      gap: 12px; flex-wrap: wrap;
       margin-bottom: 14px;
     }
     .lobby-header h3 { margin: 0; font-size: 1.1rem; color: var(--grass); }
+    .lobby-header-actions {
+      display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end;
+    }
+    .lobby-header-actions .mp-btn {
+      width: auto; padding: 7px 14px; font-size: .78rem;
+    }
     .lobby-user-info {
-      display: flex; align-items: center; gap: 10px;
+      display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
       margin-bottom: 16px; padding: 10px 14px;
       background: rgba(13,90,63,.08); border-radius: 8px;
       font-size: .88rem;
     }
     .lobby-user-info strong { color: var(--grass); }
     .lobby-credits {
-      margin-left: auto; display: flex; gap: 14px;
+      margin-left: auto; display: flex; gap: 10px; flex-wrap: wrap;
+      justify-content: flex-end;
     }
     .lobby-credit-chip {
       display: flex; align-items: center; gap: 5px;
@@ -2529,6 +2540,79 @@
     .bet-row input {
       flex: 1; padding: 8px 10px; border-radius: 7px;
       border: 1px solid var(--line); font-size: .92rem;
+    }
+
+    .lobby-bet-row {
+      display: grid;
+      grid-template-columns: auto minmax(96px, 128px) minmax(80px, 1fr);
+      gap: 10px;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+    .lobby-bet-row label {
+      font-size: .86rem;
+      font-weight: 900;
+      white-space: nowrap;
+    }
+    .lobby-bet-row input {
+      width: 100%;
+      padding: 9px 10px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      font-size: .92rem;
+    }
+    .lobby-bet-note {
+      color: var(--muted);
+      font-size: .8rem;
+    }
+    .lobby-game-actions {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+    .lobby-game-actions .mp-btn {
+      width: 100%;
+      min-height: 48px;
+      padding: 8px 10px;
+      font-size: .84rem;
+      line-height: 1.1;
+    }
+    .head-soccer-open-btn { background: #16689f; }
+    .horse-open-btn { background: #9b59b6; }
+    .lobby-limit-note {
+      display: block;
+      margin: 0 0 8px;
+      color: var(--muted);
+      font-size: .75rem;
+    }
+
+    @media (max-width: 620px) {
+      .lobby-header-actions {
+        width: 100%;
+        justify-content: stretch;
+      }
+      .lobby-header-actions .mp-btn {
+        flex: 1 1 0;
+      }
+      .lobby-credits {
+        width: 100%;
+        margin-left: 0;
+        justify-content: flex-start;
+      }
+      .lobby-bet-row {
+        grid-template-columns: 1fr;
+        align-items: stretch;
+      }
+      .lobby-game-actions {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 420px) {
+      .lobby-game-actions {
+        grid-template-columns: 1fr;
+      }
     }
 
     .blackjack-open-btn {
@@ -3557,16 +3641,13 @@
 
   <!-- ── Lobby Online ────────────────────────────────────────────────────── -->
   <div class="mp-overlay hidden" id="lobbyOverlay">
-    <div class="mp-card" style="width:min(540px,96vw)">
+    <div class="mp-card lobby-card">
       <div class="lobby-header">
         <h3>🌐 Jogadores Online</h3>
-        <div style="display:flex;gap:8px">
-          <button class="mp-btn" style="width:auto;padding:7px 14px;font-size:.78rem;background:#c0392b"
-                  onclick="logout()">Sair</button>
-          <button class="mp-btn" style="width:auto;padding:7px 14px;font-size:.78rem;background:#2980b9"
-                  onclick="showMatchHistory()">Histórico</button>
-          <button class="mp-btn" style="width:auto;padding:7px 18px;font-size:.82rem"
-                  onclick="closeLobby()">Fechar</button>
+        <div class="lobby-header-actions">
+          <button class="mp-btn" style="background:#c0392b" onclick="logout()">Sair</button>
+          <button class="mp-btn" style="background:#2980b9" onclick="showMatchHistory()">Histórico</button>
+          <button class="mp-btn" onclick="closeLobby()">Fechar</button>
         </div>
       </div>
 
@@ -3587,16 +3668,18 @@
         <li style="color:var(--muted);padding:18px;text-align:center">Ninguém online ainda…</li>
       </ul>
 
-      <div class="bet-row">
+      <div class="lobby-bet-row">
         <label for="myBetInput">Minha aposta:</label>
         <input id="myBetInput" type="number" min="5" max="50" value="10" />
-        <span style="font-size:.8rem;color:var(--muted)" id="betAvail"></span>
-        <button class="mp-btn" style="background:#16689f;width:auto;padding:8px 12px;font-size:.82rem" type="button" onclick="createHeadSoccerRoom()">Head Soccer</button>
+        <span class="lobby-bet-note" id="betAvail"></span>
+      </div>
+      <div class="lobby-game-actions">
+        <button class="mp-btn head-soccer-open-btn" type="button" onclick="createHeadSoccerRoom()">Head Soccer</button>
         <button class="mp-btn button-soccer-open-btn" type="button" onclick="createButtonSoccerRoom()">Botao</button>
         <button class="mp-btn blackjack-open-btn" type="button" onclick="createBlackjackRoom()">Mesa 21</button>
-        <button class="mp-btn" style="background:#9b59b6;width:auto;padding:8px 12px;font-size:.82rem" type="button" onclick="createHorseRoom()">🏇 Corrida</button>
+        <button class="mp-btn horse-open-btn" type="button" onclick="createHorseRoom()">🏇 Corrida</button>
       </div>
-      <small style="color:var(--muted);font-size:.75rem">Máx. 50 (2 jogadores) / 20 (3+)</small>
+      <small class="lobby-limit-note">Máx. 50 (2 jogadores) / 20 (3+)</small>
 
       <div id="matchHistoryBox" style="display:none;margin-top:14px">
         <h4 style="margin:0 0 8px;font-size:.9rem;color:var(--grass)">📋 Últimas partidas</h4>

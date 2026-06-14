@@ -7676,6 +7676,40 @@
       return headAssetCache.get(src);
     }
 
+    function getHeadSpriteInfo(src) {
+      const text = String(src || "");
+      const folder = text.match(/PNG\/([^/]+)\//)?.[1] || "Blue";
+      const pose = Number(text.match(/\((\d+)\)\.png(?:$|\?)/)?.[1] || 1);
+      return {
+        folder,
+        pose: Number.isFinite(pose) ? pose : 1
+      };
+    }
+
+    function makeHeadSpritePath(folder, pose) {
+      const cleanFolder = String(folder || "Blue").replace(/[^a-zA-Z]/g, "") || "Blue";
+      const safePose = Math.max(1, Math.min(10, Math.round(Number(pose) || 1)));
+      return `kenney_sports-pack/PNG/${cleanFolder}/character${cleanFolder}%20(${safePose}).png`;
+    }
+
+    function getAnimatedHeadSprite(player, now) {
+      const info = getHeadSpriteInfo(player?.sprite);
+      const speed = Math.hypot(Number(player?.vx) || 0, Number(player?.vy) || 0);
+      const order = Number(player?.order || 0) || 0;
+
+      if (Number(player?.kickTimer || 0) > 0) {
+        return makeHeadSpritePath(info.folder, 10);
+      }
+
+      if (speed > 35) {
+        const frames = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+        const index = Math.floor(now / 110 + order) % frames.length;
+        return makeHeadSpritePath(info.folder, frames[index]);
+      }
+
+      return makeHeadSpritePath(info.folder, info.pose);
+    }
+
     function createHeadSoccerRoom() {
       if (!mp.isOnline) {
         showToast("Faca login para abrir uma sala de Head Soccer.");
@@ -7913,8 +7947,9 @@
       drawHeadSoccerGoal(ctx, field, "left");
       drawHeadSoccerGoal(ctx, field, "right");
 
+      const now = performance.now();
       const players = [...(room.players || [])].sort((a, b) => (a.y || 0) - (b.y || 0));
-      players.forEach(player => drawHeadSoccerPlayer(ctx, player));
+      players.forEach(player => drawHeadSoccerPlayer(ctx, player, now));
       drawHeadSoccerBall(ctx, room.ball, field);
     }
 
@@ -7938,68 +7973,114 @@
       ctx.restore();
     }
 
-    function drawHeadSoccerPlayer(ctx, player) {
+    function drawHeadSoccerPlayer(ctx, player, now = performance.now()) {
       const radius = player.radius || 32;
-      const img = getHeadAsset(player.sprite);
+      const speed = Math.hypot(Number(player.vx) || 0, Number(player.vy) || 0);
+      const moving = speed > 20;
+      const kicking = Number(player.kickTimer || 0) > 0;
+      const img = getHeadAsset(getAnimatedHeadSprite(player, now)) || getHeadAsset(player.sprite);
       const faceX = Number.isFinite(Number(player.faceX)) ? Number(player.faceX) : Number(player.side || 1);
       const faceY = Number.isFinite(Number(player.faceY)) ? Number(player.faceY) : 0;
-      const angle = Math.atan2(faceY, faceX) - Math.PI / 2;
+      const angle = Math.atan2(faceY, faceX) + Math.PI / 2;
+      const phase = moving ? Math.sin(now / 82 + (Number(player.order) || 0) * .85) : 0;
+      const bob = moving ? Math.sin(now / 105 + (Number(player.order) || 0)) * 2 : 0;
+      const lean = moving ? phase * .045 : 0;
+      const bodyH = radius * 1.95;
+      const bodyW = bodyH * .68;
+      const skin = "#efbd82";
+      const boot = "#28312d";
       ctx.save();
       ctx.fillStyle = "rgba(0,0,0,.22)";
       ctx.beginPath();
-      ctx.ellipse(player.x + 3, player.y + radius * .42, radius * .92, radius * .28, 0, 0, Math.PI * 2);
+      ctx.ellipse(player.x + 4, player.y + radius * .54, radius * .78, radius * .22, 0, 0, Math.PI * 2);
       ctx.fill();
 
       ctx.save();
-      ctx.translate(player.x, player.y);
-      ctx.rotate(angle);
+      ctx.translate(player.x, player.y + bob);
+      ctx.rotate(angle + lean);
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+
+      const drawLimb = (x1, y1, x2, y2, color, width) => {
+        ctx.strokeStyle = "rgba(37,42,34,.45)";
+        ctx.lineWidth = width + 3;
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.stroke();
+        ctx.strokeStyle = color;
+        ctx.lineWidth = width;
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.stroke();
+      };
+
+      const armSwing = phase * bodyH * .11;
+      const legSwing = phase * bodyH * .12;
+      const kickReach = kicking ? -bodyH * .58 : bodyH * (.40 + legSwing / bodyH);
+      drawLimb(-bodyW * .22, -bodyH * .16, -bodyW * .58, bodyH * .07 + armSwing, skin, radius * .18);
+      drawLimb(bodyW * .22, -bodyH * .16, bodyW * .58, bodyH * .07 - armSwing, skin, radius * .18);
+      drawLimb(-bodyW * .15, bodyH * .24, -bodyW * .42, kickReach, skin, radius * .19);
+      drawLimb(bodyW * .15, bodyH * .24, bodyW * .42, bodyH * .40 - legSwing, skin, radius * .19);
+      drawLimb(-bodyW * .42, kickReach, -bodyW * .50, kickReach + bodyH * .08, boot, radius * .13);
+      drawLimb(bodyW * .42, bodyH * .40 - legSwing, bodyW * .50, bodyH * .48 - legSwing, boot, radius * .13);
+
       if (img?.complete && img.naturalWidth) {
-        const w = radius * 2.45;
-        const h = radius * 2.75;
-        ctx.drawImage(img, -w / 2, -h / 2, w, h);
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(img, -bodyW / 2, -bodyH / 2, bodyW, bodyH);
       } else {
         ctx.fillStyle = player.color || "#2f8fd8";
-        ctx.beginPath();
-        ctx.arc(0, 0, radius, 0, Math.PI * 2);
+        roundCanvasRect(ctx, -bodyW * .28, -bodyH * .22, bodyW * .56, bodyH * .52, 8);
         ctx.fill();
-        ctx.strokeStyle = "#fff9e8";
-        ctx.lineWidth = 4;
+        ctx.fillStyle = "#c57f42";
         ctx.beginPath();
-        ctx.moveTo(0, -radius * .8);
-        ctx.lineTo(0, -radius * 1.25);
-        ctx.stroke();
+        ctx.arc(0, -bodyH * .32, bodyW * .22, 0, Math.PI * 2);
+        ctx.fill();
       }
       ctx.restore();
 
-      if (Number(player.kickTimer || 0) > 0) {
-        const fx = Math.cos(angle + Math.PI / 2);
-        const fy = Math.sin(angle + Math.PI / 2);
+      if (kicking) {
+        const fx = Math.sin(angle);
+        const fy = -Math.cos(angle);
         ctx.strokeStyle = "#f9e06d";
-        ctx.lineWidth = 7;
+        ctx.lineWidth = 5;
+        ctx.lineCap = "round";
+        ctx.globalAlpha = .82;
         ctx.beginPath();
-        ctx.moveTo(player.x + fx * radius * .55, player.y + fy * radius * .55);
-        ctx.lineTo(player.x + fx * (radius + 30), player.y + fy * (radius + 30));
+        ctx.moveTo(player.x + fx * radius * .5, player.y + fy * radius * .5);
+        ctx.lineTo(player.x + fx * (radius + 24), player.y + fy * (radius + 24));
         ctx.stroke();
+        ctx.globalAlpha = 1;
       }
 
-      ctx.lineWidth = player.isMe ? 5 : 3;
-      ctx.strokeStyle = player.isMe ? "#f9e8a8" : player.color || "#ffffff";
+      ctx.fillStyle = player.color || "#ffffff";
+      ctx.globalAlpha = player.isMe ? .95 : .52;
       ctx.beginPath();
-      ctx.arc(player.x, player.y, radius + 5, 0, Math.PI * 2);
-      ctx.stroke();
-
-      ctx.font = "900 13px Segoe UI, Arial";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      const label = String(player.username || "?").slice(0, 12);
-      const metrics = ctx.measureText(label);
-      const labelWidth = Math.max(48, metrics.width + 16);
-      const labelY = player.y - radius - 19;
-      ctx.fillStyle = "rgba(23,33,31,.78)";
-      roundCanvasRect(ctx, player.x - labelWidth / 2, labelY - 11, labelWidth, 22, 7);
+      ctx.arc(player.x, player.y + radius * .62, player.isMe ? 6 : 4, 0, Math.PI * 2);
       ctx.fill();
-      ctx.fillStyle = "#fff9e8";
-      ctx.fillText(label, player.x, labelY);
+      ctx.globalAlpha = 1;
+
+      if (player.isMe) {
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = "#f9e8a8";
+        ctx.beginPath();
+        ctx.arc(player.x, player.y, radius * .92, 0, Math.PI * 2);
+        ctx.stroke();
+
+        ctx.font = "900 12px Segoe UI, Arial";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        const label = String(player.username || "?").slice(0, 12);
+        const metrics = ctx.measureText(label);
+        const labelWidth = Math.max(44, metrics.width + 14);
+        const labelY = player.y - radius - 11;
+        ctx.fillStyle = "rgba(23,33,31,.78)";
+        roundCanvasRect(ctx, player.x - labelWidth / 2, labelY - 10, labelWidth, 20, 7);
+        ctx.fill();
+        ctx.fillStyle = "#fff9e8";
+        ctx.fillText(label, player.x, labelY);
+      }
       ctx.restore();
     }
 

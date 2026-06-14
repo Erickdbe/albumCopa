@@ -2081,6 +2081,9 @@ const SLITHER_TICK_MS = 1000 / 20;
 const SLITHER_START_LENGTH = 230;
 const SLITHER_SEGMENT_SPACING = 9;
 const SLITHER_SPEED = 172;
+const SLITHER_BOOST_MULTIPLIER = 1.62;
+const SLITHER_BOOST_COST_PER_SEC = 22;
+const SLITHER_MIN_BOOST_LENGTH = SLITHER_START_LENGTH + 28;
 const SLITHER_TURN_RATE = Math.PI * 2.15;
 const SLITHER_FOOD_COUNT = 145;
 const SLITHER_LIVES = 2;
@@ -2142,6 +2145,7 @@ function makeSlitherPlayer(socket, index, bet) {
     targetLength: SLITHER_START_LENGTH,
     angle,
     targetAngle: angle,
+    boosting: false,
     body: makeSlitherBody(point.x, point.y, angle),
     respawnAt: 0,
     joinedAt: Date.now()
@@ -2176,6 +2180,7 @@ function serializeSlitherRoom(room, viewerSocketId) {
       eliminated: Boolean(player.eliminated),
       lives: Math.max(0, SLITHER_LIVES - Number(player.deaths || 0)),
       length: Math.round(player.targetLength),
+      boosting: Boolean(player.boosting),
       pelletsEaten: player.pelletsEaten || 0,
       respawnLeftMs: !player.alive && !player.eliminated ? Math.max(0, Number(player.respawnAt || now) - now) : 0,
       body: (player.body || []).filter((_, bodyIndex) => bodyIndex % 2 === 0),
@@ -2228,6 +2233,7 @@ function respawnSlitherPlayer(room, player) {
   player.targetLength = SLITHER_START_LENGTH;
   player.angle = angle;
   player.targetAngle = angle;
+  player.boosting = false;
   player.body = makeSlitherBody(point.x, point.y, angle);
   player.respawnAt = 0;
   room.message = `${player.username} voltou para a partida.`;
@@ -2237,6 +2243,7 @@ function killSlitherPlayer(room, player, reason = "bateu em uma cobra") {
   if (!player || !player.alive || player.eliminated) return;
 
   player.alive = false;
+  player.boosting = false;
   player.deaths = Math.min(SLITHER_LIVES, Number(player.deaths || 0) + 1);
   dropSlitherPellets(room, player);
   player.pelletsEaten = 0;
@@ -2449,11 +2456,19 @@ function tickSlitherRoom(room) {
     const diff = normalizeAngle(Number(player.targetAngle || player.angle) - Number(player.angle || 0));
     const maxTurn = SLITHER_TURN_RATE * dt;
     player.angle = normalizeAngle(Number(player.angle || 0) + clampNumber(diff, -maxTurn, maxTurn));
+    const canBoost = Boolean(player.boosting) && Number(player.targetLength || 0) > SLITHER_MIN_BOOST_LENGTH;
+    if (player.boosting && !canBoost) {
+      player.boosting = false;
+    }
+    if (canBoost) {
+      player.targetLength = Math.max(SLITHER_START_LENGTH, Number(player.targetLength || SLITHER_START_LENGTH) - SLITHER_BOOST_COST_PER_SEC * dt);
+    }
 
     const head = player.body[0] || randomSlitherPoint(220);
+    const speed = SLITHER_SPEED * (canBoost ? SLITHER_BOOST_MULTIPLIER : 1);
     const nextHead = {
-      x: clampNumber(head.x + Math.cos(player.angle) * SLITHER_SPEED * dt, 16, SLITHER_FIELD.width - 16),
-      y: clampNumber(head.y + Math.sin(player.angle) * SLITHER_SPEED * dt, 16, SLITHER_FIELD.height - 16)
+      x: clampNumber(head.x + Math.cos(player.angle) * speed * dt, 16, SLITHER_FIELD.width - 16),
+      y: clampNumber(head.y + Math.sin(player.angle) * speed * dt, 16, SLITHER_FIELD.height - 16)
     };
     player.body.unshift(nextHead);
     const maxPoints = Math.max(10, Math.round(Number(player.targetLength || SLITHER_START_LENGTH) / SLITHER_SEGMENT_SPACING));
@@ -3221,7 +3236,7 @@ io.on("connection", (socket) => {
     startSlitherRound(room, room.bet);
   });
 
-  socket.on("slither:input", ({ roomId, angle }) => {
+  socket.on("slither:input", ({ roomId, angle, boost }) => {
     const room = slitherRooms.get(roomId);
     if (!room || room.status !== "playing") return;
     const player = room.players.find(item => item.socketId === socket.id);
@@ -3229,6 +3244,7 @@ io.on("connection", (socket) => {
     if (Number.isFinite(Number(angle))) {
       player.targetAngle = normalizeAngle(Number(angle));
     }
+    player.boosting = Boolean(boost) && player.alive && Number(player.targetLength || 0) > SLITHER_MIN_BOOST_LENGTH;
   });
 
   socket.on("slither:leave", ({ roomId }) => {
@@ -3528,6 +3544,7 @@ function broadcastOnlineList() {
   for (const [, p] of onlinePlayers) {
     const user = db.findUser("id", p.userId);
     p.avatar = user?.avatar || p.avatar || "";
+    const slitherRoom = p.game === "slither" && p.roomId ? slitherRooms.get(p.roomId) : null;
     list.push({
       socketId: p.socketId,
       username: p.username,
@@ -3535,7 +3552,7 @@ function broadcastOnlineList() {
       avatar: p.avatar,
       game: p.game || null,
       roomId: p.roomId || null,
-      spectatable: p.game === "slither"
+      spectatable: slitherRoom?.status === "playing"
     });
   }
   io.emit("online:list", list);

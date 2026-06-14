@@ -3581,6 +3581,7 @@
     }
 
     .slither-player-chip {
+      width: 100%;
       display: grid;
       grid-template-columns: auto minmax(0, 1fr) auto;
       gap: 8px;
@@ -3589,9 +3590,12 @@
       padding: 7px 8px;
       border: 1px solid rgba(255, 249, 232, .14);
       border-radius: 8px;
+      color: #fff9e8;
       background: rgba(0,0,0,.18);
+      cursor: pointer;
       font-size: .78rem;
       font-weight: 850;
+      text-align: left;
     }
 
     .slither-player-chip.is-me {
@@ -3599,8 +3603,17 @@
       background: rgba(216, 173, 63, .14);
     }
 
+    .slither-player-chip.is-followed {
+      border-color: rgba(249, 232, 168, .86);
+      box-shadow: inset 0 0 0 2px rgba(249, 232, 168, .28), 0 0 18px rgba(249, 232, 168, .12);
+    }
+
     .slither-player-chip.is-dead {
       opacity: .62;
+    }
+
+    .slither-player-chip.is-boosting .slither-color-dot {
+      transform: scale(1.18);
     }
 
     .slither-color-dot {
@@ -4305,7 +4318,7 @@
           <section class="slither-control-box">
             <h4>Como vence</h4>
             <p style="margin:0;color:rgba(255,249,232,.72);font-size:.78rem;font-weight:800;line-height:1.35">
-              Coma bolinhas para crescer. Se a cabeca bater no corpo de outra cobra, perde uma vida. Com 2 mortes, fica assistindo ate sobrar o vencedor.
+              Coma bolinhas para crescer. Segure o mouse/toque para acelerar gastando tamanho. Se a cabeca bater no corpo de outra cobra, perde uma vida. Com 2 mortes, fica assistindo ate sobrar o vencedor.
             </p>
           </section>
 
@@ -6477,6 +6490,9 @@
       slitherRoom: null,
       slitherRenderId: 0,
       slitherLastInputAt: 0,
+      slitherLastAngle: 0,
+      slitherBoosting: false,
+      slitherFollowSocketId: null,
       headInviteRoomId: null,
       headRoomId: null,
       headRoom: null,
@@ -8916,6 +8932,8 @@
       mp.slitherInviteRoomId = null;
       mp.slitherRoomId = null;
       mp.slitherRoom = null;
+      mp.slitherBoosting = false;
+      mp.slitherFollowSocketId = null;
       if (!fromServer) updateLobbyHeader();
     }
 
@@ -8923,11 +8941,31 @@
       return mp.slitherRoom?.players?.find(player => player.isMe) || null;
     }
 
+    function getSlitherFollowPlayer(room = mp.slitherRoom) {
+      const players = room?.players || [];
+      const me = players.find(player => player.isMe);
+
+      if (me?.alive && !me.eliminated) {
+        return me;
+      }
+
+      const chosen = players.find(player =>
+        player.socketId === mp.slitherFollowSocketId
+        && player.alive
+        && !player.eliminated
+        && player.body?.length
+      );
+      if (chosen) return chosen;
+
+      return players.find(player => player.alive && !player.eliminated && player.body?.length)
+        || players.find(player => player.body?.length)
+        || null;
+    }
+
     function getSlitherCamera(room = mp.slitherRoom) {
       const field = room?.field || { width: 2200, height: 1500 };
-      const me = room?.players?.find(player => player.isMe);
-      const live = room?.players?.find(player => player.alive && !player.eliminated);
-      const focus = me?.body?.[0] || live?.body?.[0] || { x: field.width / 2, y: field.height / 2 };
+      const followed = getSlitherFollowPlayer(room);
+      const focus = followed?.body?.[0] || { x: field.width / 2, y: field.height / 2 };
       return {
         x: focus.x,
         y: focus.y,
@@ -8949,6 +8987,22 @@
       };
     }
 
+    function emitSlitherInput(angle = mp.slitherLastAngle, force = false) {
+      if (!mp.slitherRoom || mp.slitherRoom.status !== "playing" || !mp.slitherRoomId) return;
+      const me = getSlitherMe();
+      const head = me?.body?.[0];
+      if (!me || !head || !me.alive || me.eliminated) return;
+
+      const now = performance.now();
+      if (!force && now - mp.slitherLastInputAt <= 38) return;
+      mp.slitherLastInputAt = now;
+      mp.socket?.emit("slither:input", {
+        roomId: mp.slitherRoomId,
+        angle,
+        boost: Boolean(mp.slitherBoosting)
+      });
+    }
+
     function updateSlitherAim(event) {
       if (!mp.slitherRoom || mp.slitherRoom.status !== "playing" || !mp.slitherRoomId) return;
       const me = getSlitherMe();
@@ -8960,11 +9014,23 @@
       const localY = ((event.clientY - rect.top) / rect.height) * slitherCanvas.height;
       const world = slitherScreenToWorld(localX, localY);
       const angle = Math.atan2(world.y - head.y, world.x - head.x);
-      const now = performance.now();
-      if (now - mp.slitherLastInputAt > 38) {
-        mp.slitherLastInputAt = now;
-        mp.socket?.emit("slither:input", { roomId: mp.slitherRoomId, angle });
+      mp.slitherLastAngle = angle;
+      emitSlitherInput(angle);
+    }
+
+    function setSlitherBoost(active, event = null) {
+      mp.slitherBoosting = Boolean(active);
+      if (event?.clientX != null) {
+        updateSlitherAim(event);
+        return;
       }
+      emitSlitherInput(mp.slitherLastAngle, true);
+    }
+
+    function followSlitherPlayer(socketId) {
+      if (!socketId) return;
+      mp.slitherFollowSocketId = socketId;
+      renderSlitherRoom(mp.slitherRoom);
     }
 
     function renderSlitherRoom(room) {
@@ -8975,6 +9041,10 @@
       document.getElementById("slitherMessage").textContent = room.message || "";
 
       const me = getSlitherMe();
+      const followed = getSlitherFollowPlayer(room);
+      if (followed) {
+        mp.slitherFollowSocketId = followed.socketId;
+      }
       const liveCount = (room.players || []).filter(player => player.alive && !player.eliminated).length;
       const activeCount = (room.players || []).filter(player => !player.eliminated).length;
       document.getElementById("slitherStatusLabel").textContent = room.status === "playing"
@@ -8982,19 +9052,29 @@
         : room.status === "finished"
           ? "Fim de jogo"
           : `${room.players?.length || 0} jogadores na sala`;
-      document.getElementById("slitherLengthLabel").textContent = `Tamanho: ${me ? Math.round(me.length || 0) : 0}`;
-      document.getElementById("slitherLivesLabel").textContent = `Vidas: ${me ? me.lives : 0}`;
+      const statPlayer = me?.alive && !me.eliminated ? me : followed;
+      document.getElementById("slitherLengthLabel").textContent = `Tamanho: ${statPlayer ? Math.round(statPlayer.length || 0) : 0}`;
+      document.getElementById("slitherLivesLabel").textContent = `Vidas: ${statPlayer ? statPlayer.lives : 0}`;
 
-      document.getElementById("slitherPlayers").innerHTML = (room.players || []).map(player => `
-        <div class="slither-player-chip ${player.isMe ? "is-me" : ""} ${!player.alive || player.eliminated ? "is-dead" : ""}" data-socket-id="${escHtml(player.socketId)}">
+      const playersEl = document.getElementById("slitherPlayers");
+      playersEl.innerHTML = (room.players || []).map(player => {
+        const isFollowed = player.socketId === mp.slitherFollowSocketId;
+        const boostLabel = player.boosting ? " | turbo" : "";
+        const followLabel = isFollowed && room.status === "playing" && (!me || !me.alive || me.eliminated) ? " | assistindo" : "";
+        return `
+        <button class="slither-player-chip ${player.isMe ? "is-me" : ""} ${isFollowed ? "is-followed" : ""} ${player.boosting ? "is-boosting" : ""} ${!player.alive || player.eliminated ? "is-dead" : ""}" type="button" data-socket-id="${escHtml(player.socketId)}">
           <span class="slither-color-dot" style="--slither-color:${escHtml(player.color || "#7c8cff")}"></span>
           <span>
             <strong>${escHtml(player.username)}${player.isMe ? " (voce)" : ""}</strong>
-            <small>${player.eliminated ? "eliminado" : player.alive ? `${Math.round(player.length || 0)} pts` : "renascendo"}${player.isHost ? " | dono" : ""}</small>
+            <small>${player.eliminated ? "eliminado" : player.alive ? `${Math.round(player.length || 0)} pts` : "renascendo"}${boostLabel}${followLabel}${player.isHost ? " | dono" : ""}</small>
           </span>
           <span class="slither-life-badge">${"&hearts;".repeat(Math.max(0, Number(player.lives || 0)))}</span>
-        </div>
-      `).join("");
+        </button>
+      `;
+      }).join("");
+      playersEl.querySelectorAll(".slither-player-chip[data-socket-id]").forEach(button => {
+        button.addEventListener("click", () => followSlitherPlayer(button.dataset.socketId));
+      });
 
       renderSlitherControls(room);
       ensureSlitherRenderLoop();
@@ -9066,6 +9146,7 @@
       ctx.restore();
 
       const me = getSlitherMe();
+      const followed = getSlitherFollowPlayer(room);
       if (me && !me.alive && !me.eliminated && me.respawnLeftMs > 0) {
         ctx.fillStyle = "rgba(8,16,24,.62)";
         ctx.fillRect(0, 0, slitherCanvas.width, slitherCanvas.height);
@@ -9079,7 +9160,14 @@
         ctx.fillStyle = "#f9e8a8";
         ctx.font = "900 18px Segoe UI, Arial";
         ctx.textAlign = "center";
-        ctx.fillText("Voce foi eliminado. Assistindo os jogadores restantes.", slitherCanvas.width / 2, 34);
+        ctx.fillText(`Voce foi eliminado. Assistindo ${followed?.username || "jogador"}. Clique na lista para trocar.`, slitherCanvas.width / 2, 34);
+      } else if (!me && room.status === "playing") {
+        ctx.fillStyle = "rgba(8,16,24,.44)";
+        ctx.fillRect(0, 0, slitherCanvas.width, 58);
+        ctx.fillStyle = "#f9e8a8";
+        ctx.font = "900 18px Segoe UI, Arial";
+        ctx.textAlign = "center";
+        ctx.fillText(`Assistindo ${followed?.username || "partida"}. Clique na lista para trocar de camera.`, slitherCanvas.width / 2, 34);
       }
     }
 
@@ -9115,17 +9203,17 @@
       ctx.lineCap = "round";
       ctx.lineJoin = "round";
       ctx.shadowColor = player.color || "#7c8cff";
-      ctx.shadowBlur = 11;
+      ctx.shadowBlur = player.boosting ? 24 : 11;
       ctx.strokeStyle = player.color || "#7c8cff";
-      ctx.lineWidth = radius * 2;
+      ctx.lineWidth = radius * (player.boosting ? 2.18 : 2);
       ctx.beginPath();
       ctx.moveTo(body[0].x, body[0].y);
       for (let i = 1; i < body.length; i += 1) ctx.lineTo(body[i].x, body[i].y);
       ctx.stroke();
 
       ctx.shadowBlur = 0;
-      ctx.strokeStyle = "rgba(255,255,255,.18)";
-      ctx.lineWidth = radius * .65;
+      ctx.strokeStyle = player.boosting ? "rgba(255,255,255,.34)" : "rgba(255,255,255,.18)";
+      ctx.lineWidth = radius * (player.boosting ? .85 : .65);
       ctx.beginPath();
       ctx.moveTo(body[0].x, body[0].y);
       for (let i = 1; i < body.length; i += 1) ctx.lineTo(body[i].x, body[i].y);
@@ -9163,9 +9251,17 @@
 
     slitherCanvas.addEventListener("pointermove", updateSlitherAim);
     slitherCanvas.addEventListener("pointerdown", (event) => {
+      if (event.button !== undefined && event.button !== 0) return;
+      event.preventDefault();
       if (slitherCanvas.setPointerCapture) slitherCanvas.setPointerCapture(event.pointerId);
-      updateSlitherAim(event);
+      setSlitherBoost(true, event);
     });
+    slitherCanvas.addEventListener("pointerup", (event) => {
+      event.preventDefault();
+      setSlitherBoost(false, event);
+    });
+    slitherCanvas.addEventListener("pointercancel", () => setSlitherBoost(false));
+    slitherCanvas.addEventListener("lostpointercapture", () => setSlitherBoost(false));
     slitherCanvas.addEventListener("contextmenu", (event) => event.preventDefault());
 
     const HORSE_COLORS = ["#e74c3c","#f39c12","#2ecc71","#3498db","#9b59b6"];

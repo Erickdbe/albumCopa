@@ -592,6 +592,63 @@
       font-weight: 900;
     }
 
+    .slither-side-button {
+      position: relative;
+      width: 100%;
+      min-height: 70px;
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 10px;
+      margin-top: 8px;
+      padding: 12px;
+      overflow: hidden;
+      border: 0;
+      border-radius: var(--radius);
+      color: #fff9e8;
+      background:
+        radial-gradient(circle at 78% 28%, #f7ff91 0 5px, transparent 6px),
+        radial-gradient(circle at 64% 60%, #ff6be8 0 5px, transparent 6px),
+        radial-gradient(circle at 88% 70%, #74ff9d 0 5px, transparent 6px),
+        repeating-radial-gradient(circle at 78% 48%, rgba(255,255,255,.18) 0 8px, transparent 9px 17px),
+        linear-gradient(145deg, #223055, #18231f);
+      box-shadow: 0 14px 28px rgba(19, 28, 45, 0.24);
+      cursor: pointer;
+      font-weight: 950;
+      text-align: left;
+    }
+
+    .slither-side-button::after {
+      content: "";
+      position: absolute;
+      right: 18px;
+      bottom: 18px;
+      width: 96px;
+      height: 32px;
+      border: 10px solid #7d8cff;
+      border-left-color: transparent;
+      border-radius: 999px;
+      transform: rotate(-14deg);
+      box-shadow: 0 0 18px rgba(125, 140, 255, .42);
+    }
+
+    .slither-side-button span,
+    .slither-side-button small {
+      position: relative;
+      z-index: 2;
+    }
+
+    .slither-side-button span {
+      font-size: 1.02rem;
+      text-transform: uppercase;
+    }
+
+    .slither-side-button small {
+      color: rgba(255, 249, 232, 0.82);
+      font-size: 0.72rem;
+      font-weight: 900;
+    }
+
     .filter-group {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
@@ -2437,6 +2494,8 @@
     /* Lobby */
     .lobby-card {
       width: min(760px, 96vw);
+      max-height: calc(100vh - 48px);
+      overflow: auto;
     }
     .lobby-header {
       display: flex; align-items: center; justify-content: space-between;
@@ -2489,6 +2548,95 @@
     }
     .status-badge.available { background: #d4edda; color: #155724; }
     .status-badge.in-game   { background: #ffeeba; color: #856404; }
+
+    .lobby-chat {
+      display: grid;
+      gap: 8px;
+      margin-top: 14px;
+      padding: 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.48);
+    }
+
+    .lobby-chat-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      color: var(--grass);
+      font-size: .82rem;
+      font-weight: 950;
+      text-transform: uppercase;
+    }
+
+    .lobby-chat-log {
+      display: grid;
+      gap: 6px;
+      max-height: 150px;
+      overflow-y: auto;
+      padding-right: 2px;
+    }
+
+    .chat-message {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
+      gap: 8px;
+      align-items: start;
+      padding: 7px 8px;
+      border-radius: 7px;
+      background: rgba(255, 255, 255, 0.58);
+      font-size: .78rem;
+    }
+
+    .chat-message.is-system {
+      grid-template-columns: minmax(0, 1fr);
+      color: #5f3f00;
+      background: rgba(255, 245, 195, 0.72);
+      font-weight: 850;
+    }
+
+    .chat-message strong,
+    .chat-message span {
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+
+    .chat-message strong {
+      color: var(--grass);
+      font-size: .74rem;
+      line-height: 1.2;
+    }
+
+    .chat-message small {
+      color: var(--muted);
+      font-size: .68rem;
+      font-weight: 850;
+    }
+
+    .chat-form {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 8px;
+    }
+
+    .chat-form input {
+      min-height: 38px;
+      padding: 0 10px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: #fff;
+      font: inherit;
+      font-size: .84rem;
+      font-weight: 800;
+    }
+
+    .chat-form .mp-btn {
+      width: auto;
+      min-height: 38px;
+      padding: 0 14px;
+      font-size: .78rem;
+    }
     .challenge-btn {
       padding: 5px 14px; border: 1px solid var(--grass);
       border-radius: 20px; background: transparent;
@@ -2580,6 +2728,7 @@
     }
     .head-soccer-open-btn { background: #16689f; }
     .horse-open-btn { background: #9b59b6; }
+    .slither-open-btn { background: #3b4f96; }
     .lobby-limit-note {
       display: block;
       margin: 0 0 8px;
@@ -3289,6 +3438,207 @@
       .button-side-panel { grid-template-rows: none; }
     }
 
+    .slither-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 10008;
+      display: grid;
+      place-items: center;
+      padding: 14px;
+      background: rgba(3, 7, 12, 0.9);
+      backdrop-filter: blur(5px);
+    }
+
+    .slither-overlay.hidden { display: none; }
+
+    .slither-table {
+      width: min(1240px, 98vw);
+      max-height: calc(100vh - 28px);
+      display: grid;
+      grid-template-rows: auto auto minmax(0, 1fr);
+      gap: 12px;
+      padding: 16px;
+      overflow: auto;
+      border: 2px solid rgba(125, 140, 255, 0.72);
+      border-radius: 12px;
+      color: #fff9e8;
+      background:
+        radial-gradient(circle at 20% 0%, rgba(125, 140, 255, .2), transparent 22rem),
+        linear-gradient(145deg, #16213a, #07100d);
+      box-shadow: 0 26px 80px rgba(0, 0, 0, .54);
+    }
+
+    .slither-top,
+    .slither-scorebar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .slither-top h3 {
+      margin: 0;
+      font-size: 1.2rem;
+      text-transform: uppercase;
+    }
+
+    .slither-top span,
+    .slither-scorebar span {
+      color: rgba(255, 249, 232, .74);
+      font-size: .82rem;
+      font-weight: 850;
+    }
+
+    .slither-message {
+      min-height: 38px;
+      display: flex;
+      align-items: center;
+      padding: 9px 11px;
+      border: 1px solid rgba(255, 249, 232, .14);
+      border-radius: 8px;
+      color: #f9e8a8;
+      background: rgba(0,0,0,.18);
+      font-weight: 850;
+    }
+
+    .slither-main {
+      display: grid;
+      grid-template-columns: minmax(720px, 1fr) minmax(260px, 320px);
+      gap: 12px;
+      min-height: 0;
+    }
+
+    .slither-field-shell {
+      position: relative;
+      min-height: 0;
+      border: 8px solid rgba(125, 140, 255, .34);
+      border-radius: 8px;
+      background: #091018;
+      box-shadow: inset 0 0 0 2px rgba(255, 249, 232, .12), 0 16px 34px rgba(0,0,0,.3);
+      overflow: hidden;
+    }
+
+    .slither-canvas {
+      display: block;
+      width: 100%;
+      aspect-ratio: 1100 / 720;
+      min-height: 430px;
+      background: #091018;
+      cursor: crosshair;
+      touch-action: none;
+    }
+
+    .slither-taunt-layer {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      overflow: hidden;
+    }
+
+    .slither-side-panel {
+      display: grid;
+      grid-template-rows: auto auto auto minmax(0, 1fr);
+      gap: 10px;
+      min-height: 0;
+    }
+
+    .slither-control-box {
+      display: grid;
+      gap: 8px;
+      padding: 10px;
+      border: 1px solid rgba(255, 249, 232, .15);
+      border-radius: 8px;
+      background: rgba(255,255,255,.06);
+    }
+
+    .slither-control-box h4 {
+      margin: 0;
+      font-size: .82rem;
+      text-transform: uppercase;
+      color: #f9e8a8;
+    }
+
+    .slither-actions,
+    .slither-emoji-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .slither-actions .mp-btn {
+      flex: 1 1 120px;
+      min-height: 38px;
+      padding: 8px 10px;
+      font-size: .82rem;
+    }
+
+    .slither-player-list {
+      display: grid;
+      gap: 7px;
+      overflow: auto;
+      padding-right: 2px;
+    }
+
+    .slither-player-chip {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      gap: 8px;
+      align-items: center;
+      min-height: 44px;
+      padding: 7px 8px;
+      border: 1px solid rgba(255, 249, 232, .14);
+      border-radius: 8px;
+      background: rgba(0,0,0,.18);
+      font-size: .78rem;
+      font-weight: 850;
+    }
+
+    .slither-player-chip.is-me {
+      border-color: rgba(216, 173, 63, .66);
+      background: rgba(216, 173, 63, .14);
+    }
+
+    .slither-player-chip.is-dead {
+      opacity: .62;
+    }
+
+    .slither-color-dot {
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      border: 2px solid rgba(255,255,255,.48);
+      background: var(--slither-color);
+      box-shadow: 0 4px 10px rgba(0,0,0,.22), 0 0 12px var(--slither-color);
+    }
+
+    .slither-player-chip strong,
+    .slither-player-chip small {
+      display: block;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .slither-player-chip small {
+      color: rgba(255,249,232,.68);
+      font-size: .68rem;
+      text-transform: uppercase;
+    }
+
+    .slither-life-badge {
+      color: #f9e8a8;
+      font-size: .72rem;
+      text-transform: uppercase;
+    }
+
+    @media (max-width: 980px) {
+      .slither-main { grid-template-columns: 1fr; }
+      .slither-canvas { min-height: 330px; }
+      .slither-side-panel { grid-template-rows: none; }
+    }
+
     /* ── Horse Racing ──────────────────────────────────────────────────────── */
     .horse-overlay {
       position: fixed;
@@ -3569,6 +3919,10 @@
             <span>Futebol de Botao</span>
             <small>Turnos online</small>
           </button>
+          <button class="slither-side-button" id="openSlitherGame" type="button">
+            <span>Slither</span>
+            <small>Cobrinhas online</small>
+          </button>
           <button class="blackjack-side-button" id="openBlackjackGame" type="button">
             <span>Mesa 21</span>
             <small>Cartas online</small>
@@ -3676,6 +4030,7 @@
       <div class="lobby-game-actions">
         <button class="mp-btn head-soccer-open-btn" type="button" onclick="createHeadSoccerRoom()">Head Soccer</button>
         <button class="mp-btn button-soccer-open-btn" type="button" onclick="createButtonSoccerRoom()">Botao</button>
+        <button class="mp-btn slither-open-btn" type="button" onclick="createSlitherRoom()">Slither</button>
         <button class="mp-btn blackjack-open-btn" type="button" onclick="createBlackjackRoom()">Mesa 21</button>
         <button class="mp-btn horse-open-btn" type="button" onclick="createHorseRoom()">🏇 Corrida</button>
       </div>
@@ -3685,6 +4040,20 @@
         <h4 style="margin:0 0 8px;font-size:.9rem;color:var(--grass)">📋 Últimas partidas</h4>
         <ul class="online-list" id="matchHistoryList" style="max-height:180px"></ul>
       </div>
+
+      <section class="lobby-chat" aria-label="Chat geral">
+        <div class="lobby-chat-head">
+          <span>Chat geral</span>
+          <small id="chatCount">0 mensagens</small>
+        </div>
+        <div class="lobby-chat-log" id="globalChatLog">
+          <div class="chat-message is-system">Entre online para conversar com a galera.</div>
+        </div>
+        <form class="chat-form" id="globalChatForm">
+          <input id="globalChatInput" type="text" maxlength="220" placeholder="Mensagem para todos online" autocomplete="off">
+          <button class="mp-btn" type="submit">Enviar</button>
+        </form>
+      </section>
 
       <p style="font-size:.78rem;color:var(--muted);margin:0">
         Selecione um jogador disponível e clique em <strong>Desafiar</strong>.
@@ -3805,6 +4174,15 @@
     </div>
   </div>
 
+  <div class="challenge-toast hidden" id="slitherInviteToast">
+    <h4>Slither online</h4>
+    <p id="slitherInviteMsg"></p>
+    <div class="challenge-toast-btns">
+      <button class="btn-accept" onclick="acceptSlitherInvite()">Entrar</button>
+      <button class="btn-reject" onclick="rejectSlitherInvite()">Agora nao</button>
+    </div>
+  </div>
+
   <div class="button-soccer-overlay hidden" id="buttonSoccerOverlay">
     <div class="button-soccer-table">
       <div class="button-soccer-top">
@@ -3874,6 +4252,66 @@
           <section class="button-control-box">
             <h4>Jogadores</h4>
             <div class="button-player-list" id="buttonPlayers"></div>
+          </section>
+        </aside>
+      </div>
+    </div>
+  </div>
+
+  <div class="slither-overlay hidden" id="slitherOverlay">
+    <div class="slither-table">
+      <div class="slither-top">
+        <div>
+          <h3>Slither</h3>
+          <span id="slitherBetLabel">Aposta: 0</span>
+        </div>
+        <button class="mp-btn" style="width:auto;padding:8px 16px" type="button" onclick="leaveSlitherRoom()">Fechar</button>
+      </div>
+
+      <div class="slither-scorebar">
+        <span id="slitherStatusLabel">Aguardando</span>
+        <span id="slitherLengthLabel">Tamanho: 0</span>
+        <span id="slitherLivesLabel">Vidas: 2</span>
+      </div>
+
+      <div class="slither-message" id="slitherMessage">Aguardando sala.</div>
+
+      <div class="slither-main">
+        <div class="slither-field-shell" id="slitherFieldShell">
+          <canvas class="slither-canvas" id="slitherCanvas" width="1100" height="720"></canvas>
+          <div class="slither-taunt-layer" id="slitherTauntLayer"></div>
+        </div>
+
+        <aside class="slither-side-panel">
+          <section class="slither-control-box">
+            <h4>Partida</h4>
+            <div class="slither-actions">
+              <button class="mp-btn" id="slitherStartBtn" type="button" onclick="startSlither()">Comecar</button>
+              <button class="mp-btn" id="slitherLeaveBtn" type="button" onclick="leaveSlitherRoom()">Sair</button>
+            </div>
+          </section>
+
+          <section class="slither-control-box">
+            <h4>Emoji</h4>
+            <div class="slither-emoji-bar">
+              <button class="button-emoji-btn" type="button" onclick="sendTaunt('😂')">😂</button>
+              <button class="button-emoji-btn" type="button" onclick="sendTaunt('🔥')">🔥</button>
+              <button class="button-emoji-btn" type="button" onclick="sendTaunt('💀')">💀</button>
+              <button class="button-emoji-btn" type="button" onclick="sendTaunt('🤫')">🤫</button>
+              <button class="button-emoji-btn" type="button" onclick="sendTaunt('🎯')">🎯</button>
+            </div>
+          </section>
+
+          <section class="slither-control-box">
+            <h4>Como vence</h4>
+            <p style="margin:0;color:rgba(255,249,232,.72);font-size:.78rem;font-weight:800;line-height:1.35">
+              Coma bolinhas para crescer. Se a cabeca bater no corpo de outra cobra, perde uma vida. Com 2 mortes, fica assistindo ate sobrar o vencedor.
+            </p>
+          </section>
+
+          <section class="slither-control-box">
+            <h4>Jogadores</h4>
+            <div class="slither-player-list" id="slitherPlayers"></div>
           </section>
         </aside>
       </div>
@@ -4219,7 +4657,8 @@
       marketListings: [],
       marketToday: "",
       marketCanListToday: true,
-      onlinePlayers: []
+      onlinePlayers: [],
+      chatMessages: []
     };
 
     const pagesPerSpread = 2;
@@ -4252,6 +4691,7 @@
     const gameModal = document.getElementById("gameModal");
     const openBetGame = document.getElementById("openBetGame");
     const openButtonSoccerGame = document.getElementById("openButtonSoccerGame");
+    const openSlitherGame = document.getElementById("openSlitherGame");
     const openBlackjackGame = document.getElementById("openBlackjackGame");
     const openMarket = document.getElementById("openMarket");
     const marketOverlay = document.getElementById("marketOverlay");
@@ -4263,6 +4703,10 @@
     const onlineStripList = document.getElementById("onlineStripList");
     const onlineCountLabel = document.getElementById("onlineCountLabel");
     const openLobbyFromBoard = document.getElementById("openLobbyFromBoard");
+    const globalChatLog = document.getElementById("globalChatLog");
+    const globalChatForm = document.getElementById("globalChatForm");
+    const globalChatInput = document.getElementById("globalChatInput");
+    const chatCount = document.getElementById("chatCount");
     const closeGameModal = document.getElementById("closeGameModal");
     const teamSelect = document.getElementById("teamSelect");
     const wagerInput = document.getElementById("wagerInput");
@@ -4294,6 +4738,8 @@
     const buttonSoccerCtx = buttonSoccerCanvas.getContext("2d");
     const buttonPower = document.getElementById("buttonPower");
     const buttonPowerValue = document.getElementById("buttonPowerValue");
+    const slitherCanvas = document.getElementById("slitherCanvas");
+    const slitherCtx = slitherCanvas.getContext("2d");
     const FIELD = {
       width: 1500,
       height: 675,
@@ -4587,6 +5033,13 @@
     function startGame() {
       if (mp.headRoomId && mp.headRoom?.status === "waiting") {
         startHeadSoccerOnline();
+        return;
+      }
+
+      if (mp.headRoomId && mp.headRoom?.status === "finished") {
+        const bet = Number(mp.headRoom.bet || document.getElementById("myBetInput").value || 10);
+        closeHeadSoccerRoom(true);
+        mp.socket.emit("head:create", { bet });
         return;
       }
 
@@ -5848,11 +6301,13 @@
     packButton.addEventListener("click", openPack);
     openBetGame.addEventListener("click", openHeadSoccerFromSidebar);
     openButtonSoccerGame.addEventListener("click", openButtonSoccerFromSidebar);
+    openSlitherGame.addEventListener("click", openSlitherFromSidebar);
     openBlackjackGame.addEventListener("click", openBlackjackFromSidebar);
     openMarket.addEventListener("click", openMarketplace);
     closeMarket.addEventListener("click", closeMarketplace);
     marketListButton.addEventListener("click", announceDuplicate);
     openLobbyFromBoard.addEventListener("click", openLobby);
+    globalChatForm.addEventListener("submit", sendGlobalChat);
     marketOverlay.addEventListener("click", (event) => {
       if (event.target === marketOverlay) {
         closeMarketplace();
@@ -6017,6 +6472,11 @@
       buttonLastGoalId: null,
       buttonLastShotId: null,
       buttonShotAnimating: false,
+      slitherInviteRoomId: null,
+      slitherRoomId: null,
+      slitherRoom: null,
+      slitherRenderId: 0,
+      slitherLastInputAt: 0,
       headInviteRoomId: null,
       headRoomId: null,
       headRoom: null,
@@ -6240,6 +6700,15 @@
         renderOnlineList(list);
       });
 
+      mp.socket.on("chat:history", (messages) => {
+        state.chatMessages = Array.isArray(messages) ? messages.slice(-80) : [];
+        renderChat();
+      });
+
+      mp.socket.on("chat:message", (message) => {
+        appendChatMessage(message);
+      });
+
       // Desafio recebido
       mp.socket.on("challenge:received", ({ challengeId, fromUsername, fromBet }) => {
         mp.receivedChallengeId = challengeId;
@@ -6438,6 +6907,37 @@
         showToast(msg || "Nao foi possivel jogar futebol de botao.");
       });
 
+      mp.socket.on("slither:invite", ({ roomId, fromUsername, bet }) => {
+        mp.slitherInviteRoomId = roomId;
+        document.getElementById("slitherInviteMsg").textContent =
+          `${fromUsername} abriu uma sala de Slither. Aposta: ${bet} creditos.`;
+        document.getElementById("slitherInviteToast").classList.remove("hidden");
+      });
+
+      mp.socket.on("slither:update", (room) => {
+        renderSlitherRoom(room);
+      });
+
+      mp.socket.on("slither:finished", ({ room, updatedUser }) => {
+        if (updatedUser) {
+          applyServerData(updatedUser);
+        }
+        renderSlitherRoom(room);
+        renderBetPanel();
+        updateLobbyHeader();
+        showToast(room.message || "Slither encerrado.");
+      });
+
+      mp.socket.on("slither:cancelled", ({ message }) => {
+        closeSlitherOverlay(true);
+        showToast(message || "Sala de Slither cancelada.");
+        updateLobbyHeader();
+      });
+
+      mp.socket.on("slither:error", (msg) => {
+        showToast(msg || "Nao foi possivel jogar Slither.");
+      });
+
       // ── Emoji Taunts ────────────────────────────────────────────────────
       mp.socket.on("market:sold", ({ listing, buyer, updatedUser }) => {
         if (updatedUser) {
@@ -6543,7 +7043,7 @@
           ${renderAvatar(player.avatar, player.username)}
           <span>
             <strong>${escHtml(player.username)}${player.socketId === self ? " (voce)" : ""}</strong>
-            <small>${player.inGame ? "Em jogo" : "Disponivel"}</small>
+            <small>${player.inGame ? (player.game === "slither" ? "Slither" : "Em jogo") : "Disponivel"}</small>
           </span>
         </div>
       `).join("");
@@ -6565,11 +7065,14 @@
           ${renderAvatar(p.avatar, p.username)}
           <span class="player-name">${escHtml(p.username)}</span>
           <span class="status-badge ${p.inGame ? "in-game" : "available"}">
-            ${p.inGame ? "Em jogo" : "Disponível"}
+            ${p.inGame ? (p.game === "slither" ? "Slither" : "Em jogo") : "Disponível"}
           </span>
           ${!p.inGame ? `
             <button class="challenge-btn" onclick="sendChallenge('${p.socketId}','${escHtml(p.username)}')">
               Desafiar
+            </button>` : p.spectatable && p.roomId ? `
+            <button class="challenge-btn" onclick="spectateSlitherRoom('${escHtml(p.roomId)}')">
+              Assistir
             </button>` : ""}
         </li>
       `).join("");
@@ -6724,6 +7227,56 @@
       return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
     }
 
+    function renderChat() {
+      if (!globalChatLog) return;
+      const messages = Array.isArray(state.chatMessages) ? state.chatMessages.slice(-80) : [];
+      chatCount.textContent = `${messages.length} mensagem${messages.length === 1 ? "" : "s"}`;
+
+      if (!messages.length) {
+        globalChatLog.innerHTML = `<div class="chat-message is-system">Nenhuma mensagem ainda.</div>`;
+        return;
+      }
+
+      globalChatLog.innerHTML = messages.map((message) => {
+        const isSystem = message.type === "system";
+        if (isSystem) {
+          return `<div class="chat-message is-system">${escHtml(message.text || "")}</div>`;
+        }
+
+        return `
+          <div class="chat-message">
+            ${renderAvatar(message.avatar, message.username)}
+            <span>
+              <strong>${escHtml(message.username || "?")}</strong>
+              <span>${escHtml(message.text || "")}</span>
+            </span>
+          </div>
+        `;
+      }).join("");
+      globalChatLog.scrollTop = globalChatLog.scrollHeight;
+    }
+
+    function appendChatMessage(message) {
+      if (!message) return;
+      state.chatMessages = [...(state.chatMessages || []), message].slice(-80);
+      renderChat();
+      if (message.type === "system" && message.text) {
+        showToast(message.text);
+      }
+    }
+
+    function sendGlobalChat(event) {
+      event?.preventDefault();
+      const text = globalChatInput?.value.trim();
+      if (!text) return;
+      if (!mp.socket?.connected) {
+        showToast("Entre online para usar o chat.");
+        return;
+      }
+      mp.socket.emit("chat:send", { text });
+      globalChatInput.value = "";
+    }
+
     function updateOnlineDot(online) {
       const dot   = document.getElementById("onlineDot");
       const label = document.getElementById("onlineBtnLabel");
@@ -6821,7 +7374,8 @@
         `;
       }).join("");
 
-      document.getElementById("blackjackStartBtn").disabled = !(isWaiting && isHost);
+      document.getElementById("blackjackStartBtn").textContent = isFinished ? "Jogar novamente" : "Começar";
+      document.getElementById("blackjackStartBtn").disabled = !(isFinished || (isWaiting && isHost));
       document.getElementById("blackjackHitBtn").disabled = !(isPlaying && me?.status === "playing");
       document.getElementById("blackjackStandBtn").disabled = !(isPlaying && me?.status === "playing");
       document.getElementById("blackjackLeaveBtn").disabled = !(isWaiting || isFinished);
@@ -6856,6 +7410,12 @@
 
     function startBlackjackRound() {
       if (!mp.blackjackRoomId) return;
+      if (mp.blackjackTable?.status === "finished") {
+        const bet = Number(mp.blackjackTable.bet || document.getElementById("myBetInput").value || 10);
+        closeBlackjackTable();
+        mp.socket.emit("blackjack:create", { bet });
+        return;
+      }
       mp.socket.emit("blackjack:start", { roomId: mp.blackjackRoomId });
     }
 
@@ -7199,7 +7759,7 @@
 
     function sendTaunt(emoji) {
       emoji = normalizeTauntEmoji(emoji);
-      const hasActiveRoom = mp.roomId || mp.blackjackRoomId || mp.horseRoomId || mp.buttonRoomId || mp.headRoomId;
+      const hasActiveRoom = mp.roomId || mp.blackjackRoomId || mp.horseRoomId || mp.buttonRoomId || mp.headRoomId || mp.slitherRoomId;
       if (!emoji || !mp.socket?.connected || !hasActiveRoom) return;
 
       const payload = { emoji };
@@ -7218,6 +7778,16 @@
           payload.game = "button";
           payload.x = me.x;
           payload.y = me.y;
+        }
+      }
+
+      if (mp.slitherRoom && !document.getElementById("slitherOverlay").classList.contains("hidden")) {
+        const me = getSlitherMe();
+        const head = me?.body?.[0];
+        if (head) {
+          payload.game = "slither";
+          payload.x = head.x;
+          payload.y = head.y;
         }
       }
 
@@ -7265,6 +7835,29 @@
         el.style.setProperty("--x", `${(x / field.width) * 100}%`);
         el.style.setProperty("--y", `${(y / field.height) * 100}%`);
         buttonLayer.appendChild(el);
+        setTimeout(() => el.remove(), 1700);
+        return;
+      }
+
+      const slitherOverlay = document.getElementById("slitherOverlay");
+      const slitherLayer = document.getElementById("slitherTauntLayer");
+      if (slitherLayer && mp.slitherRoom && !slitherOverlay.classList.contains("hidden")) {
+        const camera = getSlitherCamera(mp.slitherRoom);
+        let x = Number(payload.x);
+        let y = Number(payload.y);
+        if (!Number.isFinite(x) || !Number.isFinite(y)) {
+          const player = mp.slitherRoom.players?.find(item => item.socketId === payload.fromSocketId) || getSlitherMe();
+          const head = player?.body?.[0];
+          x = head?.x ?? camera.x;
+          y = head?.y ?? camera.y;
+        }
+        const point = slitherWorldToScreen(x, y, camera);
+        const el = document.createElement("span");
+        el.className = "taunt-pop";
+        el.textContent = emoji;
+        el.style.setProperty("--x", `${(point.x / slitherCanvas.width) * 100}%`);
+        el.style.setProperty("--y", `${(point.y / slitherCanvas.height) * 100}%`);
+        slitherLayer.appendChild(el);
         setTimeout(() => el.remove(), 1700);
         return;
       }
@@ -7871,9 +8464,9 @@
       startMatch.textContent = room.status === "waiting"
         ? "Comecar online"
         : room.status === "finished"
-          ? "Partida encerrada"
+          ? "Jogar novamente"
           : "Em campo";
-      startMatch.disabled = !canStart;
+      startMatch.disabled = !(canStart || room.status === "finished");
 
       drawHeadSoccerRoom(room);
       ensureHeadSoccerRenderLoop();
@@ -8249,6 +8842,332 @@
     });
 
     // ── Corrida de Cavalos ─────────────────────────────────────────────────────
+    // Slither online
+    function openSlitherFromSidebar() {
+      if (!mp.isOnline) {
+        showToast("Faca login para abrir o Slither.");
+        document.getElementById("authOverlay").classList.remove("hidden");
+        return;
+      }
+      openLobby();
+      setTimeout(() => document.getElementById("myBetInput")?.focus(), 80);
+    }
+
+    function createSlitherRoom() {
+      if (!mp.isOnline) {
+        showToast("Faca login para abrir uma sala.");
+        document.getElementById("authOverlay").classList.remove("hidden");
+        return;
+      }
+      const bet = Number(document.getElementById("myBetInput").value) || 10;
+      if (bet < 5) { showToast("Aposta minima: 5 creditos."); return; }
+      if (bet > state.betCredits) { showToast("Creditos de aposta insuficientes."); return; }
+      mp.socket.emit("slither:create", { bet });
+      document.getElementById("lobbyOverlay").classList.add("hidden");
+    }
+
+    function acceptSlitherInvite() {
+      if (!mp.slitherInviteRoomId) return;
+      document.getElementById("slitherInviteToast").classList.add("hidden");
+      mp.socket.emit("slither:join", { roomId: mp.slitherInviteRoomId });
+      mp.slitherInviteRoomId = null;
+    }
+
+    function rejectSlitherInvite() {
+      mp.slitherInviteRoomId = null;
+      document.getElementById("slitherInviteToast").classList.add("hidden");
+    }
+
+    function spectateSlitherRoom(roomId) {
+      if (!mp.socket?.connected) {
+        showToast("Entre online para assistir partidas.");
+        return;
+      }
+      if (!roomId) return;
+      document.getElementById("lobbyOverlay").classList.add("hidden");
+      mp.socket.emit("slither:spectate", { roomId });
+    }
+
+    function startSlither() {
+      if (!mp.slitherRoomId) return;
+      if (mp.slitherRoom?.status === "finished") {
+        const bet = Number(mp.slitherRoom.bet || document.getElementById("myBetInput").value || 10);
+        closeSlitherOverlay(true);
+        mp.socket.emit("slither:create", { bet });
+        return;
+      }
+      mp.socket.emit("slither:start", { roomId: mp.slitherRoomId });
+    }
+
+    function leaveSlitherRoom() {
+      if (mp.slitherRoomId && mp.slitherRoom?.status !== "finished") {
+        mp.socket?.emit("slither:leave", { roomId: mp.slitherRoomId });
+      }
+      closeSlitherOverlay(false);
+    }
+
+    function closeSlitherOverlay(fromServer = false) {
+      document.getElementById("slitherOverlay").classList.add("hidden");
+      document.getElementById("slitherInviteToast").classList.add("hidden");
+      if (mp.slitherRenderId) {
+        cancelAnimationFrame(mp.slitherRenderId);
+        mp.slitherRenderId = 0;
+      }
+      mp.slitherInviteRoomId = null;
+      mp.slitherRoomId = null;
+      mp.slitherRoom = null;
+      if (!fromServer) updateLobbyHeader();
+    }
+
+    function getSlitherMe() {
+      return mp.slitherRoom?.players?.find(player => player.isMe) || null;
+    }
+
+    function getSlitherCamera(room = mp.slitherRoom) {
+      const field = room?.field || { width: 2200, height: 1500 };
+      const me = room?.players?.find(player => player.isMe);
+      const live = room?.players?.find(player => player.alive && !player.eliminated);
+      const focus = me?.body?.[0] || live?.body?.[0] || { x: field.width / 2, y: field.height / 2 };
+      return {
+        x: focus.x,
+        y: focus.y,
+        scale: Math.min(slitherCanvas.width / 940, slitherCanvas.height / 620)
+      };
+    }
+
+    function slitherWorldToScreen(x, y, camera = getSlitherCamera()) {
+      return {
+        x: (x - camera.x) * camera.scale + slitherCanvas.width / 2,
+        y: (y - camera.y) * camera.scale + slitherCanvas.height / 2
+      };
+    }
+
+    function slitherScreenToWorld(x, y, camera = getSlitherCamera()) {
+      return {
+        x: (x - slitherCanvas.width / 2) / camera.scale + camera.x,
+        y: (y - slitherCanvas.height / 2) / camera.scale + camera.y
+      };
+    }
+
+    function updateSlitherAim(event) {
+      if (!mp.slitherRoom || mp.slitherRoom.status !== "playing" || !mp.slitherRoomId) return;
+      const me = getSlitherMe();
+      const head = me?.body?.[0];
+      if (!me || !head || !me.alive || me.eliminated) return;
+
+      const rect = slitherCanvas.getBoundingClientRect();
+      const localX = ((event.clientX - rect.left) / rect.width) * slitherCanvas.width;
+      const localY = ((event.clientY - rect.top) / rect.height) * slitherCanvas.height;
+      const world = slitherScreenToWorld(localX, localY);
+      const angle = Math.atan2(world.y - head.y, world.x - head.x);
+      const now = performance.now();
+      if (now - mp.slitherLastInputAt > 38) {
+        mp.slitherLastInputAt = now;
+        mp.socket?.emit("slither:input", { roomId: mp.slitherRoomId, angle });
+      }
+    }
+
+    function renderSlitherRoom(room) {
+      mp.slitherRoom = room;
+      mp.slitherRoomId = room.roomId;
+      document.getElementById("slitherOverlay").classList.remove("hidden");
+      document.getElementById("slitherBetLabel").textContent = `Aposta: ${room.bet} creditos`;
+      document.getElementById("slitherMessage").textContent = room.message || "";
+
+      const me = getSlitherMe();
+      const liveCount = (room.players || []).filter(player => player.alive && !player.eliminated).length;
+      const activeCount = (room.players || []).filter(player => !player.eliminated).length;
+      document.getElementById("slitherStatusLabel").textContent = room.status === "playing"
+        ? `${liveCount}/${activeCount} vivos`
+        : room.status === "finished"
+          ? "Fim de jogo"
+          : `${room.players?.length || 0} jogadores na sala`;
+      document.getElementById("slitherLengthLabel").textContent = `Tamanho: ${me ? Math.round(me.length || 0) : 0}`;
+      document.getElementById("slitherLivesLabel").textContent = `Vidas: ${me ? me.lives : 0}`;
+
+      document.getElementById("slitherPlayers").innerHTML = (room.players || []).map(player => `
+        <div class="slither-player-chip ${player.isMe ? "is-me" : ""} ${!player.alive || player.eliminated ? "is-dead" : ""}" data-socket-id="${escHtml(player.socketId)}">
+          <span class="slither-color-dot" style="--slither-color:${escHtml(player.color || "#7c8cff")}"></span>
+          <span>
+            <strong>${escHtml(player.username)}${player.isMe ? " (voce)" : ""}</strong>
+            <small>${player.eliminated ? "eliminado" : player.alive ? `${Math.round(player.length || 0)} pts` : "renascendo"}${player.isHost ? " | dono" : ""}</small>
+          </span>
+          <span class="slither-life-badge">${"&hearts;".repeat(Math.max(0, Number(player.lives || 0)))}</span>
+        </div>
+      `).join("");
+
+      renderSlitherControls(room);
+      ensureSlitherRenderLoop();
+    }
+
+    function renderSlitherControls(room) {
+      const isHost = room.hostSocketId === mp.socket?.id;
+      const startBtn = document.getElementById("slitherStartBtn");
+      startBtn.textContent = room.status === "finished" ? "Jogar novamente" : "Comecar";
+      startBtn.disabled = room.status === "playing" || (room.status === "waiting" && (!isHost || (room.players?.length || 0) < 2));
+      document.getElementById("slitherLeaveBtn").textContent = room.status === "finished" ? "Fechar" : "Sair";
+    }
+
+    function ensureSlitherRenderLoop() {
+      if (mp.slitherRenderId) return;
+      const frame = () => {
+        if (!mp.slitherRoom || document.getElementById("slitherOverlay").classList.contains("hidden")) {
+          mp.slitherRenderId = 0;
+          return;
+        }
+        drawSlitherRoom(mp.slitherRoom);
+        mp.slitherRenderId = requestAnimationFrame(frame);
+      };
+      mp.slitherRenderId = requestAnimationFrame(frame);
+    }
+
+    function drawSlitherRoom(room) {
+      const field = room.field || { width: 2200, height: 1500, snakeRadius: 13, pelletRadius: 5 };
+      const ctx = slitherCtx;
+      const camera = getSlitherCamera(room);
+      ctx.clearRect(0, 0, slitherCanvas.width, slitherCanvas.height);
+      ctx.fillStyle = "#081018";
+      ctx.fillRect(0, 0, slitherCanvas.width, slitherCanvas.height);
+
+      ctx.save();
+      ctx.translate(slitherCanvas.width / 2, slitherCanvas.height / 2);
+      ctx.scale(camera.scale, camera.scale);
+      ctx.translate(-camera.x, -camera.y);
+
+      const viewLeft = camera.x - slitherCanvas.width / camera.scale / 2 - 80;
+      const viewTop = camera.y - slitherCanvas.height / camera.scale / 2 - 80;
+      const viewRight = camera.x + slitherCanvas.width / camera.scale / 2 + 80;
+      const viewBottom = camera.y + slitherCanvas.height / camera.scale / 2 + 80;
+
+      ctx.fillStyle = "#0b121c";
+      ctx.fillRect(0, 0, field.width, field.height);
+      drawSlitherHexGrid(ctx, viewLeft, viewTop, viewRight, viewBottom);
+
+      ctx.strokeStyle = "rgba(125,140,255,.48)";
+      ctx.lineWidth = 5;
+      ctx.strokeRect(0, 0, field.width, field.height);
+
+      (room.pellets || []).forEach(pellet => {
+        if (pellet.x < viewLeft || pellet.x > viewRight || pellet.y < viewTop || pellet.y > viewBottom) return;
+        ctx.save();
+        ctx.shadowColor = pellet.color || "#f9e8a8";
+        ctx.shadowBlur = 14;
+        ctx.fillStyle = pellet.color || "#f9e8a8";
+        ctx.beginPath();
+        ctx.arc(pellet.x, pellet.y, (field.pelletRadius || 5) + Number(pellet.value || 1), 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      });
+
+      [...(room.players || [])].sort((a, b) => (a.eliminated ? -1 : 0) - (b.eliminated ? -1 : 0)).forEach(player => {
+        drawSlitherSnake(ctx, player, field);
+      });
+
+      ctx.restore();
+
+      const me = getSlitherMe();
+      if (me && !me.alive && !me.eliminated && me.respawnLeftMs > 0) {
+        ctx.fillStyle = "rgba(8,16,24,.62)";
+        ctx.fillRect(0, 0, slitherCanvas.width, slitherCanvas.height);
+        ctx.fillStyle = "#fff9e8";
+        ctx.font = "900 32px Segoe UI, Arial";
+        ctx.textAlign = "center";
+        ctx.fillText(`Renascendo em ${Math.ceil(me.respawnLeftMs / 1000)}s`, slitherCanvas.width / 2, slitherCanvas.height / 2);
+      } else if (me?.eliminated && room.status === "playing") {
+        ctx.fillStyle = "rgba(8,16,24,.44)";
+        ctx.fillRect(0, 0, slitherCanvas.width, 58);
+        ctx.fillStyle = "#f9e8a8";
+        ctx.font = "900 18px Segoe UI, Arial";
+        ctx.textAlign = "center";
+        ctx.fillText("Voce foi eliminado. Assistindo os jogadores restantes.", slitherCanvas.width / 2, 34);
+      }
+    }
+
+    function drawSlitherHexGrid(ctx, left, top, right, bottom) {
+      const size = 42;
+      const h = Math.sqrt(3) * size;
+      ctx.strokeStyle = "rgba(255,255,255,.055)";
+      ctx.lineWidth = 2;
+      for (let y = Math.floor(top / h) * h; y < bottom + h; y += h) {
+        for (let x = Math.floor(left / (size * 1.5)) * size * 1.5; x < right + size * 2; x += size * 1.5) {
+          const cx = x;
+          const cy = y + ((Math.round(x / (size * 1.5)) % 2) ? h / 2 : 0);
+          ctx.beginPath();
+          for (let i = 0; i < 6; i += 1) {
+            const angle = Math.PI / 6 + i * Math.PI / 3;
+            const px = cx + Math.cos(angle) * size;
+            const py = cy + Math.sin(angle) * size;
+            if (i === 0) ctx.moveTo(px, py);
+            else ctx.lineTo(px, py);
+          }
+          ctx.closePath();
+          ctx.stroke();
+        }
+      }
+    }
+
+    function drawSlitherSnake(ctx, player, field) {
+      const body = player.body || [];
+      if (body.length < 2) return;
+      const radius = field.snakeRadius || 13;
+      ctx.save();
+      ctx.globalAlpha = player.eliminated ? .28 : player.alive ? 1 : .48;
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+      ctx.shadowColor = player.color || "#7c8cff";
+      ctx.shadowBlur = 11;
+      ctx.strokeStyle = player.color || "#7c8cff";
+      ctx.lineWidth = radius * 2;
+      ctx.beginPath();
+      ctx.moveTo(body[0].x, body[0].y);
+      for (let i = 1; i < body.length; i += 1) ctx.lineTo(body[i].x, body[i].y);
+      ctx.stroke();
+
+      ctx.shadowBlur = 0;
+      ctx.strokeStyle = "rgba(255,255,255,.18)";
+      ctx.lineWidth = radius * .65;
+      ctx.beginPath();
+      ctx.moveTo(body[0].x, body[0].y);
+      for (let i = 1; i < body.length; i += 1) ctx.lineTo(body[i].x, body[i].y);
+      ctx.stroke();
+
+      const head = body[0];
+      const neck = body[1] || { x: head.x - 1, y: head.y };
+      const angle = Math.atan2(head.y - neck.y, head.x - neck.x);
+      const eyeOffset = radius * .45;
+      const eyeForward = radius * .72;
+      const px = -Math.sin(angle);
+      const py = Math.cos(angle);
+      ctx.fillStyle = "#fff";
+      [-1, 1].forEach(side => {
+        const ex = head.x + Math.cos(angle) * eyeForward + px * eyeOffset * side;
+        const ey = head.y + Math.sin(angle) * eyeForward + py * eyeOffset * side;
+        ctx.beginPath();
+        ctx.arc(ex, ey, radius * .34, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = "#17211f";
+        ctx.beginPath();
+        ctx.arc(ex + Math.cos(angle) * 2, ey + Math.sin(angle) * 2, radius * .14, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = "#fff";
+      });
+
+      ctx.font = "900 15px Segoe UI, Arial";
+      ctx.textAlign = "center";
+      ctx.fillStyle = "#fff9e8";
+      ctx.shadowColor = "rgba(0,0,0,.8)";
+      ctx.shadowBlur = 5;
+      ctx.fillText(player.username || "?", head.x, head.y - radius * 2.1);
+      ctx.restore();
+    }
+
+    slitherCanvas.addEventListener("pointermove", updateSlitherAim);
+    slitherCanvas.addEventListener("pointerdown", (event) => {
+      if (slitherCanvas.setPointerCapture) slitherCanvas.setPointerCapture(event.pointerId);
+      updateSlitherAim(event);
+    });
+    slitherCanvas.addEventListener("contextmenu", (event) => event.preventDefault());
+
     const HORSE_COLORS = ["#e74c3c","#f39c12","#2ecc71","#3498db","#9b59b6"];
     const HORSE_EMOJIS = ["🔴","🟡","🟢","🔵","🟣"];
     let horseRaceAnim = null;
@@ -8285,6 +9204,12 @@
 
     function startHorseRace() {
       if (!mp.horseRoomId) return;
+      if (mp.horseRoom?.status === "finished") {
+        const bet = Number(mp.horseRoom.bet || document.getElementById("myBetInput").value || 10);
+        closeHorseOverlay();
+        mp.socket.emit("horse:create", { bet });
+        return;
+      }
       mp.socket.emit("horse:start", { roomId: mp.horseRoomId });
     }
 
@@ -8356,7 +9281,8 @@
       }).join("");
 
       // Buttons
-      document.getElementById("horseStartBtn").disabled = !(isHost && isWaiting);
+      document.getElementById("horseStartBtn").textContent = isFinished ? "Jogar novamente" : "🏁 Largar!";
+      document.getElementById("horseStartBtn").disabled = !(isFinished || (isHost && isWaiting));
       document.getElementById("horseLeaveBtn").textContent = isFinished ? "Fechar" : "Sair";
 
       // Winner banner

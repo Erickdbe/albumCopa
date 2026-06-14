@@ -412,6 +412,7 @@ const server = http.createServer(app);
 const io     = new Server(server, {
   cors: { origin: "*", methods: ["GET", "POST"] }
 });
+const chatHistory = [];
 
 app.use(cors());
 app.use(express.json());
@@ -434,6 +435,34 @@ function safeUser(user) {
   user = normalizeUserProgress(user);
   const { password_hash, ...safe } = user;
   return safe;
+}
+
+function cleanChatText(value, maxLength = 220) {
+  return String(value || "").replace(/\s+/g, " ").trim().slice(0, maxLength);
+}
+
+function emitChatMessage(message) {
+  const entry = {
+    id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    at: new Date().toISOString(),
+    ...message
+  };
+
+  chatHistory.push(entry);
+  while (chatHistory.length > 80) chatHistory.shift();
+  io.emit("chat:message", entry);
+  return entry;
+}
+
+function emitSystemChat(text, kind = "system", extra = {}) {
+  const cleanText = cleanChatText(text, 260);
+  if (!cleanText) return null;
+  return emitChatMessage({
+    type: "system",
+    kind,
+    text: cleanText,
+    ...extra
+  });
 }
 
 // ─── REST: Registro ────────────────────────────────────────────────────────
@@ -567,6 +596,21 @@ app.post("/api/pack/open", authMiddleware, (req, res) => {
       duplicates,
       pending_stickers: []
     });
+
+    const legendaryItems = packItems.filter(item => item.rarity === "legendary" && !item.isDuplicate);
+    if (legendaryItems.length) {
+      const names = legendaryItems.map(item => item.name || item.code).join(", ");
+      emitSystemChat(`${updated.username} tirou lendaria no pacote: ${names}.`, "legendary", {
+        userId: updated.id,
+        username: updated.username,
+        stickers: legendaryItems.map(item => ({
+          stickerId: item.stickerId,
+          code: item.code,
+          name: item.name,
+          rarity: item.rarity
+        }))
+      });
+    }
 
     res.json({ ok: true, packItems, user: safeUser(updated) });
   } catch (err) {
@@ -713,6 +757,14 @@ app.post("/api/market/list", authMiddleware, (req, res) => {
     }
     saveDb(data);
 
+    emitSystemChat(`${user.username} anunciou ${listing.code} - ${listing.name} na loja por ${listing.price} creditos.`, "market", {
+      userId: user.id,
+      username: user.username,
+      listingId: listing.id,
+      stickerId: listing.sticker_id,
+      price: listing.price
+    });
+
     res.json({ ok: true, listing, user: safeUser(db.findUser("id", req.userId)) });
   } catch (err) {
     console.error("[market:create] erro:", err);
@@ -823,6 +875,7 @@ const activeRooms        = new Map();   // roomId → detalhes da sala
 const blackjackRooms     = new Map();   // roomId -> mesa de 21
 const buttonSoccerRooms  = new Map();   // roomId -> futebol de botao
 const headSoccerRooms    = new Map();   // roomId -> head soccer em sala
+const slitherRooms       = new Map();   // roomId -> cobrinhas estilo slither
 
 io.use((socket, next) => {
   const token   = socket.handshake.auth.token;
@@ -2017,6 +2070,433 @@ function findHeadSoccerRoomBySocket(socketId) {
   return null;
 }
 
+const SLITHER_FIELD = {
+  width: 2200,
+  height: 1500,
+  snakeRadius: 13,
+  pelletRadius: 5
+};
+const SLITHER_MAX_PLAYERS = 8;
+const SLITHER_TICK_MS = 1000 / 20;
+const SLITHER_START_LENGTH = 230;
+const SLITHER_SEGMENT_SPACING = 9;
+const SLITHER_SPEED = 172;
+const SLITHER_TURN_RATE = Math.PI * 2.15;
+const SLITHER_FOOD_COUNT = 145;
+const SLITHER_LIVES = 2;
+const SLITHER_GROWTH_PER_PELLET = 7.5;
+const SLITHER_RESPAWN_MS = 1800;
+const SLITHER_COLORS = ["#7c8cff", "#ff6b7d", "#57d39b", "#f6c453", "#c678dd", "#60d7ff", "#ff9f43", "#f8f0df"];
+
+function normalizeAngle(angle) {
+  let value = Number(angle) || 0;
+  while (value > Math.PI) value -= Math.PI * 2;
+  while (value < -Math.PI) value += Math.PI * 2;
+  return value;
+}
+
+function randomSlitherPoint(margin = 120) {
+  return {
+    x: margin + Math.random() * (SLITHER_FIELD.width - margin * 2),
+    y: margin + Math.random() * (SLITHER_FIELD.height - margin * 2)
+  };
+}
+
+function makeSlitherBody(x, y, angle, targetLength = SLITHER_START_LENGTH) {
+  const points = [];
+  const count = Math.max(8, Math.round(targetLength / SLITHER_SEGMENT_SPACING));
+  for (let i = 0; i < count; i += 1) {
+    points.push({
+      x: x - Math.cos(angle) * i * SLITHER_SEGMENT_SPACING,
+      y: y - Math.sin(angle) * i * SLITHER_SEGMENT_SPACING
+    });
+  }
+  return points;
+}
+
+function makeSlitherPellet(x = null, y = null, value = 1) {
+  const point = x === null || y === null ? randomSlitherPoint(48) : { x, y };
+  return {
+    id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    x: Math.round(point.x),
+    y: Math.round(point.y),
+    value,
+    color: SLITHER_COLORS[Math.floor(Math.random() * SLITHER_COLORS.length)]
+  };
+}
+
+function makeSlitherPlayer(socket, index, bet) {
+  const point = randomSlitherPoint(220);
+  const angle = Math.random() * Math.PI * 2;
+  return {
+    socketId: socket.id,
+    userId: socket.userId,
+    username: socket.username,
+    avatar: socket.avatar || "",
+    color: SLITHER_COLORS[index % SLITHER_COLORS.length],
+    bet,
+    alive: true,
+    eliminated: false,
+    deaths: 0,
+    pelletsEaten: 0,
+    targetLength: SLITHER_START_LENGTH,
+    angle,
+    targetAngle: angle,
+    body: makeSlitherBody(point.x, point.y, angle),
+    respawnAt: 0,
+    joinedAt: Date.now()
+  };
+}
+
+function fillSlitherPellets(room) {
+  while (room.pellets.length < SLITHER_FOOD_COUNT) {
+    room.pellets.push(makeSlitherPellet());
+  }
+}
+
+function serializeSlitherRoom(room, viewerSocketId) {
+  const now = Date.now();
+  return {
+    roomId: room.roomId,
+    hostSocketId: room.hostSocketId,
+    hostUsername: room.hostUsername,
+    bet: room.bet,
+    status: room.status,
+    message: room.message,
+    field: SLITHER_FIELD,
+    pellets: room.pellets,
+    winnerSocketId: room.winnerSocketId || null,
+    startedAt: room.startedAt || null,
+    players: room.players.map((player, index) => ({
+      socketId: player.socketId,
+      username: player.username,
+      avatar: player.avatar || "",
+      color: player.color,
+      alive: Boolean(player.alive),
+      eliminated: Boolean(player.eliminated),
+      lives: Math.max(0, SLITHER_LIVES - Number(player.deaths || 0)),
+      length: Math.round(player.targetLength),
+      pelletsEaten: player.pelletsEaten || 0,
+      respawnLeftMs: !player.alive && !player.eliminated ? Math.max(0, Number(player.respawnAt || now) - now) : 0,
+      body: (player.body || []).filter((_, bodyIndex) => bodyIndex % 2 === 0),
+      isHost: player.socketId === room.hostSocketId,
+      isMe: player.socketId === viewerSocketId,
+      order: index
+    }))
+  };
+}
+
+function emitSlitherUpdate(room) {
+  const targets = new Set(room.players.map(player => player.socketId));
+  for (const spectatorId of room.spectators || []) targets.add(spectatorId);
+  targets.forEach(socketId => {
+    io.to(socketId).emit("slither:update", serializeSlitherRoom(room, socketId));
+  });
+}
+
+function findSlitherRoomBySocket(socketId) {
+  for (const room of slitherRooms.values()) {
+    if (room.players.some(player => player.socketId === socketId) || room.spectators?.has(socketId)) return room;
+  }
+  return null;
+}
+
+function getSlitherLiveContenders(room) {
+  return room.players.filter(player => !player.eliminated);
+}
+
+function dropSlitherPellets(room, player) {
+  const body = Array.isArray(player.body) ? player.body : [];
+  const drops = Math.min(Math.max(0, Number(player.pelletsEaten || 0)), 120);
+  if (!body.length || drops <= 0) return;
+
+  for (let i = 0; i < drops; i += 1) {
+    const point = body[Math.floor((i / Math.max(1, drops - 1)) * (body.length - 1))] || body[0];
+    const jitter = 18;
+    const x = clampNumber(point.x + (Math.random() - 0.5) * jitter, 20, SLITHER_FIELD.width - 20);
+    const y = clampNumber(point.y + (Math.random() - 0.5) * jitter, 20, SLITHER_FIELD.height - 20);
+    room.pellets.push(makeSlitherPellet(x, y, 1));
+  }
+}
+
+function respawnSlitherPlayer(room, player) {
+  const point = randomSlitherPoint(220);
+  const angle = Math.random() * Math.PI * 2;
+  player.alive = true;
+  player.eliminated = false;
+  player.pelletsEaten = 0;
+  player.targetLength = SLITHER_START_LENGTH;
+  player.angle = angle;
+  player.targetAngle = angle;
+  player.body = makeSlitherBody(point.x, point.y, angle);
+  player.respawnAt = 0;
+  room.message = `${player.username} voltou para a partida.`;
+}
+
+function killSlitherPlayer(room, player, reason = "bateu em uma cobra") {
+  if (!player || !player.alive || player.eliminated) return;
+
+  player.alive = false;
+  player.deaths = Math.min(SLITHER_LIVES, Number(player.deaths || 0) + 1);
+  dropSlitherPellets(room, player);
+  player.pelletsEaten = 0;
+
+  if (player.deaths >= SLITHER_LIVES) {
+    player.eliminated = true;
+    player.respawnAt = 0;
+    room.message = `${player.username} ${reason} e foi eliminado.`;
+  } else {
+    player.respawnAt = Date.now() + SLITHER_RESPAWN_MS;
+    room.message = `${player.username} ${reason}. Renasce em instantes.`;
+  }
+}
+
+function startSlitherRound(room, requestedBet = room.bet) {
+  const maxBet = room.players.length >= 3 ? 20 : 50;
+  const tableBet = clampNumber(requestedBet, 5, maxBet);
+  if (room.players.length < 2) {
+    room.message = "Precisa de pelo menos 2 jogadores para iniciar.";
+    emitSlitherUpdate(room);
+    return false;
+  }
+
+  for (const player of room.players) {
+    const user = db.findUser("id", player.userId);
+    if (!user || Number(user.bet_credits || 0) < tableBet) {
+      room.message = `${player.username} nao tem creditos para ${tableBet}.`;
+      emitSlitherUpdate(room);
+      return false;
+    }
+  }
+
+  room.players.forEach((player, index) => {
+    const user = db.findUser("id", player.userId);
+    db.updateUser(player.userId, {
+      bet_credits: Math.max(0, Number(user.bet_credits || 0) - tableBet)
+    });
+    const fresh = makeSlitherPlayer(io.sockets.sockets.get(player.socketId) || {
+      id: player.socketId,
+      userId: player.userId,
+      username: player.username,
+      avatar: player.avatar
+    }, index, tableBet);
+    Object.assign(player, fresh, { socketId: player.socketId, userId: player.userId, username: player.username, avatar: player.avatar || "" });
+  });
+
+  room.bet = tableBet;
+  room.status = "playing";
+  room.startedAt = Date.now();
+  room.winnerSocketId = null;
+  room.pellets = [];
+  room.message = "Partida iniciada. Coma bolinhas, cresca e faca a cabeca dos rivais bater no seu corpo.";
+  fillSlitherPellets(room);
+
+  clearInterval(room.tickTimer);
+  room.lastTick = Date.now();
+  room.tickTimer = setInterval(() => tickSlitherRoom(room), SLITHER_TICK_MS);
+  emitSlitherUpdate(room);
+  broadcastOnlineList();
+  return true;
+}
+
+function finishSlitherRoom(room, reason = "") {
+  if (!room || room.status === "finished") return;
+
+  clearInterval(room.tickTimer);
+  room.tickTimer = null;
+  room.status = "finished";
+
+  const contenders = getSlitherLiveContenders(room);
+  const winner = contenders.length === 1 ? contenders[0] : null;
+  room.winnerSocketId = winner?.socketId || null;
+
+  const totalPot = room.players.reduce((sum, player) => sum + Number(player.bet || room.bet || 0), 0);
+  if (winner) {
+    const user = db.findUser("id", winner.userId);
+    if (user) {
+      db.updateUser(winner.userId, {
+        bet_credits: Number(user.bet_credits || 0) + totalPot
+      });
+      addExchangeWin(winner.userId);
+    }
+    room.message = `${reason ? `${reason} ` : ""}${winner.username} venceu o Slither e levou ${totalPot} creditos.`;
+  } else {
+    room.players.forEach(player => {
+      const user = db.findUser("id", player.userId);
+      if (user) {
+        db.updateUser(player.userId, {
+          bet_credits: Number(user.bet_credits || 0) + Number(player.bet || room.bet || 0)
+        });
+      }
+    });
+    room.message = `${reason ? `${reason} ` : ""}Slither encerrado sem vencedor. Apostas devolvidas.`;
+  }
+
+  const targets = new Set(room.players.map(player => player.socketId));
+  for (const spectatorId of room.spectators || []) targets.add(spectatorId);
+  targets.forEach(socketId => {
+    const participant = room.players.find(player => player.socketId === socketId);
+    io.to(socketId).emit("slither:finished", {
+      room: serializeSlitherRoom(room, socketId),
+      updatedUser: participant ? safeUser(db.findUser("id", participant.userId)) : null
+    });
+  });
+
+  room.players.forEach(player => {
+    const online = onlinePlayers.get(player.socketId);
+    if (online) { online.inGame = false; online.roomId = null; online.game = null; }
+    const liveSocket = io.sockets.sockets.get(player.socketId);
+    if (liveSocket) liveSocket.leave(room.roomId);
+  });
+  for (const spectatorId of room.spectators || []) {
+    const liveSocket = io.sockets.sockets.get(spectatorId);
+    if (liveSocket) liveSocket.leave(room.roomId);
+  }
+
+  slitherRooms.delete(room.roomId);
+  broadcastOnlineList();
+}
+
+function cancelSlitherRoom(room, reason = "Sala de Slither cancelada.") {
+  if (!room) return;
+
+  clearInterval(room.tickTimer);
+  if (room.status === "playing") {
+    room.players.forEach(player => {
+      const user = db.findUser("id", player.userId);
+      if (user) {
+        db.updateUser(player.userId, {
+          bet_credits: Number(user.bet_credits || 0) + Number(player.bet || room.bet || 0)
+        });
+      }
+    });
+  }
+
+  const targets = new Set(room.players.map(player => player.socketId));
+  for (const spectatorId of room.spectators || []) targets.add(spectatorId);
+  targets.forEach(socketId => {
+    io.to(socketId).emit("slither:cancelled", { message: reason });
+    const online = onlinePlayers.get(socketId);
+    if (online && room.players.some(player => player.socketId === socketId)) {
+      online.inGame = false;
+      online.roomId = null;
+      online.game = null;
+    }
+    const liveSocket = io.sockets.sockets.get(socketId);
+    if (liveSocket) liveSocket.leave(room.roomId);
+  });
+
+  slitherRooms.delete(room.roomId);
+  broadcastOnlineList();
+}
+
+function removeSlitherPlayer(room, socketId, reason = "") {
+  const player = room.players.find(item => item.socketId === socketId);
+  if (!player) {
+    room.spectators?.delete(socketId);
+    emitSlitherUpdate(room);
+    return;
+  }
+
+  if (room.status === "playing") {
+    player.deaths = SLITHER_LIVES - 1;
+    killSlitherPlayer(room, player, reason || "saiu da partida");
+    if (getSlitherLiveContenders(room).length <= 1) {
+      finishSlitherRoom(room, reason || `${player.username} saiu da partida.`);
+      return;
+    }
+    emitSlitherUpdate(room);
+    return;
+  }
+
+  room.players = room.players.filter(item => item.socketId !== socketId);
+  const online = onlinePlayers.get(socketId);
+  if (online) { online.inGame = false; online.roomId = null; online.game = null; }
+  const liveSocket = io.sockets.sockets.get(socketId);
+  if (liveSocket) liveSocket.leave(room.roomId);
+
+  if (!room.players.length) {
+    slitherRooms.delete(room.roomId);
+    broadcastOnlineList();
+    return;
+  }
+
+  if (room.hostSocketId === socketId) {
+    room.hostSocketId = room.players[0].socketId;
+    room.hostUsername = room.players[0].username;
+  }
+  room.players.forEach((item, index) => { item.color = SLITHER_COLORS[index % SLITHER_COLORS.length]; });
+  room.message = reason || `${player.username} saiu da sala.`;
+  emitSlitherUpdate(room);
+  broadcastOnlineList();
+}
+
+function tickSlitherRoom(room) {
+  if (!room || !slitherRooms.has(room.roomId) || room.status !== "playing") return;
+
+  const now = Date.now();
+  const dt = Math.min((now - (room.lastTick || now)) / 1000, 0.08);
+  room.lastTick = now;
+
+  room.players.forEach(player => {
+    if (!player.alive && !player.eliminated && now >= Number(player.respawnAt || 0)) {
+      respawnSlitherPlayer(room, player);
+    }
+  });
+
+  const alivePlayers = room.players.filter(player => player.alive && !player.eliminated);
+  alivePlayers.forEach(player => {
+    const diff = normalizeAngle(Number(player.targetAngle || player.angle) - Number(player.angle || 0));
+    const maxTurn = SLITHER_TURN_RATE * dt;
+    player.angle = normalizeAngle(Number(player.angle || 0) + clampNumber(diff, -maxTurn, maxTurn));
+
+    const head = player.body[0] || randomSlitherPoint(220);
+    const nextHead = {
+      x: clampNumber(head.x + Math.cos(player.angle) * SLITHER_SPEED * dt, 16, SLITHER_FIELD.width - 16),
+      y: clampNumber(head.y + Math.sin(player.angle) * SLITHER_SPEED * dt, 16, SLITHER_FIELD.height - 16)
+    };
+    player.body.unshift(nextHead);
+    const maxPoints = Math.max(10, Math.round(Number(player.targetLength || SLITHER_START_LENGTH) / SLITHER_SEGMENT_SPACING));
+    if (player.body.length > maxPoints) player.body.length = maxPoints;
+
+    for (let i = room.pellets.length - 1; i >= 0; i -= 1) {
+      const pellet = room.pellets[i];
+      if (Math.hypot(nextHead.x - pellet.x, nextHead.y - pellet.y) <= SLITHER_FIELD.snakeRadius + SLITHER_FIELD.pelletRadius + 4) {
+        room.pellets.splice(i, 1);
+        player.pelletsEaten += Number(pellet.value || 1);
+        player.targetLength += SLITHER_GROWTH_PER_PELLET * Number(pellet.value || 1);
+      }
+    }
+  });
+
+  alivePlayers.forEach(player => {
+    const head = player.body[0];
+    if (!head || !player.alive) return;
+
+    for (const other of room.players) {
+      if (!other.alive || other.eliminated || other.socketId === player.socketId) continue;
+      const body = other.body || [];
+      for (let i = 5; i < body.length; i += 2) {
+        const point = body[i];
+        if (Math.hypot(head.x - point.x, head.y - point.y) <= SLITHER_FIELD.snakeRadius * 1.6) {
+          killSlitherPlayer(room, player, `bateu na cobra de ${other.username}`);
+          break;
+        }
+      }
+      if (!player.alive) break;
+    }
+  });
+
+  fillSlitherPellets(room);
+
+  if (getSlitherLiveContenders(room).length <= 1) {
+    finishSlitherRoom(room);
+    return;
+  }
+
+  emitSlitherUpdate(room);
+}
+
 io.on("connection", (socket) => {
   console.log(`[+] ${socket.username} conectado`);
   const connectedUser = normalizeUserProgress(db.findUser("id", socket.userId));
@@ -2028,10 +2508,25 @@ io.on("connection", (socket) => {
     username: socket.username,
     avatar:   socket.avatar,
     inGame:   false,
-    roomId:   null
+    roomId:   null,
+    game:     null
   });
 
+  socket.emit("chat:history", chatHistory);
   broadcastOnlineList();
+
+  socket.on("chat:send", ({ text }) => {
+    const cleanText = cleanChatText(text);
+    if (!cleanText) return;
+
+    emitChatMessage({
+      type: "user",
+      userId: socket.userId,
+      username: socket.username,
+      avatar: socket.avatar || "",
+      text: cleanText
+    });
+  });
 
   // ── Desafio ────────────────────────────────────────────────────────────
   socket.on("challenge:send", ({ toSocketId, myBet }) => {
@@ -2156,6 +2651,12 @@ io.on("connection", (socket) => {
     const horseRoom = findHorseRoomBySocket(socket.id);
     if (horseRoom) {
       horseRoom.players.forEach(player => targets.add(player.socketId));
+    }
+
+    const slitherRoom = findSlitherRoomBySocket(socket.id);
+    if (slitherRoom) {
+      slitherRoom.players.forEach(player => targets.add(player.socketId));
+      for (const spectatorId of slitherRoom.spectators || []) targets.add(spectatorId);
     }
 
     if (p?.roomId) {
@@ -2643,6 +3144,121 @@ io.on("connection", (socket) => {
     socket.leave(roomId);
   });
 
+  // Slither
+  socket.on("slither:create", ({ bet }) => {
+    const tableBet = clampNumber(bet || 10, 5, 50);
+    const user = db.findUser("id", socket.userId);
+    const player = onlinePlayers.get(socket.id);
+    if (!user || Number(user.bet_credits || 0) < tableBet)
+      return socket.emit("slither:error", "Creditos de aposta insuficientes.");
+    if (player?.inGame)
+      return socket.emit("slither:error", "Voce ja esta em uma partida.");
+
+    const roomId = `slither-${Date.now()}-${socket.id}`;
+    const room = {
+      roomId,
+      hostSocketId: socket.id,
+      hostUsername: socket.username,
+      bet: tableBet,
+      status: "waiting",
+      message: "Sala aberta. Cada jogador tem 2 vidas.",
+      pellets: [],
+      spectators: new Set(),
+      winnerSocketId: null,
+      tickTimer: null,
+      lastTick: Date.now(),
+      players: [makeSlitherPlayer(socket, 0, tableBet)]
+    };
+    fillSlitherPellets(room);
+    slitherRooms.set(roomId, room);
+    socket.join(roomId);
+    if (player) { player.inGame = true; player.roomId = roomId; player.game = "slither"; }
+
+    for (const [, target] of onlinePlayers) {
+      if (target.socketId !== socket.id && !target.inGame) {
+        io.to(target.socketId).emit("slither:invite", { roomId, fromUsername: socket.username, bet: tableBet });
+      }
+    }
+
+    emitSlitherUpdate(room);
+    broadcastOnlineList();
+  });
+
+  socket.on("slither:join", ({ roomId }) => {
+    const room = slitherRooms.get(roomId);
+    if (!room || room.status !== "waiting")
+      return socket.emit("slither:error", "Sala indisponivel.");
+    if (room.players.some(player => player.socketId === socket.id))
+      return emitSlitherUpdate(room);
+    if (room.players.length >= SLITHER_MAX_PLAYERS)
+      return socket.emit("slither:error", `Sala cheia (max. ${SLITHER_MAX_PLAYERS} jogadores).`);
+
+    const maxBet = room.players.length >= 2 ? 20 : 50;
+    if (room.bet > maxBet) {
+      return socket.emit("slither:error", `Esta sala teria ${room.players.length + 1} jogadores. Aposta maxima: ${maxBet} creditos.`);
+    }
+
+    const user = db.findUser("id", socket.userId);
+    const player = onlinePlayers.get(socket.id);
+    if (!user || Number(user.bet_credits || 0) < room.bet)
+      return socket.emit("slither:error", "Creditos de aposta insuficientes.");
+    if (player?.inGame)
+      return socket.emit("slither:error", "Voce ja esta em uma partida.");
+
+    room.players.push(makeSlitherPlayer(socket, room.players.length, room.bet));
+    room.message = `${socket.username} entrou no Slither.`;
+    socket.join(roomId);
+    if (player) { player.inGame = true; player.roomId = roomId; player.game = "slither"; }
+    emitSlitherUpdate(room);
+    broadcastOnlineList();
+  });
+
+  socket.on("slither:start", ({ roomId }) => {
+    const room = slitherRooms.get(roomId);
+    if (!room || room.status !== "waiting") return;
+    if (room.hostSocketId !== socket.id)
+      return socket.emit("slither:error", "So o dono da sala pode iniciar.");
+    startSlitherRound(room, room.bet);
+  });
+
+  socket.on("slither:input", ({ roomId, angle }) => {
+    const room = slitherRooms.get(roomId);
+    if (!room || room.status !== "playing") return;
+    const player = room.players.find(item => item.socketId === socket.id);
+    if (!player || player.eliminated) return;
+    if (Number.isFinite(Number(angle))) {
+      player.targetAngle = normalizeAngle(Number(angle));
+    }
+  });
+
+  socket.on("slither:leave", ({ roomId }) => {
+    const room = slitherRooms.get(roomId);
+    if (!room) return;
+    removeSlitherPlayer(room, socket.id, `${socket.username} saiu da sala.`);
+    socket.leave(roomId);
+  });
+
+  socket.on("slither:spectate", ({ roomId }) => {
+    const room = slitherRooms.get(roomId);
+    if (!room || room.status !== "playing")
+      return socket.emit("slither:error", "Partida indisponivel para assistir.");
+    if (room.players.some(player => player.socketId === socket.id))
+      return emitSlitherUpdate(room);
+    const online = onlinePlayers.get(socket.id);
+    if (online?.inGame)
+      return socket.emit("slither:error", "Termine sua partida antes de assistir outra.");
+    room.spectators.add(socket.id);
+    socket.join(roomId);
+    socket.emit("slither:update", serializeSlitherRoom(room, socket.id));
+  });
+
+  socket.on("slither:unwatch", ({ roomId }) => {
+    const room = slitherRooms.get(roomId);
+    if (!room) return;
+    room.spectators?.delete(socket.id);
+    socket.leave(roomId);
+  });
+
   // ── Corrida de Cavalos ─────────────────────────────────────────────────
   socket.on("horse:create", ({ bet }) => {
     const tableBet = Math.max(5, Math.min(50, Number(bet) || 10));
@@ -2824,6 +3440,11 @@ io.on("connection", (socket) => {
       removeHeadSoccerPlayer(headRoom, socket.id, `${socket.username} desconectou.`);
     }
 
+    const slitherRoom = findSlitherRoomBySocket(socket.id);
+    if (slitherRoom) {
+      removeSlitherPlayer(slitherRoom, socket.id, `${socket.username} desconectou.`);
+    }
+
     const blackjackRoom = findBlackjackRoomBySocket(socket.id);
     if (blackjackRoom) {
       const participant = blackjackRoom.players.find(item => item.socketId === socket.id);
@@ -2907,7 +3528,15 @@ function broadcastOnlineList() {
   for (const [, p] of onlinePlayers) {
     const user = db.findUser("id", p.userId);
     p.avatar = user?.avatar || p.avatar || "";
-    list.push({ socketId: p.socketId, username: p.username, inGame: p.inGame, avatar: p.avatar });
+    list.push({
+      socketId: p.socketId,
+      username: p.username,
+      inGame: p.inGame,
+      avatar: p.avatar,
+      game: p.game || null,
+      roomId: p.roomId || null,
+      spectatable: p.game === "slither"
+    });
   }
   io.emit("online:list", list);
 }

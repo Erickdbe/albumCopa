@@ -902,6 +902,7 @@ const headSoccerRooms    = new Map();   // roomId -> head soccer em sala
 const slitherRooms       = new Map();   // roomId -> cobrinhas estilo slither
 const crashRooms         = new Map();   // roomId -> crash do aviao
 const artilleryRooms     = new Map();   // roomId -> artilharia por turnos
+const relicRooms         = new Map();   // roomId -> caca as reliquias em arena
 
 function ensureSpectators(room) {
   if (!room.spectators) room.spectators = new Set();
@@ -944,6 +945,9 @@ function clearSocketFromSpectatorRooms(socketId) {
   }
   for (const room of artilleryRooms.values()) {
     if (clearSpectator(room, socketId)) emitArtilleryUpdate(room);
+  }
+  for (const room of relicRooms.values()) {
+    if (clearSpectator(room, socketId)) emitRelicUpdate(room);
   }
 }
 
@@ -3511,6 +3515,442 @@ function removeArtilleryPlayer(room, socketId, reason = "") {
   broadcastOnlineList();
 }
 
+const RELIC_FIELD = {
+  width: 1320,
+  height: 820,
+  playerRadius: 18,
+  relicRadius: 12,
+  mineRadius: 18,
+  portalRadius: 28
+};
+const RELIC_MAX_PLAYERS = 8;
+const RELIC_GAME_MS = 90000;
+const RELIC_TICK_MS = 1000 / 20;
+const RELIC_COUNT = 18;
+const RELIC_MINE_COUNT = 10;
+const RELIC_PORTAL_COUNT = 4;
+const RELIC_SPEED = 270;
+const RELIC_COLORS = ["#35a7ff", "#f05a48", "#57d39b", "#f7c948", "#8f7cff", "#ff8c42", "#e75eb7", "#f5f2df"];
+const RELIC_VALUES = [
+  { value: 1, color: "#7dd3fc", radius: 10 },
+  { value: 2, color: "#57d39b", radius: 12 },
+  { value: 5, color: "#f7c948", radius: 15 }
+];
+
+function relicRandomPoint(margin = 64) {
+  return {
+    x: Math.round(margin + Math.random() * (RELIC_FIELD.width - margin * 2)),
+    y: Math.round(margin + Math.random() * (RELIC_FIELD.height - margin * 2))
+  };
+}
+
+function makeRelicItem() {
+  const roll = Math.random();
+  const type = roll > 0.92 ? RELIC_VALUES[2] : roll > 0.62 ? RELIC_VALUES[1] : RELIC_VALUES[0];
+  const point = relicRandomPoint(74);
+  return {
+    id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    x: point.x,
+    y: point.y,
+    value: type.value,
+    color: type.color,
+    radius: type.radius
+  };
+}
+
+function makeRelicMine() {
+  const point = relicRandomPoint(96);
+  return {
+    id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    x: point.x,
+    y: point.y,
+    radius: RELIC_FIELD.mineRadius
+  };
+}
+
+function makeRelicPortals() {
+  const spots = [
+    { x: 118, y: 122 },
+    { x: RELIC_FIELD.width - 118, y: 122 },
+    { x: 118, y: RELIC_FIELD.height - 122 },
+    { x: RELIC_FIELD.width - 118, y: RELIC_FIELD.height - 122 }
+  ];
+  return spots.map((spot, index) => ({
+    id: index,
+    x: spot.x,
+    y: spot.y,
+    toId: index < 2 ? index + 2 : index - 2,
+    color: index % 2 === 0 ? "#60d7ff" : "#c678dd"
+  }));
+}
+
+function makeRelicPlayer(socket, index, bet) {
+  return {
+    socketId: socket.id,
+    userId: socket.userId,
+    username: socket.username,
+    avatar: socket.avatar || "",
+    color: RELIC_COLORS[index % RELIC_COLORS.length],
+    bet,
+    score: 0,
+    collected: 0,
+    x: 0,
+    y: 0,
+    input: { x: 0, y: 0 },
+    stunnedUntil: 0,
+    invulnerableUntil: 0,
+    portalCooldownUntil: 0,
+    disconnected: false,
+    joinedAt: Date.now()
+  };
+}
+
+function positionRelicPlayers(room) {
+  const spots = [
+    { x: 150, y: 150 },
+    { x: RELIC_FIELD.width - 150, y: RELIC_FIELD.height - 150 },
+    { x: RELIC_FIELD.width - 150, y: 150 },
+    { x: 150, y: RELIC_FIELD.height - 150 },
+    { x: RELIC_FIELD.width / 2, y: 118 },
+    { x: RELIC_FIELD.width / 2, y: RELIC_FIELD.height - 118 },
+    { x: 118, y: RELIC_FIELD.height / 2 },
+    { x: RELIC_FIELD.width - 118, y: RELIC_FIELD.height / 2 }
+  ];
+  room.players.forEach((player, index) => {
+    const spot = spots[index % spots.length];
+    player.x = spot.x;
+    player.y = spot.y;
+    player.input = { x: 0, y: 0 };
+    player.stunnedUntil = 0;
+    player.invulnerableUntil = 0;
+    player.portalCooldownUntil = 0;
+    player.score = 0;
+    player.collected = 0;
+    player.disconnected = false;
+  });
+}
+
+function activeRelicPlayers(room) {
+  return room.players.filter(player => !player.disconnected);
+}
+
+function serializeRelicRoom(room, viewerSocketId) {
+  const now = Date.now();
+  const isSpectator = !room.players.some(player => player.socketId === viewerSocketId && !player.disconnected);
+  return {
+    roomId: room.roomId,
+    hostSocketId: room.hostSocketId,
+    hostUsername: room.hostUsername,
+    bet: room.bet,
+    status: room.status,
+    message: room.message,
+    field: RELIC_FIELD,
+    relics: room.relics || [],
+    mines: room.mines || [],
+    portals: room.portals || [],
+    gameEndsAt: room.gameEndsAt || null,
+    timeLeftMs: room.status === "playing" ? Math.max(0, Number(room.gameEndsAt || now) - now) : 0,
+    winnerSocketId: room.winnerSocketId || null,
+    isSpectator,
+    spectatorCount: roomSpectatorCount(room),
+    players: room.players.map((player, index) => ({
+      socketId: player.socketId,
+      username: player.username,
+      avatar: player.avatar || "",
+      color: player.color,
+      score: Math.max(0, Math.round(Number(player.score || 0))),
+      collected: Math.max(0, Math.round(Number(player.collected || 0))),
+      x: Math.round(Number(player.x || 0)),
+      y: Math.round(Number(player.y || 0)),
+      stunnedMs: Math.max(0, Number(player.stunnedUntil || 0) - now),
+      disconnected: Boolean(player.disconnected),
+      isHost: player.socketId === room.hostSocketId,
+      isMe: player.socketId === viewerSocketId,
+      order: index
+    }))
+  };
+}
+
+function emitRelicUpdate(room) {
+  const targets = new Set(activeRelicPlayers(room).map(player => player.socketId));
+  for (const spectatorId of room.spectators || []) targets.add(spectatorId);
+  targets.forEach(socketId => {
+    io.to(socketId).emit("relic:update", serializeRelicRoom(room, socketId));
+  });
+}
+
+function findRelicRoomBySocket(socketId) {
+  for (const room of relicRooms.values()) {
+    if (room.players.some(player => player.socketId === socketId && !player.disconnected) || room.spectators?.has(socketId)) return room;
+  }
+  return null;
+}
+
+function setRelicInput(player, input) {
+  let x = Number(input?.x || 0);
+  let y = Number(input?.y || 0);
+  if (!Number.isFinite(x)) x = 0;
+  if (!Number.isFinite(y)) y = 0;
+  const length = Math.hypot(x, y);
+  if (length > 1) {
+    x /= length;
+    y /= length;
+  }
+  player.input = {
+    x: clampNumber(x, -1, 1),
+    y: clampNumber(y, -1, 1)
+  };
+}
+
+function startRelicRound(room, requestedBet = room.bet) {
+  const maxBet = room.players.length >= 3 ? 20 : 50;
+  const tableBet = clampNumber(requestedBet, 5, maxBet);
+  if (room.players.length < 2) {
+    room.message = "Precisa de pelo menos 2 jogadores para iniciar.";
+    emitRelicUpdate(room);
+    return false;
+  }
+
+  for (const player of room.players) {
+    const user = db.findUser("id", player.userId);
+    if (!user || Number(user.bet_credits || 0) < tableBet) {
+      room.message = `${player.username} nao tem creditos para ${tableBet}.`;
+      emitRelicUpdate(room);
+      return false;
+    }
+  }
+
+  room.players.forEach((player, index) => {
+    const user = db.findUser("id", player.userId);
+    db.updateUser(player.userId, {
+      bet_credits: Math.max(0, Number(user.bet_credits || 0) - tableBet)
+    });
+    player.bet = tableBet;
+    player.color = RELIC_COLORS[index % RELIC_COLORS.length];
+  });
+
+  room.bet = tableBet;
+  room.pot = room.players.reduce((sum, player) => sum + Number(player.bet || tableBet || 0), 0);
+  room.status = "playing";
+  room.startedAt = Date.now();
+  room.gameEndsAt = room.startedAt + RELIC_GAME_MS;
+  room.winnerSocketId = null;
+  room.relics = Array.from({ length: RELIC_COUNT }, () => makeRelicItem());
+  room.mines = Array.from({ length: RELIC_MINE_COUNT }, () => makeRelicMine());
+  room.portals = makeRelicPortals();
+  room.message = "Partida iniciada. Pegue reliquias, use portais e evite as minas.";
+  positionRelicPlayers(room);
+
+  clearInterval(room.tickTimer);
+  room.lastTick = Date.now();
+  room.tickTimer = setInterval(() => tickRelicRoom(room), RELIC_TICK_MS);
+  emitRelicUpdate(room);
+  broadcastOnlineList();
+  return true;
+}
+
+function tickRelicRoom(room) {
+  if (!room || !relicRooms.has(room.roomId) || room.status !== "playing") return;
+
+  const now = Date.now();
+  const dt = Math.min((now - (room.lastTick || now)) / 1000, 0.08);
+  room.lastTick = now;
+
+  activeRelicPlayers(room).forEach(player => {
+    const stunned = now < Number(player.stunnedUntil || 0);
+    if (!stunned) {
+      const input = player.input || { x: 0, y: 0 };
+      player.x = clampNumber(Number(player.x || 0) + input.x * RELIC_SPEED * dt, RELIC_FIELD.playerRadius, RELIC_FIELD.width - RELIC_FIELD.playerRadius);
+      player.y = clampNumber(Number(player.y || 0) + input.y * RELIC_SPEED * dt, RELIC_FIELD.playerRadius, RELIC_FIELD.height - RELIC_FIELD.playerRadius);
+    }
+
+    for (let index = room.relics.length - 1; index >= 0; index -= 1) {
+      const relic = room.relics[index];
+      if (Math.hypot(player.x - relic.x, player.y - relic.y) > RELIC_FIELD.playerRadius + Number(relic.radius || RELIC_FIELD.relicRadius)) continue;
+      player.score = Math.max(0, Number(player.score || 0) + Number(relic.value || 1));
+      player.collected = Math.max(0, Number(player.collected || 0) + 1);
+      room.relics.splice(index, 1, makeRelicItem());
+      if (Number(relic.value || 1) >= 5) {
+        room.message = `${player.username} achou uma reliquia dourada.`;
+      }
+    }
+
+    if (now > Number(player.invulnerableUntil || 0)) {
+      const mine = room.mines.find(item => Math.hypot(player.x - item.x, player.y - item.y) <= RELIC_FIELD.playerRadius + Number(item.radius || RELIC_FIELD.mineRadius));
+      if (mine) {
+        player.score = Math.max(0, Number(player.score || 0) - 2);
+        player.stunnedUntil = now + 850;
+        player.invulnerableUntil = now + 1350;
+        Object.assign(mine, makeRelicMine(), { id: mine.id });
+        room.message = `${player.username} caiu em uma mina e perdeu 2 pontos.`;
+      }
+    }
+
+    if (now > Number(player.portalCooldownUntil || 0)) {
+      const portal = room.portals.find(item => Math.hypot(player.x - item.x, player.y - item.y) <= RELIC_FIELD.playerRadius + RELIC_FIELD.portalRadius);
+      if (portal) {
+        const target = room.portals.find(item => item.id === portal.toId);
+        if (target) {
+          const angle = Math.random() * Math.PI * 2;
+          player.x = clampNumber(target.x + Math.cos(angle) * 48, RELIC_FIELD.playerRadius, RELIC_FIELD.width - RELIC_FIELD.playerRadius);
+          player.y = clampNumber(target.y + Math.sin(angle) * 48, RELIC_FIELD.playerRadius, RELIC_FIELD.height - RELIC_FIELD.playerRadius);
+          player.portalCooldownUntil = now + 1400;
+        }
+      }
+    }
+  });
+
+  if (now >= Number(room.gameEndsAt || 0)) {
+    finishRelicRoom(room, "Tempo encerrado.");
+    return;
+  }
+
+  emitRelicUpdate(room);
+}
+
+function finishRelicRoom(room, reason = "") {
+  if (!room || room.status === "finished") return;
+
+  clearInterval(room.tickTimer);
+  room.tickTimer = null;
+  room.status = "finished";
+  room.gameEndsAt = null;
+
+  const ranked = activeRelicPlayers(room)
+    .slice()
+    .sort((a, b) => {
+      if (Number(b.score || 0) !== Number(a.score || 0)) return Number(b.score || 0) - Number(a.score || 0);
+      if (Number(b.collected || 0) !== Number(a.collected || 0)) return Number(b.collected || 0) - Number(a.collected || 0);
+      return Number(a.joinedAt || 0) - Number(b.joinedAt || 0);
+    });
+  const winner = ranked[0] || null;
+  room.winnerSocketId = winner?.socketId || null;
+
+  const totalPot = Number(room.pot || 0) || room.players.reduce((sum, player) => sum + Number(player.bet || room.bet || 0), 0);
+  if (winner) {
+    const user = db.findUser("id", winner.userId);
+    if (user) {
+      db.updateUser(winner.userId, {
+        bet_credits: Number(user.bet_credits || 0) + totalPot
+      });
+      addExchangeWin(winner.userId);
+    }
+    room.message = `${reason ? `${reason} ` : ""}${winner.username} venceu o Relic Rush com ${winner.score} pontos e levou ${totalPot} creditos.`;
+  } else {
+    room.message = `${reason ? `${reason} ` : ""}Relic Rush encerrado sem vencedor.`;
+  }
+  resetExchangeLosses(room.players.map(player => player.userId), winner ? [winner.userId] : []);
+
+  const targets = new Set(activeRelicPlayers(room).map(player => player.socketId));
+  for (const spectatorId of room.spectators || []) targets.add(spectatorId);
+  targets.forEach(socketId => {
+    const participant = room.players.find(player => player.socketId === socketId && !player.disconnected);
+    io.to(socketId).emit("relic:finished", {
+      room: serializeRelicRoom(room, socketId),
+      updatedUser: participant ? safeUser(db.findUser("id", participant.userId)) : null
+    });
+    const liveSocket = io.sockets.sockets.get(socketId);
+    if (liveSocket) liveSocket.leave(room.roomId);
+  });
+
+  room.players.forEach(player => {
+    const online = onlinePlayers.get(player.socketId);
+    if (online && online.roomId === room.roomId) {
+      online.inGame = false;
+      online.roomId = null;
+      online.game = null;
+    }
+  });
+
+  relicRooms.delete(room.roomId);
+  broadcastOnlineList();
+}
+
+function cancelRelicRoom(room, reason = "Sala de Relic Rush cancelada.") {
+  if (!room) return;
+  clearInterval(room.tickTimer);
+
+  if (room.status === "playing") {
+    activeRelicPlayers(room).forEach(player => {
+      const user = db.findUser("id", player.userId);
+      if (user) {
+        db.updateUser(player.userId, {
+          bet_credits: Number(user.bet_credits || 0) + Number(player.bet || room.bet || 0)
+        });
+      }
+    });
+  }
+
+  const targets = new Set(activeRelicPlayers(room).map(player => player.socketId));
+  for (const spectatorId of room.spectators || []) targets.add(spectatorId);
+  targets.forEach(socketId => {
+    io.to(socketId).emit("relic:cancelled", { message: reason });
+    const participant = room.players.find(player => player.socketId === socketId && !player.disconnected);
+    if (participant) {
+      const online = onlinePlayers.get(socketId);
+      if (online && online.roomId === room.roomId) {
+        online.inGame = false;
+        online.roomId = null;
+        online.game = null;
+      }
+    }
+    const liveSocket = io.sockets.sockets.get(socketId);
+    if (liveSocket) liveSocket.leave(room.roomId);
+  });
+
+  relicRooms.delete(room.roomId);
+  broadcastOnlineList();
+}
+
+function removeRelicPlayer(room, socketId, reason = "") {
+  const player = room.players.find(item => item.socketId === socketId && !item.disconnected);
+  if (!player) {
+    clearSpectator(room, socketId);
+    emitRelicUpdate(room);
+    broadcastOnlineList();
+    return;
+  }
+
+  const online = onlinePlayers.get(socketId);
+  if (online && online.roomId === room.roomId) {
+    online.inGame = false;
+    online.roomId = null;
+    online.game = null;
+  }
+  const liveSocket = io.sockets.sockets.get(socketId);
+  if (liveSocket) liveSocket.leave(room.roomId);
+
+  if (room.status === "playing") {
+    player.disconnected = true;
+    player.input = { x: 0, y: 0 };
+    resetExchangeWinStreak(player.userId);
+    room.message = reason || `${player.username} saiu e perdeu a exploracao.`;
+    if (activeRelicPlayers(room).length <= 1) {
+      finishRelicRoom(room, room.message);
+      return;
+    }
+    emitRelicUpdate(room);
+    broadcastOnlineList();
+    return;
+  }
+
+  room.players = room.players.filter(item => item.socketId !== socketId);
+  if (!room.players.length) {
+    relicRooms.delete(room.roomId);
+    broadcastOnlineList();
+    return;
+  }
+
+  if (room.hostSocketId === socketId) {
+    room.hostSocketId = room.players[0].socketId;
+    room.hostUsername = room.players[0].username;
+  }
+  room.players.forEach((item, index) => { item.color = RELIC_COLORS[index % RELIC_COLORS.length]; });
+  room.message = reason || `${player.username} saiu da sala.`;
+  emitRelicUpdate(room);
+  broadcastOnlineList();
+}
+
 io.on("connection", (socket) => {
   console.log(`[+] ${socket.username} conectado`);
   const connectedUser = normalizeUserProgress(db.findUser("id", socket.userId));
@@ -3683,6 +4123,12 @@ io.on("connection", (socket) => {
     if (artilleryRoom) {
       artilleryRoom.players.forEach(player => targets.add(player.socketId));
       for (const spectatorId of artilleryRoom.spectators || []) targets.add(spectatorId);
+    }
+
+    const relicRoom = findRelicRoomBySocket(socket.id);
+    if (relicRoom) {
+      activeRelicPlayers(relicRoom).forEach(player => targets.add(player.socketId));
+      for (const spectatorId of relicRoom.spectators || []) targets.add(spectatorId);
     }
 
     if (p?.roomId) {
@@ -4658,6 +5104,135 @@ io.on("connection", (socket) => {
     broadcastOnlineList();
   });
 
+  // Relic Rush
+  socket.on("relic:create", ({ bet }) => {
+    const tableBet = clampNumber(bet || 10, 5, 50);
+    const user = db.findUser("id", socket.userId);
+    const player = onlinePlayers.get(socket.id);
+    if (!user || Number(user.bet_credits || 0) < tableBet)
+      return socket.emit("relic:error", "Creditos de aposta insuficientes.");
+    if (player?.inGame)
+      return socket.emit("relic:error", "Voce ja esta em uma partida.");
+
+    const roomId = `relic-${Date.now()}-${socket.id}`;
+    const room = {
+      roomId,
+      hostSocketId: socket.id,
+      hostUsername: socket.username,
+      bet: tableBet,
+      pot: tableBet,
+      status: "waiting",
+      gameEndsAt: null,
+      winnerSocketId: null,
+      tickTimer: null,
+      lastTick: Date.now(),
+      relics: [],
+      mines: [],
+      portals: makeRelicPortals(),
+      spectators: new Set(),
+      message: "Sala aberta. Entre na expedicao e colete reliquias.",
+      players: [makeRelicPlayer(socket, 0, tableBet)]
+    };
+    positionRelicPlayers(room);
+    relicRooms.set(roomId, room);
+    socket.join(roomId);
+    if (player) { player.inGame = true; player.roomId = roomId; player.game = "relic"; }
+
+    for (const [, target] of onlinePlayers) {
+      if (target.socketId !== socket.id && !target.inGame) {
+        io.to(target.socketId).emit("relic:invite", { roomId, fromUsername: socket.username, bet: tableBet });
+      }
+    }
+
+    emitRelicUpdate(room);
+    broadcastOnlineList();
+  });
+
+  socket.on("relic:join", ({ roomId }) => {
+    const room = relicRooms.get(roomId);
+    if (!room || room.status !== "waiting")
+      return socket.emit("relic:error", "Sala indisponivel.");
+    if (room.players.some(player => player.socketId === socket.id))
+      return emitRelicUpdate(room);
+    if (room.players.length >= RELIC_MAX_PLAYERS)
+      return socket.emit("relic:error", `Sala cheia (max. ${RELIC_MAX_PLAYERS} jogadores).`);
+
+    const maxBet = room.players.length >= 2 ? 20 : 50;
+    if (room.bet > maxBet) {
+      return socket.emit("relic:error", `Esta sala teria ${room.players.length + 1} jogadores. Aposta maxima: ${maxBet} creditos.`);
+    }
+
+    const user = db.findUser("id", socket.userId);
+    const player = onlinePlayers.get(socket.id);
+    if (!user || Number(user.bet_credits || 0) < room.bet)
+      return socket.emit("relic:error", "Creditos de aposta insuficientes.");
+    if (player?.inGame)
+      return socket.emit("relic:error", "Voce ja esta em uma partida.");
+
+    room.players.push(makeRelicPlayer(socket, room.players.length, room.bet));
+    positionRelicPlayers(room);
+    room.message = `${socket.username} entrou no Relic Rush.`;
+    socket.join(roomId);
+    if (player) { player.inGame = true; player.roomId = roomId; player.game = "relic"; }
+    emitRelicUpdate(room);
+    broadcastOnlineList();
+  });
+
+  socket.on("relic:start", ({ roomId }) => {
+    const room = relicRooms.get(roomId);
+    if (!room || room.status !== "waiting") return;
+    if (room.hostSocketId !== socket.id)
+      return socket.emit("relic:error", "So o dono da sala pode iniciar.");
+    startRelicRound(room, room.bet);
+  });
+
+  socket.on("relic:input", ({ roomId, input }) => {
+    const room = relicRooms.get(roomId);
+    if (!room || room.status !== "playing") return;
+    const player = room.players.find(item => item.socketId === socket.id && !item.disconnected);
+    if (!player) return;
+    setRelicInput(player, input);
+  });
+
+  socket.on("relic:leave", ({ roomId }) => {
+    const room = relicRooms.get(roomId);
+    if (!room) return;
+    if (room.spectators?.has(socket.id)) {
+      clearSpectator(room, socket.id);
+      emitRelicUpdate(room);
+      broadcastOnlineList();
+      return;
+    }
+    if (room.status === "waiting" && room.hostSocketId === socket.id) {
+      cancelRelicRoom(room, "O dono cancelou o Relic Rush.");
+      return;
+    }
+    removeRelicPlayer(room, socket.id, `${socket.username} saiu do Relic Rush.`);
+  });
+
+  socket.on("relic:spectate", ({ roomId }) => {
+    const room = relicRooms.get(roomId);
+    if (!room || room.status !== "playing")
+      return socket.emit("relic:error", "Partida indisponivel para assistir.");
+    if (room.players.some(player => player.socketId === socket.id && !player.disconnected))
+      return emitRelicUpdate(room);
+    const online = onlinePlayers.get(socket.id);
+    if (online?.inGame)
+      return socket.emit("relic:error", "Termine sua partida antes de assistir outra.");
+    ensureSpectators(room).add(socket.id);
+    socket.join(roomId);
+    emitRelicUpdate(room);
+    broadcastOnlineList();
+  });
+
+  socket.on("relic:unwatch", ({ roomId }) => {
+    const room = relicRooms.get(roomId);
+    if (!room) return;
+    clearSpectator(room, socket.id);
+    emitRelicUpdate(room);
+    broadcastOnlineList();
+  });
+
   socket.on("horse:create", ({ bet }) => {
     const tableBet = Math.max(5, Math.min(50, Number(bet) || 10));
     const user = db.findUser("id", socket.userId);
@@ -4906,6 +5481,15 @@ io.on("connection", (socket) => {
       }
     }
 
+    const relicRoom = findRelicRoomBySocket(socket.id);
+    if (relicRoom) {
+      if (relicRoom.status === "waiting" && relicRoom.hostSocketId === socket.id) {
+        cancelRelicRoom(relicRoom, `${socket.username} cancelou o Relic Rush.`);
+      } else {
+        removeRelicPlayer(relicRoom, socket.id, `${socket.username} desconectou do Relic Rush.`);
+      }
+    }
+
     const blackjackRoom = findBlackjackRoomBySocket(socket.id);
     if (blackjackRoom) {
       const participant = blackjackRoom.players.find(item => item.socketId === socket.id);
@@ -4999,6 +5583,7 @@ function getSpectatableRoom(game, roomId) {
   if (game === "horse") return horseRooms.get(roomId) || null;
   if (game === "crash") return crashRooms.get(roomId) || null;
   if (game === "artillery") return artilleryRooms.get(roomId) || null;
+  if (game === "relic") return relicRooms.get(roomId) || null;
   return null;
 }
 

@@ -761,6 +761,61 @@
       font-weight: 900;
     }
 
+    .relic-side-button {
+      position: relative;
+      width: 100%;
+      min-height: 72px;
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 10px;
+      margin-top: 8px;
+      padding: 12px;
+      overflow: hidden;
+      border: 0;
+      border-radius: var(--radius);
+      color: #fff9e8;
+      background:
+        radial-gradient(circle at 78% 28%, rgba(247,201,72,.92) 0 10px, transparent 12px),
+        radial-gradient(circle at 52% 66%, rgba(96,215,255,.74) 0 13px, transparent 15px),
+        linear-gradient(135deg, #0f5147, #263a72 58%, #31274e);
+      box-shadow: 0 14px 28px rgba(29, 68, 80, 0.24);
+      cursor: pointer;
+      font-weight: 950;
+      text-align: left;
+    }
+
+    .relic-side-button::after {
+      content: "";
+      position: absolute;
+      right: 16px;
+      bottom: 14px;
+      width: 76px;
+      height: 46px;
+      clip-path: polygon(50% 0, 86% 30%, 70% 100%, 30% 100%, 14% 30%);
+      background: linear-gradient(145deg, #f7c948, #60d7ff 48%, #8f7cff);
+      box-shadow: 0 0 24px rgba(247,201,72,.42);
+      opacity: .9;
+      transform: rotate(9deg);
+    }
+
+    .relic-side-button span,
+    .relic-side-button small {
+      position: relative;
+      z-index: 2;
+    }
+
+    .relic-side-button span {
+      font-size: 1.02rem;
+      text-transform: uppercase;
+    }
+
+    .relic-side-button small {
+      color: rgba(255, 249, 232, 0.82);
+      font-size: 0.72rem;
+      font-weight: 900;
+    }
+
     .filter-group {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
@@ -2875,6 +2930,7 @@
     .slither-open-btn { background: #3b4f96; }
     .crash-open-btn { background: linear-gradient(135deg, #c0392b, #f39c12); }
     .artillery-open-btn { background: linear-gradient(135deg, #254b6d, #a43f4b); }
+    .relic-open-btn { background: linear-gradient(135deg, #0f8b74, #3b4f96); }
     .lobby-limit-note {
       display: block;
       margin: 0 0 8px;
@@ -3457,6 +3513,181 @@
     @media (max-width: 900px) {
       .artillery-main { grid-template-columns: 1fr; }
       .artillery-canvas { min-height: 300px; }
+    }
+
+    .relic-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      color: #fff9e8;
+      background: rgba(4, 12, 18, 0.84);
+      backdrop-filter: blur(6px);
+    }
+
+    .relic-overlay.hidden {
+      display: none;
+    }
+
+    .relic-table {
+      width: min(1180px, 98vw);
+      max-height: calc(100vh - 32px);
+      display: grid;
+      gap: 12px;
+      padding: 14px;
+      overflow: auto;
+      border: 2px solid rgba(96, 215, 255, 0.34);
+      border-radius: 12px;
+      background:
+        radial-gradient(circle at 12% 0%, rgba(247,201,72,.14), transparent 18rem),
+        radial-gradient(circle at 92% 16%, rgba(96,215,255,.14), transparent 16rem),
+        linear-gradient(145deg, #102225, #11152a);
+      box-shadow: 0 24px 76px rgba(0, 0, 0, 0.48);
+    }
+
+    .relic-top,
+    .relic-scorebar,
+    .relic-actions {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .relic-top h3 {
+      margin: 0;
+      font-size: 1.18rem;
+      text-transform: uppercase;
+    }
+
+    .relic-top span,
+    .relic-scorebar span {
+      color: rgba(255, 249, 232, 0.72);
+      font-size: .8rem;
+      font-weight: 850;
+    }
+
+    .relic-message {
+      min-height: 38px;
+      padding: 10px 12px;
+      border: 1px solid rgba(255, 248, 232, 0.12);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.07);
+      font-size: .86rem;
+      font-weight: 850;
+    }
+
+    .relic-main {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 270px;
+      gap: 12px;
+      min-height: 0;
+    }
+
+    .relic-field-shell {
+      position: relative;
+      min-width: 0;
+      overflow: hidden;
+      border: 2px solid rgba(255, 248, 232, 0.16);
+      border-radius: 10px;
+      background: #081018;
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,.06);
+    }
+
+    .relic-canvas {
+      width: 100%;
+      aspect-ratio: 1320 / 820;
+      min-height: 390px;
+      display: block;
+      touch-action: none;
+      background: #071016;
+    }
+
+    .relic-taunt-layer {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+    }
+
+    .relic-panel {
+      display: grid;
+      align-content: start;
+      gap: 10px;
+      padding: 12px;
+      border: 1px solid rgba(255, 248, 232, 0.12);
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.07);
+    }
+
+    .relic-actions .mp-btn {
+      width: auto;
+      min-width: 100px;
+      padding: 9px 14px;
+      font-size: .84rem;
+    }
+
+    .relic-players {
+      display: grid;
+      gap: 7px;
+      max-height: 360px;
+      overflow: auto;
+    }
+
+    .relic-player-row {
+      display: grid;
+      grid-template-columns: 10px minmax(0, 1fr) auto;
+      gap: 8px;
+      align-items: center;
+      padding: 8px;
+      border: 1px solid rgba(255, 248, 232, 0.10);
+      border-radius: 8px;
+      background: rgba(0, 0, 0, 0.18);
+    }
+
+    .relic-player-row.is-me {
+      border-color: rgba(96, 215, 255, 0.62);
+      background: rgba(96, 215, 255, 0.10);
+    }
+
+    .relic-player-row.is-winner {
+      box-shadow: inset 0 0 0 2px rgba(247, 201, 72, 0.46);
+    }
+
+    .relic-player-row.is-out {
+      opacity: .58;
+      filter: grayscale(.42);
+    }
+
+    .relic-color-dot {
+      width: 10px;
+      height: 30px;
+      border-radius: 999px;
+      background: var(--relic-color);
+      box-shadow: 0 0 12px var(--relic-color);
+    }
+
+    .relic-player-row strong,
+    .relic-player-row small {
+      display: block;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .relic-player-row small {
+      color: rgba(255, 249, 232, 0.65);
+      font-size: .72rem;
+      font-weight: 850;
+    }
+
+    @media (max-width: 900px) {
+      .relic-main { grid-template-columns: 1fr; }
+      .relic-canvas { min-height: 310px; }
     }
 
     /* Waiting overlay (esperando oponente aceitar) */
@@ -4717,6 +4948,10 @@
             <span>CanhÃ£o Arena</span>
             <small>Angulo e forÃ§a</small>
           </button>
+          <button class="relic-side-button" id="openRelicGame" type="button">
+            <span>Relic Rush</span>
+            <small>Reliquias e portais</small>
+          </button>
           <button class="blackjack-side-button" id="openBlackjackGame" type="button">
             <span>Mesa 21</span>
             <small>Cartas online</small>
@@ -4827,6 +5062,7 @@
         <button class="mp-btn slither-open-btn" type="button" onclick="createSlitherRoom()">Slither</button>
         <button class="mp-btn crash-open-btn" type="button" onclick="createCrashRoom()">Crash</button>
         <button class="mp-btn artillery-open-btn" type="button" onclick="createArtilleryRoom()">Canhao</button>
+        <button class="mp-btn relic-open-btn" type="button" onclick="createRelicRoom()">Relic Rush</button>
         <button class="mp-btn blackjack-open-btn" type="button" onclick="createBlackjackRoom()">Mesa 21</button>
         <button class="mp-btn horse-open-btn" type="button" onclick="createHorseRoom()">🏇 Corrida</button>
       </div>
@@ -5061,6 +5297,57 @@
             <button class="button-emoji-btn" type="button" onclick="sendTaunt('ðŸ’¥')">ðŸ’¥</button>
             <button class="button-emoji-btn" type="button" onclick="sendTaunt('ðŸ”¥')">ðŸ”¥</button>
             <button class="button-emoji-btn" type="button" onclick="sendTaunt('ðŸ¤¡')">ðŸ¤¡</button>
+          </div>
+        </aside>
+      </div>
+    </div>
+  </div>
+
+  <div class="challenge-toast hidden" id="relicInviteToast">
+    <h4>Relic Rush</h4>
+    <p id="relicInviteMsg"></p>
+    <div class="challenge-toast-btns">
+      <button class="btn-accept" onclick="acceptRelicInvite()">Entrar</button>
+      <button class="btn-reject" onclick="rejectRelicInvite()">Agora nao</button>
+    </div>
+  </div>
+
+  <div class="relic-overlay hidden" id="relicOverlay">
+    <div class="relic-table">
+      <div class="relic-top">
+        <div>
+          <h3>Relic Rush</h3>
+          <span id="relicBetLabel">Aposta: 0</span>
+        </div>
+        <button class="mp-btn" style="width:auto;padding:8px 16px" type="button" onclick="leaveRelicRoom()">Fechar</button>
+      </div>
+
+      <div class="relic-scorebar">
+        <span id="relicStatusLabel">Aguardando sala</span>
+        <strong id="relicTimerLabel">0s</strong>
+        <span id="relicSpectatorLabel">0 assistindo</span>
+      </div>
+
+      <div class="relic-message" id="relicMessage">Aguardando sala.</div>
+
+      <div class="relic-main">
+        <div class="relic-field-shell" id="relicFieldShell">
+          <canvas class="relic-canvas" id="relicCanvas" width="1320" height="820"></canvas>
+          <div class="relic-taunt-layer" id="relicTauntLayer"></div>
+        </div>
+
+        <aside class="relic-panel">
+          <div class="relic-actions">
+            <button class="mp-btn" id="relicStartBtn" type="button" onclick="startRelicRound()">Comecar</button>
+            <button class="mp-btn" id="relicLeaveBtn" type="button" onclick="leaveRelicRoom()">Sair</button>
+          </div>
+          <div class="relic-players" id="relicPlayers"></div>
+          <div class="button-emoji-bar">
+            <button class="button-emoji-btn" type="button" onclick="sendTaunt('&#128514;')">&#128514;</button>
+            <button class="button-emoji-btn" type="button" onclick="sendTaunt('&#127919;')">&#127919;</button>
+            <button class="button-emoji-btn" type="button" onclick="sendTaunt('&#128142;')">&#128142;</button>
+            <button class="button-emoji-btn" type="button" onclick="sendTaunt('&#9889;')">&#9889;</button>
+            <button class="button-emoji-btn" type="button" onclick="sendTaunt('&#128293;')">&#128293;</button>
           </div>
         </aside>
       </div>
@@ -5623,6 +5910,7 @@
     const openSlitherGame = document.getElementById("openSlitherGame");
     const openCrashGame = document.getElementById("openCrashGame");
     const openArtilleryGame = document.getElementById("openArtilleryGame");
+    const openRelicGame = document.getElementById("openRelicGame");
     const openBlackjackGame = document.getElementById("openBlackjackGame");
     const openMarket = document.getElementById("openMarket");
     const marketOverlay = document.getElementById("marketOverlay");
@@ -5681,6 +5969,8 @@
     const artilleryPower = document.getElementById("artilleryPower");
     const artilleryAngleValue = document.getElementById("artilleryAngleValue");
     const artilleryPowerValue = document.getElementById("artilleryPowerValue");
+    const relicCanvas = document.getElementById("relicCanvas");
+    const relicCtx = relicCanvas.getContext("2d");
     const FIELD = {
       width: 1500,
       height: 675,
@@ -7265,6 +7555,7 @@
     openSlitherGame.addEventListener("click", openSlitherFromSidebar);
     openCrashGame.addEventListener("click", openCrashFromSidebar);
     openArtilleryGame.addEventListener("click", openArtilleryFromSidebar);
+    openRelicGame.addEventListener("click", openRelicFromSidebar);
     openBlackjackGame.addEventListener("click", openBlackjackFromSidebar);
     openMarket.addEventListener("click", openMarketplace);
     closeMarket.addEventListener("click", closeMarketplace);
@@ -7453,6 +7744,14 @@
       artilleryRenderId: 0,
       artilleryLastShotId: null,
       artilleryShotAnimation: null,
+      relicInviteRoomId: null,
+      relicRoomId: null,
+      relicRoom: null,
+      relicRenderId: 0,
+      relicKeys: new Set(),
+      relicPointerActive: false,
+      relicPointerInput: { x: 0, y: 0 },
+      relicLastInputAt: 0,
       headInviteRoomId: null,
       headRoomId: null,
       headRoom: null,
@@ -7977,6 +8276,37 @@
         showToast(msg || "Nao foi possivel jogar Canhao Arena.");
       });
 
+      mp.socket.on("relic:invite", ({ roomId, fromUsername, bet }) => {
+        mp.relicInviteRoomId = roomId;
+        document.getElementById("relicInviteMsg").textContent =
+          `${fromUsername} abriu uma sala de Relic Rush. Aposta: ${bet} creditos.`;
+        document.getElementById("relicInviteToast").classList.remove("hidden");
+      });
+
+      mp.socket.on("relic:update", (room) => {
+        renderRelicRoom(room);
+      });
+
+      mp.socket.on("relic:finished", ({ room, updatedUser }) => {
+        if (updatedUser) {
+          applyServerData(updatedUser);
+        }
+        renderRelicRoom(room);
+        renderBetPanel();
+        updateLobbyHeader();
+        showToast(room.message || "Relic Rush encerrado.");
+      });
+
+      mp.socket.on("relic:cancelled", ({ message }) => {
+        closeRelicOverlay(true);
+        showToast(message || "Sala de Relic Rush cancelada.");
+        updateLobbyHeader();
+      });
+
+      mp.socket.on("relic:error", (msg) => {
+        showToast(msg || "Nao foi possivel jogar Relic Rush.");
+      });
+
       mp.socket.on("market:sold", ({ listing, buyer, updatedUser }) => {
         if (updatedUser) {
           applyServerData(updatedUser);
@@ -8066,7 +8396,8 @@
         slither: "Slither",
         horse: "Corrida",
         crash: "Crash",
-        artillery: "Canhao Arena"
+        artillery: "Canhao Arena",
+        relic: "Relic Rush"
       };
       return labels[game] || "Em jogo";
     }
@@ -8867,7 +9198,7 @@
 
     function sendTaunt(emoji) {
       emoji = normalizeTauntEmoji(emoji);
-      const hasActiveRoom = mp.roomId || mp.blackjackRoomId || mp.horseRoomId || mp.buttonRoomId || mp.headRoomId || mp.slitherRoomId || mp.crashRoomId || mp.artilleryRoomId;
+      const hasActiveRoom = mp.roomId || mp.blackjackRoomId || mp.horseRoomId || mp.buttonRoomId || mp.headRoomId || mp.slitherRoomId || mp.crashRoomId || mp.artilleryRoomId || mp.relicRoomId;
       if (!emoji || !mp.socket?.connected || !hasActiveRoom) return;
 
       const payload = { emoji };
@@ -8907,6 +9238,15 @@
         const me = getArtilleryMe();
         if (me) {
           payload.game = "artillery";
+          payload.x = me.x;
+          payload.y = me.y - 34;
+        }
+      }
+
+      if (mp.relicRoom && !document.getElementById("relicOverlay").classList.contains("hidden")) {
+        const me = getRelicMe();
+        if (me) {
+          payload.game = "relic";
           payload.x = me.x;
           payload.y = me.y - 34;
         }
@@ -9000,6 +9340,27 @@
         el.style.setProperty("--x", `${(x / field.width) * 100}%`);
         el.style.setProperty("--y", `${(y / field.height) * 100}%`);
         artilleryLayer.appendChild(el);
+        setTimeout(() => el.remove(), 1700);
+        return;
+      }
+
+      const relicOverlay = document.getElementById("relicOverlay");
+      const relicLayer = document.getElementById("relicTauntLayer");
+      if (relicLayer && mp.relicRoom && !relicOverlay.classList.contains("hidden")) {
+        const field = mp.relicRoom.field || { width: 1320, height: 820 };
+        let x = Number(payload.x);
+        let y = Number(payload.y);
+        if (!Number.isFinite(x) || !Number.isFinite(y)) {
+          const player = mp.relicRoom.players?.find(item => item.socketId === payload.fromSocketId) || getRelicMe();
+          x = player?.x ?? field.width / 2;
+          y = (player?.y ?? field.height / 2) - 34;
+        }
+        const el = document.createElement("span");
+        el.className = "taunt-pop";
+        el.textContent = emoji;
+        el.style.setProperty("--x", `${(x / field.width) * 100}%`);
+        el.style.setProperty("--y", `${(y / field.height) * 100}%`);
+        relicLayer.appendChild(el);
         setTimeout(() => el.remove(), 1700);
         return;
       }
@@ -10562,6 +10923,415 @@
     artilleryPower.addEventListener("input", updateArtilleryControlLabels);
     updateArtilleryControlLabels();
 
+    function openRelicFromSidebar() {
+      if (!mp.isOnline) {
+        showToast("Faca login para abrir o Relic Rush.");
+        document.getElementById("authOverlay").classList.remove("hidden");
+        return;
+      }
+      openLobby();
+      window.setTimeout(() => {
+        document.querySelector("[onclick='createRelicRoom()']")?.focus();
+      }, 0);
+    }
+
+    function createRelicRoom() {
+      if (!mp.isOnline) {
+        showToast("Faca login para abrir uma sala.");
+        document.getElementById("authOverlay").classList.remove("hidden");
+        return;
+      }
+      const bet = Number(document.getElementById("myBetInput").value) || 10;
+      if (bet < 5) { showToast("Aposta minima: 5 creditos."); return; }
+      if (bet > state.betCredits) { showToast("Creditos de aposta insuficientes."); return; }
+      mp.socket.emit("relic:create", { bet });
+      document.getElementById("lobbyOverlay").classList.add("hidden");
+    }
+
+    function acceptRelicInvite() {
+      if (!mp.relicInviteRoomId) return;
+      document.getElementById("relicInviteToast").classList.add("hidden");
+      mp.socket.emit("relic:join", { roomId: mp.relicInviteRoomId });
+      mp.relicInviteRoomId = null;
+    }
+
+    function rejectRelicInvite() {
+      mp.relicInviteRoomId = null;
+      document.getElementById("relicInviteToast").classList.add("hidden");
+    }
+
+    function startRelicRound() {
+      if (!mp.relicRoomId) return;
+      if (mp.relicRoom?.isSpectator) {
+        showToast("Voce esta assistindo esta partida.");
+        return;
+      }
+      if (mp.relicRoom?.status === "finished") {
+        const bet = Number(mp.relicRoom.bet || document.getElementById("myBetInput").value || 10);
+        closeRelicOverlay(true);
+        mp.socket.emit("relic:create", { bet });
+        return;
+      }
+      mp.socket.emit("relic:start", { roomId: mp.relicRoomId });
+    }
+
+    function leaveRelicRoom() {
+      if (mp.relicRoomId && mp.relicRoom?.status !== "finished") {
+        sendRelicInput(true, { x: 0, y: 0 });
+        mp.socket?.emit(mp.relicRoom?.isSpectator ? "relic:unwatch" : "relic:leave", { roomId: mp.relicRoomId });
+      }
+      closeRelicOverlay(false);
+    }
+
+    function closeRelicOverlay(fromServer = false) {
+      document.getElementById("relicOverlay").classList.add("hidden");
+      document.getElementById("relicInviteToast").classList.add("hidden");
+      document.getElementById("relicTauntLayer").innerHTML = "";
+      if (mp.relicRenderId) {
+        cancelAnimationFrame(mp.relicRenderId);
+        mp.relicRenderId = 0;
+      }
+      mp.relicInviteRoomId = null;
+      mp.relicRoomId = null;
+      mp.relicRoom = null;
+      mp.relicKeys.clear();
+      mp.relicPointerActive = false;
+      mp.relicPointerInput = { x: 0, y: 0 };
+      mp.relicLastInputAt = 0;
+      if (!fromServer) updateLobbyHeader();
+    }
+
+    function getRelicMe() {
+      return mp.relicRoom?.players?.find(player => player.isMe && !player.disconnected) || null;
+    }
+
+    function relicOverlayIsOpen() {
+      return !document.getElementById("relicOverlay").classList.contains("hidden");
+    }
+
+    function relicInputFromKeys() {
+      if (mp.relicPointerActive) return mp.relicPointerInput || { x: 0, y: 0 };
+      const left = mp.relicKeys.has("ArrowLeft") || mp.relicKeys.has("a") || mp.relicKeys.has("A");
+      const right = mp.relicKeys.has("ArrowRight") || mp.relicKeys.has("d") || mp.relicKeys.has("D");
+      const up = mp.relicKeys.has("ArrowUp") || mp.relicKeys.has("w") || mp.relicKeys.has("W");
+      const down = mp.relicKeys.has("ArrowDown") || mp.relicKeys.has("s") || mp.relicKeys.has("S");
+      let x = (right ? 1 : 0) - (left ? 1 : 0);
+      let y = (down ? 1 : 0) - (up ? 1 : 0);
+      const length = Math.hypot(x, y);
+      if (length > 1) {
+        x /= length;
+        y /= length;
+      }
+      return { x, y };
+    }
+
+    function sendRelicInput(force = false, input = null) {
+      if (!mp.relicRoomId || !mp.socket?.connected || mp.relicRoom?.status !== "playing" || mp.relicRoom?.isSpectator) return;
+      const now = performance.now();
+      if (!force && now - Number(mp.relicLastInputAt || 0) < 70) return;
+      mp.relicLastInputAt = now;
+      mp.socket.emit("relic:input", {
+        roomId: mp.relicRoomId,
+        input: input || relicInputFromKeys()
+      });
+    }
+
+    function getRelicCanvasPoint(event) {
+      const rect = relicCanvas.getBoundingClientRect();
+      return {
+        x: ((event.clientX - rect.left) / rect.width) * relicCanvas.width,
+        y: ((event.clientY - rect.top) / rect.height) * relicCanvas.height
+      };
+    }
+
+    function updateRelicPointerInput(event) {
+      const me = getRelicMe();
+      if (!me || mp.relicRoom?.status !== "playing" || mp.relicRoom?.isSpectator) return;
+      const point = getRelicCanvasPoint(event);
+      let x = point.x - me.x;
+      let y = point.y - me.y;
+      const length = Math.hypot(x, y);
+      if (length < 12) {
+        x = 0;
+        y = 0;
+      } else {
+        x /= length;
+        y /= length;
+      }
+      mp.relicPointerInput = { x, y };
+      sendRelicInput(true);
+    }
+
+    function renderRelicRoom(room) {
+      if (!room) return;
+      mp.relicRoom = room;
+      mp.relicRoomId = room.roomId;
+      document.getElementById("relicOverlay").classList.remove("hidden");
+      document.getElementById("relicInviteToast").classList.add("hidden");
+
+      const isWaiting = room.status === "waiting";
+      const isPlaying = room.status === "playing";
+      const isFinished = room.status === "finished";
+      const isHost = room.hostSocketId === mp.socket?.id;
+      const isSpectator = Boolean(room.isSpectator);
+      const players = room.players || [];
+      const ranked = players.slice().sort((a, b) => {
+        if (Number(b.score || 0) !== Number(a.score || 0)) return Number(b.score || 0) - Number(a.score || 0);
+        return Number(b.collected || 0) - Number(a.collected || 0);
+      });
+      const leader = ranked.find(player => !player.disconnected) || ranked[0];
+
+      document.getElementById("relicBetLabel").textContent = `Aposta: ${room.bet} creditos`;
+      document.getElementById("relicMessage").textContent = room.message || "";
+      document.getElementById("relicStatusLabel").textContent = isPlaying
+        ? `Lider: ${leader?.username || "-"} (${leader?.score || 0})`
+        : isFinished
+          ? "Partida encerrada"
+          : `${players.length} jogadores na sala`;
+      document.getElementById("relicTimerLabel").textContent = isPlaying
+        ? `${Math.ceil(Number(room.timeLeftMs || 0) / 1000)}s`
+        : isFinished ? "fim" : "aguardando";
+      document.getElementById("relicSpectatorLabel").textContent = `${Number(room.spectatorCount || 0)} assistindo`;
+
+      document.getElementById("relicPlayers").innerHTML = ranked.map(player => `
+        <div class="relic-player-row ${player.isMe ? "is-me" : ""} ${room.winnerSocketId === player.socketId ? "is-winner" : ""} ${player.disconnected ? "is-out" : ""}" data-socket-id="${escHtml(player.socketId)}">
+          <span class="relic-color-dot" style="--relic-color:${escHtml(player.color || "#60d7ff")}"></span>
+          <span>
+            <strong>${escHtml(player.username)}${player.isMe ? " (voce)" : ""}${player.isHost ? " *" : ""}</strong>
+            <small>${player.disconnected ? "saiu" : player.stunnedMs > 0 ? "atordoado" : `${player.collected || 0} reliquias`}</small>
+          </span>
+          <strong>${player.score || 0}</strong>
+        </div>
+      `).join("");
+
+      document.getElementById("relicStartBtn").textContent = isFinished ? "Jogar novamente" : "Comecar";
+      document.getElementById("relicStartBtn").disabled = isSpectator || !(isFinished || (isWaiting && isHost && players.length >= 2));
+      document.getElementById("relicLeaveBtn").textContent = isSpectator ? "Sair da transmissao" : isFinished ? "Fechar" : "Sair";
+
+      ensureRelicRenderLoop();
+    }
+
+    function ensureRelicRenderLoop() {
+      if (mp.relicRenderId) return;
+      const frame = () => {
+        if (!mp.relicRoom || !relicOverlayIsOpen()) {
+          mp.relicRenderId = 0;
+          return;
+        }
+        if (mp.relicRoom.status === "playing") {
+          const left = Math.max(0, Number(mp.relicRoom.gameEndsAt || Date.now()) - Date.now());
+          document.getElementById("relicTimerLabel").textContent = `${Math.ceil(left / 1000)}s`;
+          sendRelicInput(false);
+        }
+        drawRelicRoom(mp.relicRoom);
+        mp.relicRenderId = requestAnimationFrame(frame);
+      };
+      mp.relicRenderId = requestAnimationFrame(frame);
+    }
+
+    function drawRelicRoom(room) {
+      const field = room.field || { width: 1320, height: 820, playerRadius: 18, relicRadius: 12, mineRadius: 18, portalRadius: 28 };
+      const ctx = relicCtx;
+      ctx.clearRect(0, 0, relicCanvas.width, relicCanvas.height);
+      ctx.save();
+      ctx.scale(relicCanvas.width / field.width, relicCanvas.height / field.height);
+
+      const bg = ctx.createLinearGradient(0, 0, field.width, field.height);
+      bg.addColorStop(0, "#071118");
+      bg.addColorStop(.46, "#10232a");
+      bg.addColorStop(1, "#17142b");
+      ctx.fillStyle = bg;
+      ctx.fillRect(0, 0, field.width, field.height);
+      drawRelicGrid(ctx, field);
+
+      (room.portals || []).forEach(portal => drawRelicPortal(ctx, portal, field));
+      (room.relics || []).forEach(relic => drawRelicItem(ctx, relic));
+      (room.mines || []).forEach(mine => drawRelicMine(ctx, mine));
+      (room.players || []).forEach(player => drawRelicPlayer(ctx, player, field));
+
+      if (room.status === "waiting") {
+        drawRelicBanner(ctx, field, "Aguardando inicio");
+      } else if (room.status === "finished") {
+        drawRelicBanner(ctx, field, room.message || "Partida encerrada");
+      }
+
+      ctx.restore();
+    }
+
+    function drawRelicGrid(ctx, field) {
+      ctx.save();
+      ctx.strokeStyle = "rgba(255,255,255,.055)";
+      ctx.lineWidth = 1;
+      for (let x = 0; x <= field.width; x += 44) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, field.height);
+        ctx.stroke();
+      }
+      for (let y = 0; y <= field.height; y += 44) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(field.width, y);
+        ctx.stroke();
+      }
+      ctx.strokeStyle = "rgba(96,215,255,.34)";
+      ctx.lineWidth = 4;
+      ctx.strokeRect(4, 4, field.width - 8, field.height - 8);
+      ctx.restore();
+    }
+
+    function drawRelicItem(ctx, relic) {
+      const radius = Number(relic.radius || 12);
+      ctx.save();
+      ctx.translate(relic.x, relic.y);
+      ctx.rotate(Math.PI / 4);
+      ctx.shadowColor = relic.color || "#f7c948";
+      ctx.shadowBlur = 20;
+      ctx.fillStyle = relic.color || "#f7c948";
+      ctx.fillRect(-radius * .72, -radius * .72, radius * 1.44, radius * 1.44);
+      ctx.shadowBlur = 0;
+      ctx.strokeStyle = "rgba(255,255,255,.72)";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(-radius * .72, -radius * .72, radius * 1.44, radius * 1.44);
+      ctx.restore();
+    }
+
+    function drawRelicMine(ctx, mine) {
+      const radius = Number(mine.radius || 18);
+      ctx.save();
+      ctx.translate(mine.x, mine.y);
+      ctx.fillStyle = "rgba(240,90,72,.18)";
+      ctx.beginPath();
+      ctx.arc(0, 0, radius + 10, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#111820";
+      ctx.strokeStyle = "#f05a48";
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(0, 0, radius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      for (let i = 0; i < 8; i += 1) {
+        const a = i * Math.PI / 4;
+        ctx.beginPath();
+        ctx.moveTo(Math.cos(a) * radius * .72, Math.sin(a) * radius * .72);
+        ctx.lineTo(Math.cos(a) * (radius + 7), Math.sin(a) * (radius + 7));
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    function drawRelicPortal(ctx, portal, field) {
+      const radius = field.portalRadius || 28;
+      const pulse = 1 + Math.sin(performance.now() / 260 + Number(portal.id || 0)) * .07;
+      ctx.save();
+      ctx.translate(portal.x, portal.y);
+      ctx.strokeStyle = portal.color || "#60d7ff";
+      ctx.shadowColor = portal.color || "#60d7ff";
+      ctx.shadowBlur = 18;
+      ctx.lineWidth = 5;
+      ctx.beginPath();
+      ctx.arc(0, 0, radius * pulse, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(0, 0, radius * .55 * pulse, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    function drawRelicPlayer(ctx, player, field) {
+      const radius = field.playerRadius || 18;
+      const stunned = Number(player.stunnedMs || 0) > 0;
+      ctx.save();
+      ctx.globalAlpha = player.disconnected ? .38 : 1;
+      ctx.translate(player.x, player.y);
+      ctx.shadowColor = player.color || "#60d7ff";
+      ctx.shadowBlur = stunned ? 4 : 16;
+      ctx.fillStyle = stunned ? "#88909a" : player.color || "#60d7ff";
+      ctx.beginPath();
+      ctx.arc(0, 0, radius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.strokeStyle = player.isMe ? "#fff9e8" : "rgba(255,255,255,.34)";
+      ctx.lineWidth = player.isMe ? 4 : 2;
+      ctx.stroke();
+
+      ctx.fillStyle = "#071118";
+      ctx.font = "900 13px Segoe UI, Arial";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(String(player.score || 0), 0, 1);
+
+      ctx.textBaseline = "alphabetic";
+      ctx.fillStyle = "#fff9e8";
+      ctx.shadowColor = "rgba(0,0,0,.9)";
+      ctx.shadowBlur = 5;
+      ctx.font = "900 14px Segoe UI, Arial";
+      ctx.fillText(player.username || "?", 0, -radius - 12);
+      ctx.restore();
+    }
+
+    function drawRelicBanner(ctx, field, text) {
+      ctx.save();
+      ctx.fillStyle = "rgba(5,12,18,.42)";
+      ctx.fillRect(0, 0, field.width, 70);
+      ctx.fillStyle = "#fff9e8";
+      ctx.font = "900 24px Segoe UI, Arial";
+      ctx.textAlign = "center";
+      ctx.fillText(text, field.width / 2, 44);
+      ctx.restore();
+    }
+
+    function isRelicControlKey(key) {
+      return ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "a", "A", "d", "D", "w", "W", "s", "S"].includes(key);
+    }
+
+    function isTypingTarget(target) {
+      const tag = String(target?.tagName || "").toLowerCase();
+      return tag === "input" || tag === "textarea" || tag === "select" || Boolean(target?.isContentEditable);
+    }
+
+    document.addEventListener("keydown", (event) => {
+      if (!relicOverlayIsOpen() || !isRelicControlKey(event.key) || isTypingTarget(event.target)) return;
+      event.preventDefault();
+      mp.relicKeys.add(event.key);
+      sendRelicInput(true);
+    });
+
+    document.addEventListener("keyup", (event) => {
+      if (!relicOverlayIsOpen() || !isRelicControlKey(event.key)) return;
+      event.preventDefault();
+      mp.relicKeys.delete(event.key);
+      sendRelicInput(true);
+    });
+
+    relicCanvas.addEventListener("pointerdown", (event) => {
+      if (event.button !== undefined && event.button !== 0) return;
+      event.preventDefault();
+      mp.relicPointerActive = true;
+      if (relicCanvas.setPointerCapture) relicCanvas.setPointerCapture(event.pointerId);
+      updateRelicPointerInput(event);
+    });
+
+    relicCanvas.addEventListener("pointermove", (event) => {
+      if (!mp.relicPointerActive) return;
+      event.preventDefault();
+      updateRelicPointerInput(event);
+    });
+
+    function stopRelicPointer(event = null) {
+      if (event?.preventDefault) event.preventDefault();
+      mp.relicPointerActive = false;
+      mp.relicPointerInput = { x: 0, y: 0 };
+      sendRelicInput(true, { x: 0, y: 0 });
+    }
+
+    relicCanvas.addEventListener("pointerup", stopRelicPointer);
+    relicCanvas.addEventListener("pointercancel", stopRelicPointer);
+    relicCanvas.addEventListener("lostpointercapture", stopRelicPointer);
+    relicCanvas.addEventListener("contextmenu", (event) => event.preventDefault());
+
     function createSlitherRoom() {
       if (!mp.isOnline) {
         showToast("Faca login para abrir uma sala.");
@@ -10599,7 +11369,8 @@
         slither: "slither:spectate",
         horse: "horse:spectate",
         crash: "crash:spectate",
-        artillery: "artillery:spectate"
+        artillery: "artillery:spectate",
+        relic: "relic:spectate"
       };
       const eventName = events[game];
       if (!roomId || !eventName) {

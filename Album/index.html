@@ -649,6 +649,60 @@
       font-weight: 900;
     }
 
+    .crash-side-button {
+      position: relative;
+      width: 100%;
+      min-height: 70px;
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 10px;
+      margin-top: 8px;
+      padding: 12px;
+      overflow: hidden;
+      border: 0;
+      border-radius: var(--radius);
+      color: #fff9e8;
+      background:
+        radial-gradient(circle at 80% 26%, #fff6bd 0 10px, transparent 11px),
+        linear-gradient(115deg, transparent 0 46%, rgba(255,255,255,.68) 47% 49%, transparent 50%),
+        linear-gradient(145deg, #c0392b, #f39c12 52%, #18231f);
+      box-shadow: 0 14px 28px rgba(145, 61, 18, 0.26);
+      cursor: pointer;
+      font-weight: 950;
+      text-align: left;
+    }
+
+    .crash-side-button::after {
+      content: "";
+      position: absolute;
+      right: 18px;
+      bottom: 18px;
+      width: 78px;
+      height: 28px;
+      border-radius: 999px 999px 999px 18px;
+      background: #fff8e8;
+      box-shadow: -18px 8px 0 -8px rgba(255,248,232,.8), 0 0 18px rgba(243,156,18,.44);
+      transform: rotate(-18deg);
+    }
+
+    .crash-side-button span,
+    .crash-side-button small {
+      position: relative;
+      z-index: 2;
+    }
+
+    .crash-side-button span {
+      font-size: 1.02rem;
+      text-transform: uppercase;
+    }
+
+    .crash-side-button small {
+      color: rgba(255, 249, 232, 0.82);
+      font-size: 0.72rem;
+      font-weight: 900;
+    }
+
     .filter-group {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
@@ -2761,6 +2815,7 @@
     .head-soccer-open-btn { background: #16689f; }
     .horse-open-btn { background: #9b59b6; }
     .slither-open-btn { background: #3b4f96; }
+    .crash-open-btn { background: linear-gradient(135deg, #c0392b, #f39c12); }
     .lobby-limit-note {
       display: block;
       margin: 0 0 8px;
@@ -2939,6 +2994,216 @@
       min-width: 118px;
       padding: 9px 15px;
       font-size: .86rem;
+    }
+
+    .crash-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 10004;
+      display: grid;
+      place-items: center;
+      padding: 16px;
+      background: rgba(5, 18, 14, 0.86);
+    }
+
+    .crash-overlay.hidden {
+      display: none;
+    }
+
+    .crash-table {
+      width: min(920px, 96vw);
+      max-height: calc(100vh - 32px);
+      display: grid;
+      gap: 12px;
+      padding: 18px;
+      overflow: auto;
+      border: 2px solid rgba(243, 156, 18, 0.64);
+      border-radius: 12px;
+      color: #fff8e8;
+      background:
+        radial-gradient(circle at 50% 0%, rgba(243, 156, 18, 0.24), transparent 18rem),
+        linear-gradient(145deg, #141b24, #07131a);
+      box-shadow: 0 24px 70px rgba(0, 0, 0, 0.48);
+    }
+
+    .crash-top,
+    .crash-actions {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .crash-top h3 {
+      margin: 0;
+      font-size: 1.2rem;
+      text-transform: uppercase;
+    }
+
+    .crash-message {
+      min-height: 38px;
+      padding: 10px 12px;
+      border: 1px solid rgba(255, 248, 232, 0.16);
+      border-radius: 8px;
+      color: #f9e8a8;
+      background: rgba(255, 255, 255, 0.06);
+      font-weight: 850;
+    }
+
+    .crash-stage {
+      position: relative;
+      min-height: 320px;
+      overflow: hidden;
+      border: 1px solid rgba(255, 248, 232, 0.14);
+      border-radius: 10px;
+      background:
+        linear-gradient(135deg, rgba(255,255,255,.08) 0 1px, transparent 1px 48px),
+        linear-gradient(45deg, rgba(255,255,255,.06) 0 1px, transparent 1px 54px),
+        linear-gradient(180deg, #112331, #071119);
+    }
+
+    .crash-multiplier {
+      position: absolute;
+      left: 18px;
+      top: 16px;
+      z-index: 3;
+      font-size: clamp(2.4rem, 8vw, 5.2rem);
+      line-height: 1;
+      font-weight: 1000;
+      color: #f9e8a8;
+      text-shadow: 0 0 22px rgba(243, 156, 18, 0.38);
+    }
+
+    .crash-plane {
+      position: absolute;
+      left: var(--plane-x, 8%);
+      bottom: var(--plane-y, 16%);
+      z-index: 4;
+      min-width: 86px;
+      min-height: 42px;
+      display: grid;
+      place-items: center;
+      border-radius: 999px;
+      color: #17211f;
+      background: linear-gradient(135deg, #fff6bd, #f39c12);
+      box-shadow: 0 14px 30px rgba(0,0,0,.34), 0 0 24px rgba(243,156,18,.48);
+      font-weight: 1000;
+      transform: translate(-50%, 50%) rotate(-12deg);
+      transition: left 110ms linear, bottom 110ms linear, filter 160ms ease;
+    }
+
+    .crash-plane.is-crashed {
+      filter: saturate(.2) brightness(.8);
+      background: linear-gradient(135deg, #c0392b, #2b1010);
+      color: #fff8e8;
+    }
+
+    .crash-curve {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      height: 64%;
+      border-left: 3px solid rgba(255,248,232,.18);
+      border-bottom: 3px solid rgba(255,248,232,.18);
+    }
+
+    .crash-curve::before {
+      content: "";
+      position: absolute;
+      left: 8%;
+      right: 14%;
+      bottom: 13%;
+      height: 62%;
+      border-bottom: 5px solid #f39c12;
+      border-right: 5px solid #f39c12;
+      border-radius: 0 0 68% 0;
+      transform: skew(-18deg);
+      box-shadow: 0 0 18px rgba(243, 156, 18, .38);
+    }
+
+    .crash-fall-layer {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      z-index: 5;
+    }
+
+    .crash-fall-name {
+      position: absolute;
+      left: var(--fall-x, 50%);
+      top: var(--fall-y, 45%);
+      padding: 5px 9px;
+      border-radius: 999px;
+      color: #fff8e8;
+      background: rgba(192, 57, 43, .9);
+      font-size: .76rem;
+      font-weight: 950;
+      animation: crashNameFall 1300ms ease-in forwards;
+    }
+
+    @keyframes crashNameFall {
+      0% { opacity: 1; transform: translate(-50%, -50%) rotate(-8deg); }
+      100% { opacity: 0; transform: translate(-50%, 150px) rotate(18deg); }
+    }
+
+    .crash-panels {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(220px, 300px);
+      gap: 10px;
+    }
+
+    .crash-panel {
+      display: grid;
+      gap: 8px;
+      padding: 10px;
+      border: 1px solid rgba(255, 248, 232, 0.14);
+      border-radius: 9px;
+      background: rgba(255, 255, 255, 0.06);
+    }
+
+    .crash-panel h4 {
+      margin: 0;
+      font-size: .82rem;
+      text-transform: uppercase;
+      color: #f9e8a8;
+    }
+
+    .crash-player-row {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      gap: 8px;
+      align-items: center;
+      min-height: 36px;
+      padding: 7px 8px;
+      border-radius: 8px;
+      background: rgba(0,0,0,.18);
+      font-size: .78rem;
+      font-weight: 850;
+    }
+
+    .crash-player-row.is-me {
+      outline: 1px solid rgba(243, 156, 18, .72);
+    }
+
+    .crash-player-row small {
+      display: block;
+      color: rgba(255,248,232,.68);
+      font-size: .68rem;
+      text-transform: uppercase;
+    }
+
+    .crash-cashout-log {
+      display: grid;
+      gap: 6px;
+      max-height: 190px;
+      overflow: auto;
+    }
+
+    @media (max-width: 760px) {
+      .crash-panels { grid-template-columns: 1fr; }
+      .crash-stage { min-height: 260px; }
     }
 
     /* Waiting overlay (esperando oponente aceitar) */
@@ -3985,6 +4250,10 @@
             <span>Slither</span>
             <small>Cobrinhas online</small>
           </button>
+          <button class="crash-side-button" id="openCrashGame" type="button">
+            <span>Crash</span>
+            <small>Avião online</small>
+          </button>
           <button class="blackjack-side-button" id="openBlackjackGame" type="button">
             <span>Mesa 21</span>
             <small>Cartas online</small>
@@ -4093,6 +4362,7 @@
         <button class="mp-btn head-soccer-open-btn" type="button" onclick="createHeadSoccerRoom()">Head Soccer</button>
         <button class="mp-btn button-soccer-open-btn" type="button" onclick="createButtonSoccerRoom()">Botao</button>
         <button class="mp-btn slither-open-btn" type="button" onclick="createSlitherRoom()">Slither</button>
+        <button class="mp-btn crash-open-btn" type="button" onclick="createCrashRoom()">Crash</button>
         <button class="mp-btn blackjack-open-btn" type="button" onclick="createBlackjackRoom()">Mesa 21</button>
         <button class="mp-btn horse-open-btn" type="button" onclick="createHorseRoom()">🏇 Corrida</button>
       </div>
@@ -4242,6 +4512,61 @@
     <div class="challenge-toast-btns">
       <button class="btn-accept" onclick="acceptSlitherInvite()">Entrar</button>
       <button class="btn-reject" onclick="rejectSlitherInvite()">Agora nao</button>
+    </div>
+  </div>
+
+  <div class="challenge-toast hidden" id="crashInviteToast">
+    <h4>Crash online</h4>
+    <p id="crashInviteMsg"></p>
+    <div class="challenge-toast-btns">
+      <button class="btn-accept" onclick="acceptCrashInvite()">Entrar</button>
+      <button class="btn-reject" onclick="rejectCrashInvite()">Agora nao</button>
+    </div>
+  </div>
+
+  <div class="crash-overlay hidden" id="crashOverlay">
+    <div class="crash-table">
+      <div class="crash-top">
+        <div>
+          <h3>Crash</h3>
+          <span id="crashBetLabel">Aposta: 0</span>
+        </div>
+        <button class="mp-btn" style="width:auto;padding:8px 16px" type="button" onclick="leaveCrashRoom()">Fechar</button>
+      </div>
+
+      <div class="crash-message" id="crashMessage">Aguardando sala.</div>
+
+      <section class="crash-stage" id="crashStage">
+        <div class="crash-multiplier" id="crashMultiplier">1.00x</div>
+        <div class="crash-curve" aria-hidden="true"></div>
+        <div class="crash-plane" id="crashPlane">AVIAO</div>
+        <div class="crash-fall-layer" id="crashFallLayer"></div>
+      </section>
+
+      <div class="crash-actions">
+        <button class="mp-btn" id="crashStartBtn" type="button" onclick="startCrashRound()">Comecar</button>
+        <button class="mp-btn" id="crashCashoutBtn" type="button" onclick="cashoutCrash()">Retirar</button>
+        <button class="mp-btn" id="crashLeaveBtn" type="button" onclick="leaveCrashRoom()">Sair</button>
+      </div>
+
+      <div class="crash-panels">
+        <section class="crash-panel">
+          <h4>Jogadores</h4>
+          <div id="crashPlayers"></div>
+        </section>
+        <section class="crash-panel">
+          <h4>Retiradas</h4>
+          <div class="crash-cashout-log" id="crashCashouts"></div>
+        </section>
+      </div>
+
+      <div class="button-emoji-bar">
+        <button class="button-emoji-btn" type="button" onclick="sendTaunt('😂')">😂</button>
+        <button class="button-emoji-btn" type="button" onclick="sendTaunt('🔥')">🔥</button>
+        <button class="button-emoji-btn" type="button" onclick="sendTaunt('💸')">💸</button>
+        <button class="button-emoji-btn" type="button" onclick="sendTaunt('🛫')">🛫</button>
+        <button class="button-emoji-btn" type="button" onclick="sendTaunt('💥')">💥</button>
+      </div>
     </div>
   </div>
 
@@ -4754,6 +5079,7 @@
     const openBetGame = document.getElementById("openBetGame");
     const openButtonSoccerGame = document.getElementById("openButtonSoccerGame");
     const openSlitherGame = document.getElementById("openSlitherGame");
+    const openCrashGame = document.getElementById("openCrashGame");
     const openBlackjackGame = document.getElementById("openBlackjackGame");
     const openMarket = document.getElementById("openMarket");
     const marketOverlay = document.getElementById("marketOverlay");
@@ -6370,6 +6696,7 @@
     openBetGame.addEventListener("click", openHeadSoccerFromSidebar);
     openButtonSoccerGame.addEventListener("click", openButtonSoccerFromSidebar);
     openSlitherGame.addEventListener("click", openSlitherFromSidebar);
+    openCrashGame.addEventListener("click", openCrashFromSidebar);
     openBlackjackGame.addEventListener("click", openBlackjackFromSidebar);
     openMarket.addEventListener("click", openMarketplace);
     closeMarket.addEventListener("click", closeMarketplace);
@@ -6548,6 +6875,10 @@
       slitherLastAngle: 0,
       slitherBoosting: false,
       slitherFollowSocketId: null,
+      crashInviteRoomId: null,
+      crashRoomId: null,
+      crashRoom: null,
+      crashLastCashoutId: null,
       headInviteRoomId: null,
       headRoomId: null,
       headRoom: null,
@@ -7009,6 +7340,37 @@
         showToast(msg || "Nao foi possivel jogar Slither.");
       });
 
+      mp.socket.on("crash:invite", ({ roomId, fromUsername, bet }) => {
+        mp.crashInviteRoomId = roomId;
+        document.getElementById("crashInviteMsg").textContent =
+          `${fromUsername} abriu uma sala de Crash. Aposta: ${bet} creditos.`;
+        document.getElementById("crashInviteToast").classList.remove("hidden");
+      });
+
+      mp.socket.on("crash:update", (room) => {
+        renderCrashRoom(room);
+      });
+
+      mp.socket.on("crash:finished", ({ room, updatedUser }) => {
+        if (updatedUser) {
+          applyServerData(updatedUser);
+        }
+        renderCrashRoom(room);
+        renderBetPanel();
+        updateLobbyHeader();
+        showToast(room.message || "Crash encerrado.");
+      });
+
+      mp.socket.on("crash:cancelled", ({ message }) => {
+        closeCrashOverlay(true);
+        showToast(message || "Sala de Crash cancelada.");
+        updateLobbyHeader();
+      });
+
+      mp.socket.on("crash:error", (msg) => {
+        showToast(msg || "Nao foi possivel jogar Crash.");
+      });
+
       // ── Emoji Taunts ────────────────────────────────────────────────────
       mp.socket.on("market:sold", ({ listing, buyer, updatedUser }) => {
         if (updatedUser) {
@@ -7097,7 +7459,8 @@
         button: "Botao",
         blackjack: "Mesa 21",
         slither: "Slither",
-        horse: "Corrida"
+        horse: "Corrida",
+        crash: "Crash"
       };
       return labels[game] || "Em jogo";
     }
@@ -7854,7 +8217,7 @@
 
     function sendTaunt(emoji) {
       emoji = normalizeTauntEmoji(emoji);
-      const hasActiveRoom = mp.roomId || mp.blackjackRoomId || mp.horseRoomId || mp.buttonRoomId || mp.headRoomId || mp.slitherRoomId;
+      const hasActiveRoom = mp.roomId || mp.blackjackRoomId || mp.horseRoomId || mp.buttonRoomId || mp.headRoomId || mp.slitherRoomId || mp.crashRoomId;
       if (!emoji || !mp.socket?.connected || !hasActiveRoom) return;
 
       const payload = { emoji };
@@ -7884,6 +8247,10 @@
           payload.x = head.x;
           payload.y = head.y;
         }
+      }
+
+      if (mp.crashRoom && !document.getElementById("crashOverlay").classList.contains("hidden")) {
+        payload.game = "crash";
       }
 
       mp.socket.emit("game:taunt", payload);
@@ -7961,7 +8328,9 @@
         ? document.getElementById("blackjackOverlay")
         : !document.getElementById("horseOverlay").classList.contains("hidden")
           ? document.getElementById("horseOverlay")
-          : null;
+          : !document.getElementById("crashOverlay").classList.contains("hidden")
+            ? document.getElementById("crashOverlay")
+            : null;
       if (overlay) {
         const el = document.createElement("span");
         el.className = "taunt-pop";
@@ -8952,6 +9321,164 @@
       setTimeout(() => document.getElementById("myBetInput")?.focus(), 80);
     }
 
+    function openCrashFromSidebar() {
+      if (!mp.isOnline) {
+        showToast("Faca login para abrir o Crash.");
+        document.getElementById("authOverlay").classList.remove("hidden");
+        return;
+      }
+      openLobby();
+      window.setTimeout(() => {
+        document.querySelector("[onclick='createCrashRoom()']")?.focus();
+      }, 0);
+    }
+
+    function createCrashRoom() {
+      if (!mp.isOnline) {
+        showToast("Faca login para abrir uma sala.");
+        document.getElementById("authOverlay").classList.remove("hidden");
+        return;
+      }
+      const bet = Number(document.getElementById("myBetInput").value) || 10;
+      if (bet < 5) { showToast("Aposta minima: 5 creditos."); return; }
+      if (bet > state.betCredits) { showToast("Creditos de aposta insuficientes."); return; }
+      mp.socket.emit("crash:create", { bet });
+      document.getElementById("lobbyOverlay").classList.add("hidden");
+    }
+
+    function acceptCrashInvite() {
+      if (!mp.crashInviteRoomId) return;
+      document.getElementById("crashInviteToast").classList.add("hidden");
+      mp.socket.emit("crash:join", { roomId: mp.crashInviteRoomId });
+      mp.crashInviteRoomId = null;
+    }
+
+    function rejectCrashInvite() {
+      mp.crashInviteRoomId = null;
+      document.getElementById("crashInviteToast").classList.add("hidden");
+    }
+
+    function startCrashRound() {
+      if (!mp.crashRoomId) return;
+      if (mp.crashRoom?.status === "finished") {
+        const bet = Number(mp.crashRoom.bet || document.getElementById("myBetInput").value || 10);
+        closeCrashOverlay(true);
+        mp.socket.emit("crash:create", { bet });
+        return;
+      }
+      mp.socket.emit("crash:start", { roomId: mp.crashRoomId });
+    }
+
+    function cashoutCrash() {
+      if (!mp.crashRoomId || mp.crashRoom?.isSpectator) return;
+      mp.socket.emit("crash:cashout", { roomId: mp.crashRoomId });
+    }
+
+    function leaveCrashRoom() {
+      if (mp.crashRoomId && mp.crashRoom?.status !== "finished") {
+        mp.socket?.emit(mp.crashRoom?.isSpectator ? "crash:unwatch" : "crash:leave", { roomId: mp.crashRoomId });
+      }
+      closeCrashOverlay(false);
+    }
+
+    function closeCrashOverlay(fromServer = false) {
+      document.getElementById("crashOverlay").classList.add("hidden");
+      document.getElementById("crashInviteToast").classList.add("hidden");
+      document.getElementById("crashFallLayer").innerHTML = "";
+      mp.crashInviteRoomId = null;
+      mp.crashRoomId = null;
+      mp.crashRoom = null;
+      mp.crashLastCashoutId = null;
+      if (!fromServer) updateLobbyHeader();
+    }
+
+    function getCrashMe() {
+      return mp.crashRoom?.players?.find(player => player.isMe) || null;
+    }
+
+    function crashStatusLabel(player) {
+      if (player.status === "flying") return "voando";
+      if (player.status === "cashed") return `sacou ${Number(player.cashoutMultiplier || 0).toFixed(2)}x`;
+      if (player.status === "crashed") return "crashou";
+      return "aguardando";
+    }
+
+    function animateCrashCashout(cashout, multiplier) {
+      if (!cashout || cashout.id === mp.crashLastCashoutId) return;
+      mp.crashLastCashoutId = cashout.id;
+      const fallLayer = document.getElementById("crashFallLayer");
+      const chip = document.createElement("span");
+      chip.className = "crash-fall-name";
+      chip.textContent = cashout.username;
+      const x = Math.min(82, Math.max(18, 12 + Math.log(Math.max(1, multiplier)) * 18));
+      const y = Math.min(78, Math.max(18, 76 - Math.log(Math.max(1, multiplier)) * 19));
+      chip.style.setProperty("--fall-x", `${x}%`);
+      chip.style.setProperty("--fall-y", `${y}%`);
+      fallLayer.appendChild(chip);
+      window.setTimeout(() => chip.remove(), 1400);
+    }
+
+    function renderCrashRoom(room) {
+      mp.crashRoom = room;
+      mp.crashRoomId = room.roomId;
+      document.getElementById("crashOverlay").classList.remove("hidden");
+      document.getElementById("crashInviteToast").classList.add("hidden");
+
+      const multiplier = Math.max(1, Number(room.multiplier || 1));
+      const isWaiting = room.status === "waiting";
+      const isPlaying = room.status === "playing";
+      const isFinished = room.status === "finished";
+      const isHost = room.hostSocketId === mp.socket?.id;
+      const isSpectator = Boolean(room.isSpectator);
+      const me = getCrashMe();
+
+      document.getElementById("crashBetLabel").textContent = `Aposta: ${room.bet} creditos`;
+      document.getElementById("crashMessage").textContent = room.message || "";
+      document.getElementById("crashMultiplier").textContent = `${multiplier.toFixed(2)}x`;
+
+      const planeX = Math.min(86, Math.max(8, 8 + Math.log(multiplier) * 19));
+      const planeY = Math.min(82, Math.max(14, 14 + Math.log(multiplier) * 20));
+      const plane = document.getElementById("crashPlane");
+      plane.style.setProperty("--plane-x", `${planeX}%`);
+      plane.style.setProperty("--plane-y", `${planeY}%`);
+      plane.classList.toggle("is-crashed", isFinished);
+      plane.textContent = isFinished ? "CRASH" : "AVIAO";
+
+      document.getElementById("crashPlayers").innerHTML = (room.players || []).map(player => `
+        <div class="crash-player-row ${player.isMe ? "is-me" : ""}" data-socket-id="${escHtml(player.socketId)}">
+          ${renderAvatar(player.avatar, player.username)}
+          <span>
+            <strong>${escHtml(player.username)}${player.isMe ? " (voce)" : ""}${player.isHost ? " *" : ""}</strong>
+            <small>${crashStatusLabel(player)}</small>
+          </span>
+          <strong>${player.status === "cashed" ? `${player.payout} cr` : `${player.bet} cr`}</strong>
+        </div>
+      `).join("");
+
+      const cashouts = room.cashouts || [];
+      document.getElementById("crashCashouts").innerHTML = cashouts.length
+        ? cashouts.slice().reverse().map(item => `
+          <div class="crash-player-row">
+            <span></span>
+            <span>
+              <strong>${escHtml(item.username)}</strong>
+              <small>${Number(item.multiplier || 0).toFixed(2)}x</small>
+            </span>
+            <strong>${item.payout} cr</strong>
+          </div>
+        `).join("")
+        : `<small style="color:rgba(255,248,232,.62);font-weight:850">Nenhuma retirada ainda.</small>`;
+
+      if (cashouts.length) {
+        animateCrashCashout(cashouts[cashouts.length - 1], multiplier);
+      }
+
+      document.getElementById("crashStartBtn").textContent = isFinished ? "Jogar novamente" : "Comecar";
+      document.getElementById("crashStartBtn").disabled = isSpectator || !(isFinished || (isWaiting && isHost));
+      document.getElementById("crashCashoutBtn").disabled = isSpectator || !(isPlaying && me?.status === "flying");
+      document.getElementById("crashLeaveBtn").textContent = isSpectator ? "Sair da transmissao" : isFinished ? "Fechar" : "Sair";
+    }
+
     function createSlitherRoom() {
       if (!mp.isOnline) {
         showToast("Faca login para abrir uma sala.");
@@ -8987,7 +9514,8 @@
         button: "button:spectate",
         blackjack: "blackjack:spectate",
         slither: "slither:spectate",
-        horse: "horse:spectate"
+        horse: "horse:spectate",
+        crash: "crash:spectate"
       };
       const eventName = events[game];
       if (!roomId || !eventName) {

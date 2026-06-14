@@ -12,6 +12,7 @@ const jwt        = require("jsonwebtoken");
 const cors       = require("cors");
 const fs         = require("fs");
 const path       = require("path");
+const crypto     = require("crypto");
 
 function loadLocalEnv() {
   const envFile = path.join(__dirname, ".env");
@@ -876,6 +877,7 @@ const blackjackRooms     = new Map();   // roomId -> mesa de 21
 const buttonSoccerRooms  = new Map();   // roomId -> futebol de botao
 const headSoccerRooms    = new Map();   // roomId -> head soccer em sala
 const slitherRooms       = new Map();   // roomId -> cobrinhas estilo slither
+const crashRooms         = new Map();   // roomId -> crash do aviao
 
 function ensureSpectators(room) {
   if (!room.spectators) room.spectators = new Set();
@@ -912,6 +914,9 @@ function clearSocketFromSpectatorRooms(socketId) {
   }
   for (const room of horseRooms.values()) {
     if (clearSpectator(room, socketId)) emitHorseUpdate(room);
+  }
+  for (const room of crashRooms.values()) {
+    if (clearSpectator(room, socketId)) emitCrashUpdate(room);
   }
 }
 
@@ -2707,6 +2712,298 @@ function tickSlitherRoom(room) {
   emitSlitherUpdate(room);
 }
 
+const CRASH_TICK_MS = 100;
+const CRASH_MAX_MULTIPLIER = 300;
+const CRASH_RATE = 0.075;
+const CRASH_HOUSE_EDGE = 0.97;
+
+function crashRandomFloat() {
+  return crypto.randomInt(1, 1_000_000) / 1_000_000;
+}
+
+function makeCrashPoint() {
+  const roll = crashRandomFloat();
+  const raw = CRASH_HOUSE_EDGE / Math.max(0.000001, 1 - roll);
+  return Math.min(CRASH_MAX_MULTIPLIER, Math.max(1, Math.floor(raw * 100) / 100));
+}
+
+function makeCrashPlayer(socket, bet) {
+  return {
+    socketId: socket.id,
+    userId: socket.userId,
+    username: socket.username,
+    avatar: socket.avatar || "",
+    bet,
+    status: "waiting",
+    cashoutMultiplier: null,
+    payout: 0,
+    joinedAt: Date.now()
+  };
+}
+
+function getCrashMultiplier(room) {
+  if (room.status !== "playing") return Number(room.multiplier || 1);
+  const elapsed = Math.max(0, Date.now() - Number(room.startedAt || Date.now())) / 1000;
+  return Math.min(CRASH_MAX_MULTIPLIER, Math.max(1, Math.exp(elapsed * CRASH_RATE)));
+}
+
+function serializeCrashRoom(room, viewerSocketId) {
+  const isSpectator = !room.players.some(player => player.socketId === viewerSocketId);
+  const multiplier = room.status === "playing" ? getCrashMultiplier(room) : Number(room.multiplier || 1);
+  return {
+    roomId: room.roomId,
+    hostSocketId: room.hostSocketId,
+    hostUsername: room.hostUsername,
+    bet: room.bet,
+    status: room.status,
+    message: room.message,
+    multiplier: Math.min(CRASH_MAX_MULTIPLIER, Number(multiplier.toFixed(2))),
+    maxMultiplier: CRASH_MAX_MULTIPLIER,
+    crashPoint: room.status === "finished" ? room.crashPoint : null,
+    isSpectator,
+    spectatorCount: roomSpectatorCount(room),
+    cashouts: room.cashouts || [],
+    players: room.players.map((player, index) => ({
+      socketId: player.socketId,
+      username: player.username,
+      avatar: player.avatar || "",
+      bet: player.bet,
+      status: player.status,
+      cashoutMultiplier: player.cashoutMultiplier,
+      payout: player.payout || 0,
+      isHost: player.socketId === room.hostSocketId,
+      isMe: player.socketId === viewerSocketId,
+      order: index
+    }))
+  };
+}
+
+function emitCrashUpdate(room) {
+  room.players.forEach(player => {
+    io.to(player.socketId).emit("crash:update", serializeCrashRoom(room, player.socketId));
+  });
+  for (const spectatorId of room.spectators || []) {
+    io.to(spectatorId).emit("crash:update", serializeCrashRoom(room, spectatorId));
+  }
+}
+
+function findCrashRoomBySocket(socketId) {
+  for (const room of crashRooms.values()) {
+    if (room.players.some(player => player.socketId === socketId) || room.spectators?.has(socketId)) return room;
+  }
+  return null;
+}
+
+function unresolvedCrashPlayers(room) {
+  return room.players.filter(player => player.status === "flying");
+}
+
+function finishCrashRoom(room, reason = "") {
+  if (!room || room.status === "finished") return;
+
+  clearInterval(room.tickTimer);
+  room.tickTimer = null;
+  room.status = "finished";
+  room.multiplier = Number(Math.min(room.crashPoint || getCrashMultiplier(room), CRASH_MAX_MULTIPLIER).toFixed(2));
+
+  let houseWins = 0;
+  room.players.forEach(player => {
+    if (player.status === "flying") {
+      player.status = "crashed";
+      houseWins += Number(player.bet || room.bet || 0);
+    }
+  });
+
+  room.message = reason || (houseWins > 0
+    ? `Crash em ${room.multiplier.toFixed(2)}x. A casa ficou com ${houseWins} creditos.`
+    : `Crash em ${room.multiplier.toFixed(2)}x. Todo mundo que sacou saiu vivo.`);
+
+  const targets = new Set(room.players.map(player => player.socketId));
+  for (const spectatorId of room.spectators || []) targets.add(spectatorId);
+  targets.forEach(socketId => {
+    const participant = room.players.find(player => player.socketId === socketId);
+    io.to(socketId).emit("crash:finished", {
+      room: serializeCrashRoom(room, socketId),
+      updatedUser: participant ? safeUser(db.findUser("id", participant.userId)) : null
+    });
+    const liveSocket = io.sockets.sockets.get(socketId);
+    if (liveSocket) liveSocket.leave(room.roomId);
+  });
+
+  room.players.forEach(player => {
+    const online = onlinePlayers.get(player.socketId);
+    if (online && online.roomId === room.roomId) {
+      online.inGame = false;
+      online.roomId = null;
+      online.game = null;
+    }
+  });
+
+  crashRooms.delete(room.roomId);
+  broadcastOnlineList();
+}
+
+function startCrashRound(room) {
+  if (!room || room.status !== "waiting") return false;
+  if (!room.players.length) return false;
+
+  for (const player of room.players) {
+    const user = db.findUser("id", player.userId);
+    if (!user || Number(user.bet_credits || 0) < Number(player.bet || room.bet || 0)) {
+      room.message = `${player.username} nao tem creditos para apostar.`;
+      emitCrashUpdate(room);
+      return false;
+    }
+  }
+
+  room.players.forEach(player => {
+    const user = db.findUser("id", player.userId);
+    db.updateUser(player.userId, {
+      bet_credits: Math.max(0, Number(user.bet_credits || 0) - Number(player.bet || room.bet || 0))
+    });
+    player.status = "flying";
+    player.cashoutMultiplier = null;
+    player.payout = 0;
+  });
+
+  room.status = "playing";
+  room.crashPoint = makeCrashPoint();
+  room.multiplier = 1;
+  room.startedAt = Date.now();
+  room.cashouts = [];
+  room.message = "O aviao decolou. Saque antes do crash.";
+  clearInterval(room.tickTimer);
+  room.tickTimer = setInterval(() => tickCrashRoom(room), CRASH_TICK_MS);
+  emitCrashUpdate(room);
+  broadcastOnlineList();
+  return true;
+}
+
+function cashoutCrashPlayer(room, socket) {
+  if (!room || room.status !== "playing") return;
+  const player = room.players.find(item => item.socketId === socket.id);
+  if (!player || player.status !== "flying") return;
+
+  const multiplier = Math.min(getCrashMultiplier(room), CRASH_MAX_MULTIPLIER);
+  if (multiplier >= Number(room.crashPoint || CRASH_MAX_MULTIPLIER)) return;
+
+  const payout = Math.max(0, Math.floor(Number(player.bet || room.bet || 0) * multiplier));
+  player.status = "cashed";
+  player.cashoutMultiplier = Number(multiplier.toFixed(2));
+  player.payout = payout;
+
+  const user = db.findUser("id", player.userId);
+  if (user) {
+    db.updateUser(player.userId, {
+      bet_credits: Number(user.bet_credits || 0) + payout
+    });
+  }
+
+  const cashout = {
+    id: `${player.socketId}-${Date.now()}`,
+    socketId: player.socketId,
+    username: player.username,
+    multiplier: player.cashoutMultiplier,
+    payout,
+    at: Date.now()
+  };
+  room.cashouts.push(cashout);
+  if (room.cashouts.length > 12) room.cashouts.shift();
+  room.message = `${player.username} sacou em ${player.cashoutMultiplier.toFixed(2)}x e levou ${payout} creditos.`;
+  emitCrashUpdate(room);
+}
+
+function tickCrashRoom(room) {
+  if (!room || !crashRooms.has(room.roomId) || room.status !== "playing") return;
+
+  const multiplier = getCrashMultiplier(room);
+  room.multiplier = Number(Math.min(multiplier, CRASH_MAX_MULTIPLIER).toFixed(2));
+
+  if (room.multiplier >= Number(room.crashPoint || CRASH_MAX_MULTIPLIER)) {
+    finishCrashRoom(room);
+    return;
+  }
+
+  emitCrashUpdate(room);
+}
+
+function cancelCrashRoom(room, reason = "Sala de Crash cancelada.") {
+  if (!room) return;
+  clearInterval(room.tickTimer);
+
+  const targets = new Set(room.players.map(player => player.socketId));
+  for (const spectatorId of room.spectators || []) targets.add(spectatorId);
+  targets.forEach(socketId => {
+    io.to(socketId).emit("crash:cancelled", { message: reason });
+    const participant = room.players.find(player => player.socketId === socketId);
+    if (participant) {
+      const online = onlinePlayers.get(socketId);
+      if (online && online.roomId === room.roomId) {
+        online.inGame = false;
+        online.roomId = null;
+        online.game = null;
+      }
+    }
+    const liveSocket = io.sockets.sockets.get(socketId);
+    if (liveSocket) liveSocket.leave(room.roomId);
+  });
+
+  crashRooms.delete(room.roomId);
+  broadcastOnlineList();
+}
+
+function removeCrashPlayer(room, socketId, reason = "") {
+  const player = room.players.find(item => item.socketId === socketId);
+  if (!player) {
+    clearSpectator(room, socketId);
+    emitCrashUpdate(room);
+    broadcastOnlineList();
+    return;
+  }
+
+  if (room.status === "playing") {
+    if (player.status === "flying") {
+      player.status = "crashed";
+      room.message = reason || `${player.username} saiu e perdeu a aposta.`;
+    }
+    const online = onlinePlayers.get(socketId);
+    if (online && online.roomId === room.roomId) {
+      online.inGame = false;
+      online.roomId = null;
+      online.game = null;
+    }
+    const liveSocket = io.sockets.sockets.get(socketId);
+    if (liveSocket) liveSocket.leave(room.roomId);
+    emitCrashUpdate(room);
+    broadcastOnlineList();
+    return;
+  }
+
+  room.players = room.players.filter(item => item.socketId !== socketId);
+  const online = onlinePlayers.get(socketId);
+  if (online && online.roomId === room.roomId) {
+    online.inGame = false;
+    online.roomId = null;
+    online.game = null;
+  }
+  const liveSocket = io.sockets.sockets.get(socketId);
+  if (liveSocket) liveSocket.leave(room.roomId);
+
+  if (!room.players.length) {
+    crashRooms.delete(room.roomId);
+    broadcastOnlineList();
+    return;
+  }
+
+  if (room.hostSocketId === socketId) {
+    room.hostSocketId = room.players[0].socketId;
+    room.hostUsername = room.players[0].username;
+  }
+  room.message = reason || `${player.username} saiu da sala.`;
+  emitCrashUpdate(room);
+  broadcastOnlineList();
+}
+
 io.on("connection", (socket) => {
   console.log(`[+] ${socket.username} conectado`);
   const connectedUser = normalizeUserProgress(db.findUser("id", socket.userId));
@@ -2867,6 +3164,12 @@ io.on("connection", (socket) => {
     if (slitherRoom) {
       slitherRoom.players.forEach(player => targets.add(player.socketId));
       for (const spectatorId of slitherRoom.spectators || []) targets.add(spectatorId);
+    }
+
+    const crashRoom = findCrashRoomBySocket(socket.id);
+    if (crashRoom) {
+      crashRoom.players.forEach(player => targets.add(player.socketId));
+      for (const spectatorId of crashRoom.spectators || []) targets.add(spectatorId);
     }
 
     if (p?.roomId) {
@@ -3574,6 +3877,121 @@ io.on("connection", (socket) => {
     broadcastOnlineList();
   });
 
+  // Crash
+  socket.on("crash:create", ({ bet }) => {
+    const tableBet = clampNumber(bet || 10, 5, 50);
+    const user = db.findUser("id", socket.userId);
+    const player = onlinePlayers.get(socket.id);
+    if (!user || Number(user.bet_credits || 0) < tableBet)
+      return socket.emit("crash:error", "Creditos de aposta insuficientes.");
+    if (player?.inGame)
+      return socket.emit("crash:error", "Voce ja esta em uma partida.");
+
+    const roomId = `crash-${Date.now()}-${socket.id}`;
+    const room = {
+      roomId,
+      hostSocketId: socket.id,
+      hostUsername: socket.username,
+      bet: tableBet,
+      status: "waiting",
+      multiplier: 1,
+      crashPoint: null,
+      startedAt: null,
+      tickTimer: null,
+      cashouts: [],
+      spectators: new Set(),
+      message: "Sala aberta. Entre no aviao e saque antes do crash.",
+      players: [makeCrashPlayer(socket, tableBet)]
+    };
+    crashRooms.set(roomId, room);
+    socket.join(roomId);
+    if (player) { player.inGame = true; player.roomId = roomId; player.game = "crash"; }
+
+    for (const [, target] of onlinePlayers) {
+      if (target.socketId !== socket.id && !target.inGame) {
+        io.to(target.socketId).emit("crash:invite", { roomId, fromUsername: socket.username, bet: tableBet });
+      }
+    }
+
+    emitCrashUpdate(room);
+    broadcastOnlineList();
+  });
+
+  socket.on("crash:join", ({ roomId }) => {
+    const room = crashRooms.get(roomId);
+    if (!room || room.status !== "waiting")
+      return socket.emit("crash:error", "Sala indisponivel.");
+    if (room.players.some(player => player.socketId === socket.id))
+      return emitCrashUpdate(room);
+
+    const user = db.findUser("id", socket.userId);
+    const player = onlinePlayers.get(socket.id);
+    if (!user || Number(user.bet_credits || 0) < Number(room.bet || 0))
+      return socket.emit("crash:error", "Creditos de aposta insuficientes.");
+    if (player?.inGame)
+      return socket.emit("crash:error", "Voce ja esta em uma partida.");
+
+    room.players.push(makeCrashPlayer(socket, room.bet));
+    room.message = `${socket.username} entrou no aviao.`;
+    socket.join(roomId);
+    if (player) { player.inGame = true; player.roomId = roomId; player.game = "crash"; }
+    emitCrashUpdate(room);
+    broadcastOnlineList();
+  });
+
+  socket.on("crash:start", ({ roomId }) => {
+    const room = crashRooms.get(roomId);
+    if (!room || room.status !== "waiting") return;
+    if (room.hostSocketId !== socket.id)
+      return socket.emit("crash:error", "So o dono da sala pode iniciar.");
+    startCrashRound(room);
+  });
+
+  socket.on("crash:cashout", ({ roomId }) => {
+    const room = crashRooms.get(roomId);
+    if (!room) return;
+    cashoutCrashPlayer(room, socket);
+  });
+
+  socket.on("crash:leave", ({ roomId }) => {
+    const room = crashRooms.get(roomId);
+    if (!room) return;
+    if (room.spectators?.has(socket.id)) {
+      clearSpectator(room, socket.id);
+      emitCrashUpdate(room);
+      broadcastOnlineList();
+      return;
+    }
+    if (room.status === "waiting" && room.hostSocketId === socket.id) {
+      cancelCrashRoom(room, "O dono cancelou o Crash.");
+      return;
+    }
+    removeCrashPlayer(room, socket.id, `${socket.username} saiu do Crash.`);
+  });
+
+  socket.on("crash:spectate", ({ roomId }) => {
+    const room = crashRooms.get(roomId);
+    if (!room || room.status !== "playing")
+      return socket.emit("crash:error", "Partida indisponivel para assistir.");
+    if (room.players.some(player => player.socketId === socket.id))
+      return emitCrashUpdate(room);
+    const online = onlinePlayers.get(socket.id);
+    if (online?.inGame)
+      return socket.emit("crash:error", "Termine sua partida antes de assistir outra.");
+    ensureSpectators(room).add(socket.id);
+    socket.join(roomId);
+    emitCrashUpdate(room);
+    broadcastOnlineList();
+  });
+
+  socket.on("crash:unwatch", ({ roomId }) => {
+    const room = crashRooms.get(roomId);
+    if (!room) return;
+    clearSpectator(room, socket.id);
+    emitCrashUpdate(room);
+    broadcastOnlineList();
+  });
+
   // ── Corrida de Cavalos ─────────────────────────────────────────────────
   socket.on("horse:create", ({ bet }) => {
     const tableBet = Math.max(5, Math.min(50, Number(bet) || 10));
@@ -3804,6 +4222,15 @@ io.on("connection", (socket) => {
       removeSlitherPlayer(slitherRoom, socket.id, `${socket.username} desconectou.`);
     }
 
+    const crashRoom = findCrashRoomBySocket(socket.id);
+    if (crashRoom) {
+      if (crashRoom.status === "waiting" && crashRoom.hostSocketId === socket.id) {
+        cancelCrashRoom(crashRoom, `${socket.username} cancelou o Crash.`);
+      } else {
+        removeCrashPlayer(crashRoom, socket.id, `${socket.username} desconectou do Crash.`);
+      }
+    }
+
     const blackjackRoom = findBlackjackRoomBySocket(socket.id);
     if (blackjackRoom) {
       const participant = blackjackRoom.players.find(item => item.socketId === socket.id);
@@ -3895,6 +4322,7 @@ function getSpectatableRoom(game, roomId) {
   if (game === "head") return headSoccerRooms.get(roomId) || null;
   if (game === "slither") return slitherRooms.get(roomId) || null;
   if (game === "horse") return horseRooms.get(roomId) || null;
+  if (game === "crash") return crashRooms.get(roomId) || null;
   return null;
 }
 

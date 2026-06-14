@@ -703,6 +703,64 @@
       font-weight: 900;
     }
 
+    .artillery-side-button {
+      position: relative;
+      width: 100%;
+      min-height: 72px;
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 10px;
+      margin-top: 8px;
+      padding: 12px;
+      overflow: hidden;
+      border: 0;
+      border-radius: var(--radius);
+      color: #fff9e8;
+      background:
+        radial-gradient(circle at 78% 36%, #ffed8a 0 11px, #161f25 12px 15px, transparent 16px),
+        linear-gradient(135deg, #254b6d, #7b3345 54%, #273328);
+      box-shadow: 0 14px 28px rgba(45, 55, 85, 0.25);
+      cursor: pointer;
+      font-weight: 950;
+      text-align: left;
+    }
+
+    .artillery-side-button::after {
+      content: "";
+      position: absolute;
+      right: 18px;
+      bottom: 15px;
+      width: 72px;
+      height: 30px;
+      border-radius: 18px 18px 6px 6px;
+      background:
+        linear-gradient(90deg, transparent 0 12px, rgba(255,255,255,.62) 13px 17px, transparent 18px),
+        linear-gradient(180deg, #3f4c5a, #151b20);
+      box-shadow:
+        -18px 18px 0 -10px #151b20,
+        18px 18px 0 -10px #151b20,
+        24px -7px 0 -7px #f7c948;
+      transform: rotate(-7deg);
+    }
+
+    .artillery-side-button span,
+    .artillery-side-button small {
+      position: relative;
+      z-index: 2;
+    }
+
+    .artillery-side-button span {
+      font-size: 1.02rem;
+      text-transform: uppercase;
+    }
+
+    .artillery-side-button small {
+      color: rgba(255, 249, 232, 0.82);
+      font-size: 0.72rem;
+      font-weight: 900;
+    }
+
     .filter-group {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
@@ -2816,6 +2874,7 @@
     .horse-open-btn { background: #9b59b6; }
     .slither-open-btn { background: #3b4f96; }
     .crash-open-btn { background: linear-gradient(135deg, #c0392b, #f39c12); }
+    .artillery-open-btn { background: linear-gradient(135deg, #254b6d, #a43f4b); }
     .lobby-limit-note {
       display: block;
       margin: 0 0 8px;
@@ -3204,6 +3263,200 @@
     @media (max-width: 760px) {
       .crash-panels { grid-template-columns: 1fr; }
       .crash-stage { min-height: 260px; }
+    }
+
+    .artillery-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      color: #fff9e8;
+      background: rgba(5, 14, 20, 0.82);
+      backdrop-filter: blur(6px);
+    }
+
+    .artillery-overlay.hidden {
+      display: none;
+    }
+
+    .artillery-table {
+      width: min(1240px, 98vw);
+      max-height: calc(100vh - 32px);
+      display: grid;
+      gap: 12px;
+      padding: 14px;
+      overflow: auto;
+      border: 2px solid rgba(247, 201, 72, 0.42);
+      border-radius: 12px;
+      background:
+        radial-gradient(circle at 12% 0%, rgba(247, 201, 72, 0.16), transparent 18rem),
+        linear-gradient(145deg, #172331, #0b171b);
+      box-shadow: 0 24px 76px rgba(0, 0, 0, 0.48);
+    }
+
+    .artillery-top,
+    .artillery-scorebar,
+    .artillery-actions {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .artillery-top h3 {
+      margin: 0;
+      font-size: 1.18rem;
+      text-transform: uppercase;
+    }
+
+    .artillery-top span,
+    .artillery-scorebar span {
+      color: rgba(255, 249, 232, 0.72);
+      font-size: .8rem;
+      font-weight: 850;
+    }
+
+    .artillery-message {
+      min-height: 38px;
+      padding: 10px 12px;
+      border: 1px solid rgba(255, 248, 232, 0.12);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.07);
+      font-size: .86rem;
+      font-weight: 850;
+    }
+
+    .artillery-main {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 288px;
+      gap: 12px;
+      min-height: 0;
+    }
+
+    .artillery-field-shell {
+      position: relative;
+      min-width: 0;
+      overflow: hidden;
+      border: 2px solid rgba(255, 248, 232, 0.18);
+      border-radius: 10px;
+      background: #111c28;
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,.06);
+    }
+
+    .artillery-canvas {
+      width: 100%;
+      aspect-ratio: 1200 / 680;
+      min-height: 390px;
+      display: block;
+      touch-action: none;
+      background: #122033;
+    }
+
+    .artillery-taunt-layer {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+    }
+
+    .artillery-panel {
+      display: grid;
+      align-content: start;
+      gap: 10px;
+      padding: 12px;
+      border: 1px solid rgba(255, 248, 232, 0.12);
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.07);
+    }
+
+    .artillery-control {
+      display: grid;
+      gap: 6px;
+    }
+
+    .artillery-control label {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      color: rgba(255, 249, 232, 0.78);
+      font-size: .74rem;
+      font-weight: 950;
+      text-transform: uppercase;
+    }
+
+    .artillery-control input[type="range"] {
+      width: 100%;
+      accent-color: #f7c948;
+    }
+
+    .artillery-players {
+      display: grid;
+      gap: 7px;
+      max-height: 260px;
+      overflow: auto;
+    }
+
+    .artillery-player-row {
+      display: grid;
+      grid-template-columns: 10px minmax(0, 1fr) auto;
+      gap: 8px;
+      align-items: center;
+      padding: 8px;
+      border: 1px solid rgba(255, 248, 232, 0.10);
+      border-radius: 8px;
+      background: rgba(0, 0, 0, 0.18);
+    }
+
+    .artillery-player-row.is-me {
+      border-color: rgba(247, 201, 72, 0.62);
+      background: rgba(247, 201, 72, 0.10);
+    }
+
+    .artillery-player-row.is-turn {
+      box-shadow: inset 0 0 0 2px rgba(93, 213, 255, 0.42);
+    }
+
+    .artillery-player-row.is-dead {
+      opacity: .54;
+      filter: grayscale(.45);
+    }
+
+    .artillery-color-dot {
+      width: 10px;
+      height: 30px;
+      border-radius: 999px;
+      background: var(--artillery-color);
+      box-shadow: 0 0 12px var(--artillery-color);
+    }
+
+    .artillery-player-row strong,
+    .artillery-player-row small {
+      display: block;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .artillery-player-row small {
+      color: rgba(255, 249, 232, 0.65);
+      font-size: .72rem;
+      font-weight: 850;
+    }
+
+    .artillery-actions .mp-btn {
+      width: auto;
+      min-width: 102px;
+      padding: 9px 14px;
+      font-size: .84rem;
+    }
+
+    @media (max-width: 900px) {
+      .artillery-main { grid-template-columns: 1fr; }
+      .artillery-canvas { min-height: 300px; }
     }
 
     /* Waiting overlay (esperando oponente aceitar) */
@@ -4460,6 +4713,10 @@
             <span>Crash</span>
             <small>Avião online</small>
           </button>
+          <button class="artillery-side-button" id="openArtilleryGame" type="button">
+            <span>CanhÃ£o Arena</span>
+            <small>Angulo e forÃ§a</small>
+          </button>
           <button class="blackjack-side-button" id="openBlackjackGame" type="button">
             <span>Mesa 21</span>
             <small>Cartas online</small>
@@ -4569,6 +4826,7 @@
         <button class="mp-btn button-soccer-open-btn" type="button" onclick="createButtonSoccerRoom()">Botao</button>
         <button class="mp-btn slither-open-btn" type="button" onclick="createSlitherRoom()">Slither</button>
         <button class="mp-btn crash-open-btn" type="button" onclick="createCrashRoom()">Crash</button>
+        <button class="mp-btn artillery-open-btn" type="button" onclick="createArtilleryRoom()">Canhao</button>
         <button class="mp-btn blackjack-open-btn" type="button" onclick="createBlackjackRoom()">Mesa 21</button>
         <button class="mp-btn horse-open-btn" type="button" onclick="createHorseRoom()">🏇 Corrida</button>
       </div>
@@ -4746,6 +5004,66 @@
     <div class="challenge-toast-btns">
       <button class="btn-accept" onclick="acceptCrashInvite()">Entrar</button>
       <button class="btn-reject" onclick="rejectCrashInvite()">Agora nao</button>
+    </div>
+  </div>
+
+  <div class="challenge-toast hidden" id="artilleryInviteToast">
+    <h4>CanhÃ£o Arena</h4>
+    <p id="artilleryInviteMsg"></p>
+    <div class="challenge-toast-btns">
+      <button class="btn-accept" onclick="acceptArtilleryInvite()">Entrar</button>
+      <button class="btn-reject" onclick="rejectArtilleryInvite()">Agora nao</button>
+    </div>
+  </div>
+
+  <div class="artillery-overlay hidden" id="artilleryOverlay">
+    <div class="artillery-table">
+      <div class="artillery-top">
+        <div>
+          <h3>CanhÃ£o Arena</h3>
+          <span id="artilleryBetLabel">Aposta: 0</span>
+        </div>
+        <button class="mp-btn" style="width:auto;padding:8px 16px" type="button" onclick="leaveArtilleryRoom()">Fechar</button>
+      </div>
+
+      <div class="artillery-scorebar">
+        <span id="artilleryTurnLabel">Turno: aguardando</span>
+        <strong id="artilleryWindLabel">Vento 0</strong>
+        <span id="artilleryTimerLabel">0s</span>
+      </div>
+
+      <div class="artillery-message" id="artilleryMessage">Aguardando sala.</div>
+
+      <div class="artillery-main">
+        <div class="artillery-field-shell" id="artilleryFieldShell">
+          <canvas class="artillery-canvas" id="artilleryCanvas" width="1200" height="680"></canvas>
+          <div class="artillery-taunt-layer" id="artilleryTauntLayer"></div>
+        </div>
+
+        <aside class="artillery-panel">
+          <div class="artillery-control">
+            <label for="artilleryAngle">Angulo <span id="artilleryAngleValue">45Â°</span></label>
+            <input id="artilleryAngle" type="range" min="0" max="180" value="45">
+          </div>
+          <div class="artillery-control">
+            <label for="artilleryPower">Forca <span id="artilleryPowerValue">58</span></label>
+            <input id="artilleryPower" type="range" min="18" max="100" value="58">
+          </div>
+          <div class="artillery-actions">
+            <button class="mp-btn" id="artilleryStartBtn" type="button" onclick="startArtilleryRound()">Comecar</button>
+            <button class="mp-btn" id="artilleryShootBtn" type="button" onclick="shootArtillery()">Atirar</button>
+            <button class="mp-btn" id="artilleryLeaveBtn" type="button" onclick="leaveArtilleryRoom()">Sair</button>
+          </div>
+          <div class="artillery-players" id="artilleryPlayers"></div>
+          <div class="button-emoji-bar">
+            <button class="button-emoji-btn" type="button" onclick="sendTaunt('ðŸ˜‚')">ðŸ˜‚</button>
+            <button class="button-emoji-btn" type="button" onclick="sendTaunt('ðŸŽ¯')">ðŸŽ¯</button>
+            <button class="button-emoji-btn" type="button" onclick="sendTaunt('ðŸ’¥')">ðŸ’¥</button>
+            <button class="button-emoji-btn" type="button" onclick="sendTaunt('ðŸ”¥')">ðŸ”¥</button>
+            <button class="button-emoji-btn" type="button" onclick="sendTaunt('ðŸ¤¡')">ðŸ¤¡</button>
+          </div>
+        </aside>
+      </div>
     </div>
   </div>
 
@@ -5304,6 +5622,7 @@
     const openButtonSoccerGame = document.getElementById("openButtonSoccerGame");
     const openSlitherGame = document.getElementById("openSlitherGame");
     const openCrashGame = document.getElementById("openCrashGame");
+    const openArtilleryGame = document.getElementById("openArtilleryGame");
     const openBlackjackGame = document.getElementById("openBlackjackGame");
     const openMarket = document.getElementById("openMarket");
     const marketOverlay = document.getElementById("marketOverlay");
@@ -5356,6 +5675,12 @@
     const buttonPowerValue = document.getElementById("buttonPowerValue");
     const slitherCanvas = document.getElementById("slitherCanvas");
     const slitherCtx = slitherCanvas.getContext("2d");
+    const artilleryCanvas = document.getElementById("artilleryCanvas");
+    const artilleryCtx = artilleryCanvas.getContext("2d");
+    const artilleryAngle = document.getElementById("artilleryAngle");
+    const artilleryPower = document.getElementById("artilleryPower");
+    const artilleryAngleValue = document.getElementById("artilleryAngleValue");
+    const artilleryPowerValue = document.getElementById("artilleryPowerValue");
     const FIELD = {
       width: 1500,
       height: 675,
@@ -6939,6 +7264,7 @@
     openButtonSoccerGame.addEventListener("click", openButtonSoccerFromSidebar);
     openSlitherGame.addEventListener("click", openSlitherFromSidebar);
     openCrashGame.addEventListener("click", openCrashFromSidebar);
+    openArtilleryGame.addEventListener("click", openArtilleryFromSidebar);
     openBlackjackGame.addEventListener("click", openBlackjackFromSidebar);
     openMarket.addEventListener("click", openMarketplace);
     closeMarket.addEventListener("click", closeMarketplace);
@@ -7121,6 +7447,12 @@
       crashRoomId: null,
       crashRoom: null,
       crashLastCashoutId: null,
+      artilleryInviteRoomId: null,
+      artilleryRoomId: null,
+      artilleryRoom: null,
+      artilleryRenderId: 0,
+      artilleryLastShotId: null,
+      artilleryShotAnimation: null,
       headInviteRoomId: null,
       headRoomId: null,
       headRoom: null,
@@ -7614,6 +7946,37 @@
       });
 
       // ── Emoji Taunts ────────────────────────────────────────────────────
+      mp.socket.on("artillery:invite", ({ roomId, fromUsername, bet }) => {
+        mp.artilleryInviteRoomId = roomId;
+        document.getElementById("artilleryInviteMsg").textContent =
+          `${fromUsername} abriu uma sala de Canhao Arena. Aposta: ${bet} creditos.`;
+        document.getElementById("artilleryInviteToast").classList.remove("hidden");
+      });
+
+      mp.socket.on("artillery:update", (room) => {
+        renderArtilleryRoom(room);
+      });
+
+      mp.socket.on("artillery:finished", ({ room, updatedUser }) => {
+        if (updatedUser) {
+          applyServerData(updatedUser);
+        }
+        renderArtilleryRoom(room);
+        renderBetPanel();
+        updateLobbyHeader();
+        showToast(room.message || "Canhao Arena encerrado.");
+      });
+
+      mp.socket.on("artillery:cancelled", ({ message }) => {
+        closeArtilleryOverlay(true);
+        showToast(message || "Sala de Canhao Arena cancelada.");
+        updateLobbyHeader();
+      });
+
+      mp.socket.on("artillery:error", (msg) => {
+        showToast(msg || "Nao foi possivel jogar Canhao Arena.");
+      });
+
       mp.socket.on("market:sold", ({ listing, buyer, updatedUser }) => {
         if (updatedUser) {
           applyServerData(updatedUser);
@@ -7702,7 +8065,8 @@
         blackjack: "Mesa 21",
         slither: "Slither",
         horse: "Corrida",
-        crash: "Crash"
+        crash: "Crash",
+        artillery: "Canhao Arena"
       };
       return labels[game] || "Em jogo";
     }
@@ -9801,7 +10165,8 @@
         blackjack: "blackjack:spectate",
         slither: "slither:spectate",
         horse: "horse:spectate",
-        crash: "crash:spectate"
+        crash: "crash:spectate",
+        artillery: "artillery:spectate"
       };
       const eventName = events[game];
       if (!roomId || !eventName) {

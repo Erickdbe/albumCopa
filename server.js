@@ -901,6 +901,7 @@ const buttonSoccerRooms  = new Map();   // roomId -> futebol de botao
 const headSoccerRooms    = new Map();   // roomId -> head soccer em sala
 const slitherRooms       = new Map();   // roomId -> cobrinhas estilo slither
 const crashRooms         = new Map();   // roomId -> crash do aviao
+const artilleryRooms     = new Map();   // roomId -> artilharia por turnos
 
 function ensureSpectators(room) {
   if (!room.spectators) room.spectators = new Set();
@@ -940,6 +941,9 @@ function clearSocketFromSpectatorRooms(socketId) {
   }
   for (const room of crashRooms.values()) {
     if (clearSpectator(room, socketId)) emitCrashUpdate(room);
+  }
+  for (const room of artilleryRooms.values()) {
+    if (clearSpectator(room, socketId)) emitArtilleryUpdate(room);
   }
 }
 
@@ -3043,6 +3047,469 @@ function removeCrashPlayer(room, socketId, reason = "") {
   broadcastOnlineList();
 }
 
+const ARTILLERY_FIELD = {
+  width: 1200,
+  height: 680,
+  groundBase: 510,
+  playerRadius: 18,
+  projectileRadius: 6,
+  blastRadius: 86
+};
+const ARTILLERY_MAX_PLAYERS = 8;
+const ARTILLERY_TURN_MS = 25000;
+const ARTILLERY_COLORS = ["#f05a48", "#35a7ff", "#f7c948", "#8f7cff", "#37c978", "#ff8c42", "#e75eb7", "#f5f2df"];
+
+function makeArtilleryTerrain() {
+  const step = 40;
+  const points = [];
+  const count = Math.floor(ARTILLERY_FIELD.width / step);
+  const phase = Math.random() * Math.PI * 2;
+  for (let index = 0; index <= count; index += 1) {
+    const x = index * step;
+    const wave = Math.sin(index * 0.58 + phase) * 42 + Math.sin(index * 0.21 + phase * 0.7) * 28;
+    const noise = (Math.random() - 0.5) * 26;
+    points.push({
+      x,
+      y: clampNumber(ARTILLERY_FIELD.groundBase + wave + noise, 380, 590)
+    });
+  }
+  return points;
+}
+
+function artilleryTerrainY(room, x) {
+  const points = room.terrain || [];
+  if (!points.length) return ARTILLERY_FIELD.groundBase;
+  if (x <= points[0].x) return points[0].y;
+  for (let index = 1; index < points.length; index += 1) {
+    const prev = points[index - 1];
+    const next = points[index];
+    if (x <= next.x) {
+      const ratio = (x - prev.x) / Math.max(1, next.x - prev.x);
+      return prev.y + (next.y - prev.y) * ratio;
+    }
+  }
+  return points[points.length - 1].y;
+}
+
+function artilleryWind() {
+  return Math.round((Math.random() * 2 - 1) * 70);
+}
+
+function makeArtilleryPlayer(socket, index, bet) {
+  return {
+    socketId: socket.id,
+    userId: socket.userId,
+    username: socket.username,
+    avatar: socket.avatar || "",
+    color: ARTILLERY_COLORS[index % ARTILLERY_COLORS.length],
+    bet,
+    hp: 100,
+    alive: true,
+    x: 0,
+    y: 0,
+    angle: index % 2 === 0 ? 44 : 136,
+    power: 58,
+    joinedAt: Date.now()
+  };
+}
+
+function positionArtilleryPlayers(room) {
+  const aliveSlots = Math.max(2, room.players.length);
+  room.players.forEach((player, index) => {
+    const x = 92 + ((ARTILLERY_FIELD.width - 184) * index) / Math.max(1, aliveSlots - 1);
+    player.x = Math.round(x);
+    player.y = Math.round(artilleryTerrainY(room, player.x) - ARTILLERY_FIELD.playerRadius);
+    player.hp = 100;
+    player.alive = true;
+    player.angle = index < room.players.length / 2 ? 42 : 138;
+    player.power = 58;
+  });
+}
+
+function serializeArtilleryRoom(room, viewerSocketId) {
+  const now = Date.now();
+  const isSpectator = !room.players.some(player => player.socketId === viewerSocketId);
+  return {
+    roomId: room.roomId,
+    hostSocketId: room.hostSocketId,
+    hostUsername: room.hostUsername,
+    bet: room.bet,
+    status: room.status,
+    message: room.message,
+    field: ARTILLERY_FIELD,
+    terrain: room.terrain || [],
+    wind: Number(room.wind || 0),
+    turnSocketId: room.turnSocketId || null,
+    turnEndsAt: room.turnEndsAt || null,
+    turnLeftMs: room.status === "playing" ? Math.max(0, Number(room.turnEndsAt || now) - now) : 0,
+    winnerSocketId: room.winnerSocketId || null,
+    lastShot: room.lastShot || null,
+    isSpectator,
+    spectatorCount: roomSpectatorCount(room),
+    players: room.players.map((player, index) => ({
+      socketId: player.socketId,
+      username: player.username,
+      avatar: player.avatar || "",
+      color: player.color,
+      hp: Math.max(0, Math.round(Number(player.hp || 0))),
+      alive: Boolean(player.alive),
+      x: Math.round(Number(player.x || 0)),
+      y: Math.round(Number(player.y || 0)),
+      angle: Math.round(Number(player.angle || 0)),
+      power: Math.round(Number(player.power || 0)),
+      bet: player.bet,
+      watchers: roomSpectatorCount(room),
+      isTurn: player.socketId === room.turnSocketId,
+      isHost: player.socketId === room.hostSocketId,
+      isMe: player.socketId === viewerSocketId,
+      order: index
+    }))
+  };
+}
+
+function emitArtilleryUpdate(room) {
+  const targets = new Set(room.players.map(player => player.socketId));
+  for (const spectatorId of room.spectators || []) targets.add(spectatorId);
+  targets.forEach(socketId => {
+    io.to(socketId).emit("artillery:update", serializeArtilleryRoom(room, socketId));
+  });
+}
+
+function findArtilleryRoomBySocket(socketId) {
+  for (const room of artilleryRooms.values()) {
+    if (room.players.some(player => player.socketId === socketId) || room.spectators?.has(socketId)) return room;
+  }
+  return null;
+}
+
+function artilleryAlivePlayers(room) {
+  return room.players.filter(player => player.alive && Number(player.hp || 0) > 0);
+}
+
+function setArtilleryTurn(room, nextIndex = 0) {
+  const alive = artilleryAlivePlayers(room);
+  if (!alive.length) return;
+  let index = ((nextIndex % room.players.length) + room.players.length) % room.players.length;
+  for (let scan = 0; scan < room.players.length; scan += 1) {
+    const candidate = room.players[index];
+    if (candidate?.alive && Number(candidate.hp || 0) > 0) break;
+    index = (index + 1) % room.players.length;
+  }
+  room.turnIndex = index;
+  room.turnSocketId = room.players[index].socketId;
+  room.turnEndsAt = Date.now() + ARTILLERY_TURN_MS;
+  clearTimeout(room.turnTimer);
+  room.turnTimer = setTimeout(() => {
+    if (!artilleryRooms.has(room.roomId) || room.status !== "playing") return;
+    const current = room.players.find(player => player.socketId === room.turnSocketId);
+    room.message = `${current?.username || "Jogador"} perdeu o turno.`;
+    advanceArtilleryTurn(room);
+    emitArtilleryUpdate(room);
+  }, ARTILLERY_TURN_MS + 250);
+}
+
+function advanceArtilleryTurn(room) {
+  if (room.status !== "playing") return;
+  const alive = artilleryAlivePlayers(room);
+  if (alive.length <= 1) {
+    finishArtilleryRoom(room);
+    return;
+  }
+  room.wind = artilleryWind();
+  setArtilleryTurn(room, (room.turnIndex || 0) + 1);
+}
+
+function carveArtilleryCrater(room, x, radius) {
+  if (!Array.isArray(room.terrain)) return;
+  room.terrain.forEach(point => {
+    const dist = Math.abs(Number(point.x || 0) - x);
+    if (dist > radius) return;
+    const cut = Math.cos((dist / radius) * Math.PI / 2) * 34;
+    point.y = clampNumber(Number(point.y || ARTILLERY_FIELD.groundBase) + cut, 360, ARTILLERY_FIELD.height - 34);
+  });
+  room.players.forEach(player => {
+    if (player.alive) {
+      player.y = Math.round(artilleryTerrainY(room, player.x) - ARTILLERY_FIELD.playerRadius);
+    }
+  });
+}
+
+function simulateArtilleryShot(room, shooter, angleDeg, power) {
+  const angle = clampNumber(angleDeg, 0, 180);
+  const shotPower = clampNumber(power, 18, 100);
+  const rad = (angle * Math.PI) / 180;
+  let x = Number(shooter.x || 0);
+  let y = Number(shooter.y || 0) - ARTILLERY_FIELD.playerRadius - 6;
+  let vx = Math.cos(rad) * (shotPower * 7.8);
+  let vy = -Math.sin(rad) * (shotPower * 7.8);
+  const gravity = 470;
+  const windAccel = Number(room.wind || 0) * 0.55;
+  const path = [];
+  let impact = null;
+
+  for (let step = 0; step < 420; step += 1) {
+    const dt = 1 / 30;
+    vx += windAccel * dt;
+    vy += gravity * dt;
+    x += vx * dt;
+    y += vy * dt;
+
+    if (step % 2 === 0) {
+      path.push({ x: Math.round(x), y: Math.round(y) });
+    }
+
+    const hitPlayer = room.players.find(player => {
+      if (!player.alive || player.socketId === shooter.socketId) return false;
+      return Math.hypot(x - player.x, y - player.y) <= ARTILLERY_FIELD.playerRadius + ARTILLERY_FIELD.projectileRadius + 3;
+    });
+
+    if (hitPlayer) {
+      impact = { x: Math.round(x), y: Math.round(y), targetSocketId: hitPlayer.socketId };
+      break;
+    }
+
+    if (x < -80 || x > ARTILLERY_FIELD.width + 80 || y > ARTILLERY_FIELD.height + 80) {
+      impact = { x: Math.round(clampNumber(x, 0, ARTILLERY_FIELD.width)), y: Math.round(clampNumber(y, 0, ARTILLERY_FIELD.height)) };
+      break;
+    }
+
+    if (x >= 0 && x <= ARTILLERY_FIELD.width && y >= artilleryTerrainY(room, x)) {
+      impact = { x: Math.round(x), y: Math.round(artilleryTerrainY(room, x)) };
+      break;
+    }
+  }
+
+  if (!impact) {
+    impact = { x: Math.round(clampNumber(x, 0, ARTILLERY_FIELD.width)), y: Math.round(clampNumber(y, 0, ARTILLERY_FIELD.height)) };
+  }
+
+  const damages = [];
+  room.players.forEach(player => {
+    if (!player.alive) return;
+    const dist = Math.hypot(impact.x - player.x, impact.y - player.y);
+    if (dist > ARTILLERY_FIELD.blastRadius) return;
+    const damage = Math.max(8, Math.round(72 * (1 - dist / ARTILLERY_FIELD.blastRadius)));
+    player.hp = Math.max(0, Number(player.hp || 0) - damage);
+    if (player.hp <= 0) player.alive = false;
+    damages.push({
+      socketId: player.socketId,
+      username: player.username,
+      damage,
+      hp: Math.round(player.hp),
+      eliminated: !player.alive
+    });
+  });
+
+  carveArtilleryCrater(room, impact.x, ARTILLERY_FIELD.blastRadius * 0.78);
+
+  return {
+    id: ++room.shotSeq,
+    shooterSocketId: shooter.socketId,
+    shooterUsername: shooter.username,
+    angle,
+    power: shotPower,
+    wind: Number(room.wind || 0),
+    path,
+    impact,
+    damages,
+    at: Date.now()
+  };
+}
+
+function startArtilleryRound(room, requestedBet = room.bet) {
+  const maxBet = room.players.length >= 3 ? 20 : 50;
+  const tableBet = clampNumber(requestedBet, 5, maxBet);
+  if (room.players.length < 2) {
+    room.message = "Precisa de pelo menos 2 jogadores para iniciar.";
+    emitArtilleryUpdate(room);
+    return false;
+  }
+
+  for (const player of room.players) {
+    const user = db.findUser("id", player.userId);
+    if (!user || Number(user.bet_credits || 0) < tableBet) {
+      room.message = `${player.username} nao tem creditos para ${tableBet}.`;
+      emitArtilleryUpdate(room);
+      return false;
+    }
+  }
+
+  room.players.forEach((player, index) => {
+    const user = db.findUser("id", player.userId);
+    db.updateUser(player.userId, {
+      bet_credits: Math.max(0, Number(user.bet_credits || 0) - tableBet)
+    });
+    const fresh = makeArtilleryPlayer(io.sockets.sockets.get(player.socketId) || {
+      id: player.socketId,
+      userId: player.userId,
+      username: player.username,
+      avatar: player.avatar
+    }, index, tableBet);
+    Object.assign(player, fresh, { socketId: player.socketId, userId: player.userId, username: player.username, avatar: player.avatar || "" });
+  });
+
+  room.bet = tableBet;
+  room.status = "playing";
+  room.terrain = makeArtilleryTerrain();
+  room.wind = artilleryWind();
+  room.lastShot = null;
+  room.shotSeq = 0;
+  room.winnerSocketId = null;
+  room.message = "Partida iniciada. Ajuste angulo e forca para derrubar os rivais.";
+  positionArtilleryPlayers(room);
+  setArtilleryTurn(room, 0);
+  emitArtilleryUpdate(room);
+  broadcastOnlineList();
+  return true;
+}
+
+function finishArtilleryRoom(room, reason = "") {
+  if (!room || room.status === "finished") return;
+
+  clearTimeout(room.turnTimer);
+  room.turnTimer = null;
+  room.status = "finished";
+  room.turnSocketId = null;
+  room.turnEndsAt = null;
+
+  const alive = artilleryAlivePlayers(room);
+  const winner = alive.length === 1 ? alive[0] : null;
+  room.winnerSocketId = winner?.socketId || null;
+  const totalPot = room.players.reduce((sum, player) => sum + Number(player.bet || room.bet || 0), 0);
+
+  if (winner) {
+    const user = db.findUser("id", winner.userId);
+    if (user) {
+      db.updateUser(winner.userId, {
+        bet_credits: Number(user.bet_credits || 0) + totalPot
+      });
+      addExchangeWin(winner.userId);
+    }
+    room.message = `${reason ? `${reason} ` : ""}${winner.username} venceu o Canhao Arena e levou ${totalPot} creditos.`;
+  } else {
+    room.players.forEach(player => {
+      const user = db.findUser("id", player.userId);
+      if (user) {
+        db.updateUser(player.userId, {
+          bet_credits: Number(user.bet_credits || 0) + Number(player.bet || room.bet || 0)
+        });
+      }
+    });
+    room.message = `${reason ? `${reason} ` : ""}Canhao Arena terminou empatado. Apostas devolvidas.`;
+  }
+  resetExchangeLosses(room.players.map(player => player.userId), winner ? [winner.userId] : []);
+
+  const targets = new Set(room.players.map(player => player.socketId));
+  for (const spectatorId of room.spectators || []) targets.add(spectatorId);
+  targets.forEach(socketId => {
+    const participant = room.players.find(player => player.socketId === socketId);
+    io.to(socketId).emit("artillery:finished", {
+      room: serializeArtilleryRoom(room, socketId),
+      updatedUser: participant ? safeUser(db.findUser("id", participant.userId)) : null
+    });
+    const liveSocket = io.sockets.sockets.get(socketId);
+    if (liveSocket) liveSocket.leave(room.roomId);
+  });
+
+  room.players.forEach(player => {
+    const online = onlinePlayers.get(player.socketId);
+    if (online && online.roomId === room.roomId) {
+      online.inGame = false;
+      online.roomId = null;
+      online.game = null;
+    }
+  });
+
+  artilleryRooms.delete(room.roomId);
+  broadcastOnlineList();
+}
+
+function cancelArtilleryRoom(room, reason = "Sala de Canhao Arena cancelada.") {
+  if (!room) return;
+  clearTimeout(room.turnTimer);
+
+  if (room.status === "playing") {
+    room.players.forEach(player => {
+      const user = db.findUser("id", player.userId);
+      if (user) {
+        db.updateUser(player.userId, {
+          bet_credits: Number(user.bet_credits || 0) + Number(player.bet || room.bet || 0)
+        });
+      }
+    });
+  }
+
+  const targets = new Set(room.players.map(player => player.socketId));
+  for (const spectatorId of room.spectators || []) targets.add(spectatorId);
+  targets.forEach(socketId => {
+    io.to(socketId).emit("artillery:cancelled", { message: reason });
+    const participant = room.players.find(player => player.socketId === socketId);
+    if (participant) {
+      const online = onlinePlayers.get(socketId);
+      if (online && online.roomId === room.roomId) {
+        online.inGame = false;
+        online.roomId = null;
+        online.game = null;
+      }
+    }
+    const liveSocket = io.sockets.sockets.get(socketId);
+    if (liveSocket) liveSocket.leave(room.roomId);
+  });
+
+  artilleryRooms.delete(room.roomId);
+  broadcastOnlineList();
+}
+
+function removeArtilleryPlayer(room, socketId, reason = "") {
+  const player = room.players.find(item => item.socketId === socketId);
+  if (!player) {
+    clearSpectator(room, socketId);
+    emitArtilleryUpdate(room);
+    broadcastOnlineList();
+    return;
+  }
+
+  const online = onlinePlayers.get(socketId);
+  if (online && online.roomId === room.roomId) {
+    online.inGame = false;
+    online.roomId = null;
+    online.game = null;
+  }
+  const liveSocket = io.sockets.sockets.get(socketId);
+  if (liveSocket) liveSocket.leave(room.roomId);
+
+  if (room.status === "playing") {
+    player.hp = 0;
+    player.alive = false;
+    resetExchangeWinStreak(player.userId);
+    room.message = reason || `${player.username} saiu e perdeu a aposta.`;
+    if (room.turnSocketId === socketId) advanceArtilleryTurn(room);
+    if (artilleryAlivePlayers(room).length <= 1) {
+      finishArtilleryRoom(room, room.message);
+      return;
+    }
+    emitArtilleryUpdate(room);
+    broadcastOnlineList();
+    return;
+  }
+
+  room.players = room.players.filter(item => item.socketId !== socketId);
+  if (!room.players.length) {
+    artilleryRooms.delete(room.roomId);
+    broadcastOnlineList();
+    return;
+  }
+
+  if (room.hostSocketId === socketId) {
+    room.hostSocketId = room.players[0].socketId;
+    room.hostUsername = room.players[0].username;
+  }
+  room.players.forEach((item, index) => { item.color = ARTILLERY_COLORS[index % ARTILLERY_COLORS.length]; });
+  room.message = reason || `${player.username} saiu da sala.`;
+  emitArtilleryUpdate(room);
+  broadcastOnlineList();
+}
+
 io.on("connection", (socket) => {
   console.log(`[+] ${socket.username} conectado`);
   const connectedUser = normalizeUserProgress(db.findUser("id", socket.userId));
@@ -3209,6 +3676,12 @@ io.on("connection", (socket) => {
     if (crashRoom) {
       crashRoom.players.forEach(player => targets.add(player.socketId));
       for (const spectatorId of crashRoom.spectators || []) targets.add(spectatorId);
+    }
+
+    const artilleryRoom = findArtilleryRoomBySocket(socket.id);
+    if (artilleryRoom) {
+      artilleryRoom.players.forEach(player => targets.add(player.socketId));
+      for (const spectatorId of artilleryRoom.spectators || []) targets.add(spectatorId);
     }
 
     if (p?.roomId) {
@@ -4033,6 +4506,157 @@ io.on("connection", (socket) => {
   });
 
   // ── Corrida de Cavalos ─────────────────────────────────────────────────
+  socket.on("artillery:create", ({ bet }) => {
+    const tableBet = clampNumber(bet || 10, 5, 50);
+    const user = db.findUser("id", socket.userId);
+    const player = onlinePlayers.get(socket.id);
+    if (!user || Number(user.bet_credits || 0) < tableBet)
+      return socket.emit("artillery:error", "Creditos de aposta insuficientes.");
+    if (player?.inGame)
+      return socket.emit("artillery:error", "Voce ja esta em uma partida.");
+
+    const roomId = `artillery-${Date.now()}-${socket.id}`;
+    const room = {
+      roomId,
+      hostSocketId: socket.id,
+      hostUsername: socket.username,
+      bet: tableBet,
+      status: "waiting",
+      terrain: makeArtilleryTerrain(),
+      wind: 0,
+      turnIndex: 0,
+      turnSocketId: null,
+      turnEndsAt: null,
+      turnTimer: null,
+      shotSeq: 0,
+      lastShot: null,
+      spectators: new Set(),
+      winnerSocketId: null,
+      message: "Sala aberta. Entre, ajuste angulo e forca, e derrube os rivais.",
+      players: [makeArtilleryPlayer(socket, 0, tableBet)]
+    };
+    artilleryRooms.set(roomId, room);
+    socket.join(roomId);
+    if (player) { player.inGame = true; player.roomId = roomId; player.game = "artillery"; }
+
+    for (const [, target] of onlinePlayers) {
+      if (target.socketId !== socket.id && !target.inGame) {
+        io.to(target.socketId).emit("artillery:invite", { roomId, fromUsername: socket.username, bet: tableBet });
+      }
+    }
+
+    emitArtilleryUpdate(room);
+    broadcastOnlineList();
+  });
+
+  socket.on("artillery:join", ({ roomId }) => {
+    const room = artilleryRooms.get(roomId);
+    if (!room || room.status !== "waiting")
+      return socket.emit("artillery:error", "Sala indisponivel.");
+    if (room.players.some(player => player.socketId === socket.id))
+      return emitArtilleryUpdate(room);
+    if (room.players.length >= ARTILLERY_MAX_PLAYERS)
+      return socket.emit("artillery:error", `Sala cheia (max. ${ARTILLERY_MAX_PLAYERS} jogadores).`);
+
+    const maxBet = room.players.length >= 2 ? 20 : 50;
+    if (room.bet > maxBet) {
+      return socket.emit("artillery:error", `Esta sala teria ${room.players.length + 1} jogadores. Aposta maxima: ${maxBet} creditos.`);
+    }
+
+    const user = db.findUser("id", socket.userId);
+    const player = onlinePlayers.get(socket.id);
+    if (!user || Number(user.bet_credits || 0) < room.bet)
+      return socket.emit("artillery:error", "Creditos de aposta insuficientes.");
+    if (player?.inGame)
+      return socket.emit("artillery:error", "Voce ja esta em uma partida.");
+
+    room.players.push(makeArtilleryPlayer(socket, room.players.length, room.bet));
+    room.message = `${socket.username} entrou no Canhao Arena.`;
+    socket.join(roomId);
+    if (player) { player.inGame = true; player.roomId = roomId; player.game = "artillery"; }
+    emitArtilleryUpdate(room);
+    broadcastOnlineList();
+  });
+
+  socket.on("artillery:start", ({ roomId }) => {
+    const room = artilleryRooms.get(roomId);
+    if (!room || room.status !== "waiting") return;
+    if (room.hostSocketId !== socket.id)
+      return socket.emit("artillery:error", "So o dono da sala pode iniciar.");
+    startArtilleryRound(room, room.bet);
+  });
+
+  socket.on("artillery:shoot", ({ roomId, angle, power }) => {
+    const room = artilleryRooms.get(roomId);
+    if (!room || room.status !== "playing") return;
+    if (room.turnSocketId !== socket.id)
+      return socket.emit("artillery:error", "Aguarde sua vez.");
+    if (Date.now() > Number(room.turnEndsAt || 0)) {
+      room.message = `${socket.username} perdeu o turno.`;
+      advanceArtilleryTurn(room);
+      emitArtilleryUpdate(room);
+      return;
+    }
+
+    const shooter = room.players.find(player => player.socketId === socket.id && player.alive);
+    if (!shooter) return;
+    clearTimeout(room.turnTimer);
+    shooter.angle = clampNumber(angle, 0, 180);
+    shooter.power = clampNumber(power, 18, 100);
+    room.lastShot = simulateArtilleryShot(room, shooter, shooter.angle, shooter.power);
+    const hits = room.lastShot.damages.filter(item => item.damage > 0);
+    room.message = hits.length
+      ? `${shooter.username} causou dano em ${hits.map(item => item.username).join(", ")}.`
+      : `${shooter.username} errou o disparo.`;
+
+    if (artilleryAlivePlayers(room).length <= 1) {
+      finishArtilleryRoom(room);
+      return;
+    }
+
+    advanceArtilleryTurn(room);
+    emitArtilleryUpdate(room);
+  });
+
+  socket.on("artillery:leave", ({ roomId }) => {
+    const room = artilleryRooms.get(roomId);
+    if (!room) return;
+    if (room.spectators?.has(socket.id)) {
+      clearSpectator(room, socket.id);
+      emitArtilleryUpdate(room);
+      broadcastOnlineList();
+      return;
+    }
+    if (room.status === "waiting" && room.hostSocketId === socket.id) {
+      cancelArtilleryRoom(room, "O dono cancelou o Canhao Arena.");
+      return;
+    }
+    removeArtilleryPlayer(room, socket.id, `${socket.username} saiu do Canhao Arena.`);
+  });
+
+  socket.on("artillery:spectate", ({ roomId }) => {
+    const room = artilleryRooms.get(roomId);
+    if (!room || room.status !== "playing")
+      return socket.emit("artillery:error", "Partida indisponivel para assistir.");
+    if (room.players.some(player => player.socketId === socket.id))
+      return emitArtilleryUpdate(room);
+    const online = onlinePlayers.get(socket.id);
+    if (online?.inGame)
+      return socket.emit("artillery:error", "Termine sua partida antes de assistir outra.");
+    ensureSpectators(room).add(socket.id);
+    socket.join(roomId);
+    emitArtilleryUpdate(room);
+    broadcastOnlineList();
+  });
+
+  socket.on("artillery:unwatch", ({ roomId }) => {
+    const room = artilleryRooms.get(roomId);
+    if (!room) return;
+    clearSpectator(room, socket.id);
+    emitArtilleryUpdate(room);
+    broadcastOnlineList();
+  });
+
   socket.on("horse:create", ({ bet }) => {
     const tableBet = Math.max(5, Math.min(50, Number(bet) || 10));
     const user = db.findUser("id", socket.userId);
@@ -4272,6 +4896,15 @@ io.on("connection", (socket) => {
       }
     }
 
+    const artilleryRoom = findArtilleryRoomBySocket(socket.id);
+    if (artilleryRoom) {
+      if (artilleryRoom.status === "waiting" && artilleryRoom.hostSocketId === socket.id) {
+        cancelArtilleryRoom(artilleryRoom, `${socket.username} cancelou o Canhao Arena.`);
+      } else {
+        removeArtilleryPlayer(artilleryRoom, socket.id, `${socket.username} desconectou do Canhao Arena.`);
+      }
+    }
+
     const blackjackRoom = findBlackjackRoomBySocket(socket.id);
     if (blackjackRoom) {
       const participant = blackjackRoom.players.find(item => item.socketId === socket.id);
@@ -4364,6 +4997,7 @@ function getSpectatableRoom(game, roomId) {
   if (game === "slither") return slitherRooms.get(roomId) || null;
   if (game === "horse") return horseRooms.get(roomId) || null;
   if (game === "crash") return crashRooms.get(roomId) || null;
+  if (game === "artillery") return artilleryRooms.get(roomId) || null;
   return null;
 }
 

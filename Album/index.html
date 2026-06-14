@@ -3964,271 +3964,71 @@
       overflow: hidden;
     }
     .merchant-figure {
-      --merchant-dark: #251323;
-      --merchant-deep: #341a32;
-      --merchant-mid: #4e2a4c;
-      --merchant-purple: #8e3f91;
-      --merchant-pink: #bb5d91;
-      --merchant-skin: #c9857a;
-      --merchant-gold: #d39a61;
       position: relative;
-      width: 156px;
-      height: 230px;
+      width: 176px;
+      height: 214px;
       image-rendering: pixelated;
-      transform: translateY(4px);
-      filter: drop-shadow(0 9px 0 rgba(37, 49, 45, 0.12));
-      animation: merchantNod 2600ms ease-in-out infinite;
+      isolation: isolate;
     }
-    .merchant-figure span {
+    .merchant-figure::after {
+      content: "";
       position: absolute;
-      display: block;
-      box-sizing: border-box;
-    }
-    .merchant-shadow {
-      left: 16px;
-      right: 8px;
-      bottom: 0;
+      left: 20px;
+      right: 18px;
+      bottom: 16px;
       height: 10px;
-      background: rgba(37, 49, 45, 0.72);
-      box-shadow: -10px 0 0 rgba(37, 49, 45, 0.72), 18px 0 0 rgba(37, 49, 45, 0.48);
-    }
-    .merchant-backpack {
-      left: 33px;
-      top: 18px;
-      width: 54px;
-      height: 72px;
-      background: #b46b71;
-      box-shadow:
-        8px -8px 0 #8d4a67,
-        18px 0 0 #6b3555,
-        0 16px 0 #7d3f60;
+      border-radius: 50%;
+      background: rgba(37, 49, 45, 0.34);
+      filter: blur(.3px);
       z-index: 1;
     }
-    .merchant-leg {
-      top: 176px;
-      width: 18px;
-      height: 40px;
-      background: var(--merchant-dark);
+    .merchant-sprite {
+      position: absolute;
+      left: 50%;
+      bottom: 18px;
+      z-index: 2;
+      width: 128px;
+      height: 128px;
+      background-image: url("../craftpix-net-922426-free-city-trader-character-sprite-sheets-pixel-art/Trader_1/Dialogue.png");
+      background-repeat: no-repeat;
+      background-size: 2048px 128px;
+      image-rendering: pixelated;
+      transform: translateX(-50%) scale(1.55);
+      transform-origin: 50% 100%;
+      filter: drop-shadow(0 8px 0 rgba(37, 49, 45, 0.16));
+      animation: traderDialogue 3400ms steps(16) infinite;
+      will-change: background-position;
+    }
+    .merchant-fig-card {
+      position: absolute;
       z-index: 3;
-    }
-    .merchant-leg.left { left: 45px; }
-    .merchant-leg.right { right: 43px; }
-    .merchant-foot {
-      bottom: 8px;
-      width: 36px;
-      height: 11px;
-      background: #9e4f76;
-      z-index: 6;
-    }
-    .merchant-foot.left {
-      left: 30px;
-      box-shadow: -8px 4px 0 #68334f;
-    }
-    .merchant-foot.right {
-      right: 25px;
-      box-shadow: 8px 4px 0 #68334f;
-    }
-    .merchant-torso {
-      left: 62px;
-      top: 64px;
-      width: 46px;
-      height: 116px;
-      background:
-        linear-gradient(90deg, transparent 0 15px, rgba(234, 207, 202, .54) 15px 23px, transparent 23px),
-        linear-gradient(180deg, #a94aa0 0 56px, #71356d 56px 92px, #5c5260 92px 100%);
-      box-shadow:
-        inset -8px 0 0 rgba(29, 16, 29, .34),
-        -8px 13px 0 #63345b,
-        8px 20px 0 #3c223b;
-      z-index: 4;
-    }
-    .merchant-torso::before,
-    .merchant-torso::after {
-      content: "";
-      position: absolute;
-      display: block;
-      width: 8px;
-      height: 8px;
-      background: var(--merchant-gold);
-      box-shadow:
-        0 18px 0 #d0827c,
-        9px 9px 0 #c77878,
-        9px 31px 0 #e0a05e,
-        -8px 39px 0 #a64d78,
-        8px 54px 0 #b75b8f;
-    }
-    .merchant-torso::before {
-      left: 8px;
-      top: 17px;
-    }
-    .merchant-torso::after {
-      right: 7px;
-      top: 23px;
-      opacity: .75;
-    }
-    .merchant-sash {
-      left: 62px;
-      top: 131px;
-      width: 47px;
-      height: 10px;
-      background: #d78b63;
-      box-shadow: 0 8px 0 #a14b6e, -5px 18px 0 #642e59;
-      z-index: 8;
-    }
-    .merchant-hood {
-      left: 58px;
-      top: 0;
-      width: 56px;
-      height: 72px;
-      background:
-        linear-gradient(180deg, #3b203c 0 18px, #241322 18px 100%);
-      clip-path: polygon(50% 0, 85% 19%, 100% 58%, 86% 100%, 14% 100%, 0 58%, 15% 19%);
-      box-shadow:
-        inset 10px 0 0 #503052,
-        inset -10px 0 0 #170c17;
-      z-index: 12;
-    }
-    .merchant-head {
-      left: 72px;
-      top: 37px;
-      width: 27px;
-      height: 30px;
-      background: #ba7772;
-      box-shadow:
-        7px 0 0 #f0b38d,
-        -7px 0 0 #6f3757,
-        0 20px 0 var(--merchant-pink),
-        7px 20px 0 #a9469b;
-      z-index: 13;
-    }
-    .merchant-mask {
-      left: 64px;
-      top: 57px;
-      width: 49px;
-      height: 28px;
-      background: linear-gradient(90deg, #7f357d, #c14fa7 55%, #803273);
-      box-shadow:
-        inset 0 -8px 0 #7c2f72,
-        8px 8px 0 #5e2f58;
-      z-index: 14;
-    }
-    .merchant-coat {
-      top: 52px;
-      height: 148px;
-      background: var(--merchant-dark);
-      z-index: 7;
-      transform-origin: top center;
-      will-change: transform;
-    }
-    .merchant-coat.coat-left {
-      left: 22px;
-      width: 52px;
-      clip-path: polygon(36% 0, 100% 0, 84% 100%, 18% 100%, 0 82%, 5% 36%);
-      box-shadow:
-        inset 12px 0 0 #3a2039,
-        inset -6px 0 0 #130b12,
-        -8px 41px 0 #1e101e,
-        6px 122px 0 #1b0e1a;
-      animation: merchantCoatLeft 3600ms ease-in-out infinite;
-    }
-    .merchant-coat.coat-right {
-      right: 13px;
-      width: 77px;
-      clip-path: polygon(0 0, 73% 17%, 100% 48%, 88% 100%, 22% 100%, 5% 62%);
-      box-shadow:
-        inset -10px 0 0 #140b14,
-        inset 13px 0 0 #402340,
-        -6px 61px 0 #2e182d,
-        13px 104px 0 #1b0e1b;
-      animation: merchantCoatRight 3600ms ease-in-out infinite;
-    }
-    .merchant-coat::after {
-      content: "";
-      position: absolute;
-      width: 10px;
-      height: 10px;
-      background: #6c5d6b;
-      box-shadow:
-        26px 22px 0 #b26680,
-        8px 44px 0 #6f6475,
-        38px 62px 0 #cb7a85,
-        20px 84px 0 #a35375;
-      opacity: .85;
-    }
-    .merchant-coat.coat-left::after {
-      left: 24px;
-      top: 50px;
-    }
-    .merchant-coat.coat-right::after {
-      left: 15px;
-      top: 48px;
-    }
-    .merchant-arm {
-      top: 73px;
-      width: 24px;
-      height: 78px;
-      background: #2a1427;
-      z-index: 9;
-      transform-origin: top center;
-    }
-    .merchant-arm.arm-left {
-      left: 15px;
-      transform: rotate(13deg);
-      box-shadow: 8px 34px 0 #3e2240;
-    }
-    .merchant-arm.arm-right {
-      right: 8px;
-      width: 31px;
-      height: 86px;
-      transform: rotate(-62deg);
-      box-shadow: -12px 22px 0 #2b162b;
-      animation: merchantRightArm 3600ms ease-in-out infinite;
-    }
-    .merchant-hand {
-      width: 20px;
-      height: 18px;
-      background: var(--merchant-skin);
-      z-index: 16;
-      transform-origin: center center;
-    }
-    .merchant-hand.hand-left {
-      left: 11px;
-      top: 146px;
-      box-shadow: -8px 6px 0 #a65f6c;
-    }
-    .merchant-hand.hand-right {
-      right: 1px;
-      top: 71px;
-      box-shadow: 8px 4px 0 #a65f6c;
-      animation: merchantRightHand 3600ms ease-in-out infinite;
-    }
-    .merchant-sticker {
-      width: 18px;
-      height: 25px;
-      border: 2px solid #2a1829;
+      width: 16px;
+      height: 22px;
+      border: 2px solid rgba(255, 246, 220, .9);
+      border-radius: 3px;
       background:
         linear-gradient(135deg, rgba(255,255,255,.45), transparent 36%),
         linear-gradient(160deg, var(--card-a, #b9577a), var(--card-b, #6e3a81));
-      box-shadow: inset 0 -5px 0 rgba(32, 18, 32, 0.24);
-      z-index: 6;
+      box-shadow: 0 4px 0 rgba(24, 12, 24, .28), inset 0 -5px 0 rgba(32, 18, 32, 0.18);
       opacity: 0;
-      animation: merchantStickerPeek 3600ms ease-in-out infinite;
+      transform: rotate(var(--tilt, 0deg));
+      animation: traderCardReveal 3400ms ease-in-out infinite;
+      animation-delay: var(--delay, 0ms);
     }
-    .merchant-sticker::after {
+    .merchant-fig-card::after {
       content: "";
       position: absolute;
-      left: 5px;
-      top: 12px;
-      width: 6px;
+      left: 4px;
+      top: 11px;
+      width: 5px;
       height: 4px;
-      background: rgba(255, 236, 197, 0.72);
-      box-shadow: 4px 6px 0 rgba(255, 236, 197, 0.48);
+      background: rgba(255, 236, 197, 0.76);
+      box-shadow: 5px 5px 0 rgba(255, 236, 197, 0.5);
     }
-    .merchant-sticker.sticker-1 { left: 82px; top: 86px; --card-a: #c86b85; --card-b: #6e426d; animation-delay: 70ms; }
-    .merchant-sticker.sticker-2 { left: 113px; top: 83px; --card-a: #b26473; --card-b: #49334e; animation-delay: 140ms; }
-    .merchant-sticker.sticker-3 { left: 101px; top: 121px; --card-a: #6c6174; --card-b: #3f3048; animation-delay: 210ms; }
-    .merchant-sticker.sticker-4 { left: 132px; top: 123px; --card-a: #ca7477; --card-b: #6b3b5a; animation-delay: 280ms; }
-    .merchant-sticker.sticker-5 { left: 90px; top: 159px; --card-a: #9e4d75; --card-b: #3b273d; animation-delay: 350ms; }
+    .merchant-fig-card.card-1 { left: 99px; top: 84px; --tilt: -7deg; --card-a: #c86b85; --card-b: #6e426d; --delay: 30ms; }
+    .merchant-fig-card.card-2 { left: 126px; top: 91px; --tilt: 4deg; --card-a: #b26473; --card-b: #49334e; --delay: 80ms; }
+    .merchant-fig-card.card-3 { left: 107px; top: 121px; --tilt: 5deg; --card-a: #6c6174; --card-b: #3f3048; --delay: 130ms; }
+    .merchant-fig-card.card-4 { left: 133px; top: 132px; --tilt: -4deg; --card-a: #ca7477; --card-b: #6b3b5a; --delay: 180ms; }
     .merchant-speech {
       position: relative;
       min-height: 42px;
@@ -4332,21 +4132,13 @@
       bottom: 22px;
       background: linear-gradient(135deg, #f4d35e, #d8ad3f);
     }
-    .market-card.is-trading .merchant-hand,
-    .market-card.is-listing .merchant-hand {
-      animation: merchantTradeHand 760ms ease-in-out both;
+    .market-card.is-trading .merchant-sprite,
+    .market-card.is-listing .merchant-sprite {
+      animation: traderDeal 1100ms steps(16) both;
     }
-    .market-card.is-trading .merchant-coat.coat-left,
-    .market-card.is-listing .merchant-coat.coat-left {
-      animation: merchantQuickOpenLeft 1040ms ease-in-out both;
-    }
-    .market-card.is-trading .merchant-coat.coat-right,
-    .market-card.is-listing .merchant-coat.coat-right {
-      animation: merchantQuickOpenRight 1040ms ease-in-out both;
-    }
-    .market-card.is-trading .merchant-sticker,
-    .market-card.is-listing .merchant-sticker {
-      animation: merchantQuickStickerPeek 1040ms ease-in-out both;
+    .market-card.is-trading .merchant-fig-card,
+    .market-card.is-listing .merchant-fig-card {
+      animation: traderCardDeal 1100ms ease-in-out both;
     }
     .market-card.is-trading .trade-chip.bet {
       animation: betChipToMerchant 820ms ease-in-out both;
@@ -4357,50 +4149,25 @@
     .market-card.is-listing .counter-sticker:first-child {
       animation: listedCardDrop 620ms cubic-bezier(.22, 1, .36, 1) both;
     }
-    @keyframes merchantNod {
-      0%, 100% { transform: translateY(4px) rotate(0deg); }
-      45% { transform: translateY(7px) rotate(-1deg); }
+    @keyframes traderDialogue {
+      from { background-position: 0 0; }
+      to { background-position: -2048px 0; }
     }
-    @keyframes merchantCoatLeft {
-      0%, 18%, 100% { transform: translateX(0) rotate(0deg) skewY(0deg); }
-      38%, 64% { transform: translateX(-13px) rotate(8deg) skewY(-2deg); }
+    @keyframes traderDeal {
+      from { background-position: 0 0; }
+      to { background-position: -2048px 0; }
     }
-    @keyframes merchantCoatRight {
-      0%, 18%, 100% { transform: translateX(0) rotate(0deg) skewY(0deg); }
-      38%, 64% { transform: translateX(15px) rotate(-10deg) skewY(2deg); }
+    @keyframes traderCardReveal {
+      0%, 22%, 88%, 100% { opacity: 0; transform: translateY(6px) scale(.86) rotate(var(--tilt, 0deg)); }
+      38%, 70% { opacity: 1; transform: translateY(0) scale(1) rotate(var(--tilt, 0deg)); }
     }
-    @keyframes merchantRightArm {
-      0%, 18%, 100% { transform: rotate(-62deg); }
-      38%, 64% { transform: translate(8px, -3px) rotate(-78deg); }
-    }
-    @keyframes merchantRightHand {
-      0%, 18%, 100% { transform: translate(0, 0) rotate(0deg); }
-      38%, 64% { transform: translate(14px, -6px) rotate(-8deg); }
-    }
-    @keyframes merchantStickerPeek {
-      0%, 24%, 100% { opacity: 0; transform: translateX(-8px) scale(.82); }
-      39%, 62% { opacity: 1; transform: translateX(0) scale(1); }
-    }
-    @keyframes merchantQuickOpenLeft {
-      0%, 100% { transform: translateX(0) rotate(0deg) skewY(0deg); }
-      34%, 78% { transform: translateX(-17px) rotate(10deg) skewY(-2deg); }
-    }
-    @keyframes merchantQuickOpenRight {
-      0%, 100% { transform: translateX(0) rotate(0deg) skewY(0deg); }
-      34%, 78% { transform: translateX(19px) rotate(-13deg) skewY(2deg); }
-    }
-    @keyframes merchantQuickStickerPeek {
-      0%, 100% { opacity: 0; transform: translateX(-8px) scale(.82); }
-      26%, 82% { opacity: 1; transform: translateX(0) scale(1); }
+    @keyframes traderCardDeal {
+      0%, 100% { opacity: 0; transform: translateY(6px) scale(.86) rotate(var(--tilt, 0deg)); }
+      26%, 82% { opacity: 1; transform: translateY(0) scale(1) rotate(var(--tilt, 0deg)); }
     }
     @keyframes counterCardBob {
       0%, 100% { transform: translateY(0) rotate(-1deg); }
       50% { transform: translateY(-5px) rotate(1deg); }
-    }
-    @keyframes merchantTradeHand {
-      0%, 100% { transform: rotate(0deg) translateX(0); }
-      35% { transform: rotate(-18deg) translateX(10px); }
-      70% { transform: rotate(16deg) translateX(-8px); }
     }
     @keyframes betChipToMerchant {
       0% { opacity: 0; transform: translate(0, 0) scale(.72); }
@@ -5383,28 +5150,11 @@
       <div class="market-grid">
         <section class="market-merchant" id="marketMerchant">
           <div class="merchant-figure" aria-hidden="true">
-            <span class="merchant-shadow"></span>
-            <span class="merchant-backpack"></span>
-            <span class="merchant-leg left"></span>
-            <span class="merchant-leg right"></span>
-            <span class="merchant-foot left"></span>
-            <span class="merchant-foot right"></span>
-            <span class="merchant-torso"></span>
-            <span class="merchant-sash"></span>
-            <span class="merchant-sticker sticker-1"></span>
-            <span class="merchant-sticker sticker-2"></span>
-            <span class="merchant-sticker sticker-3"></span>
-            <span class="merchant-sticker sticker-4"></span>
-            <span class="merchant-sticker sticker-5"></span>
-            <span class="merchant-coat coat-left"></span>
-            <span class="merchant-coat coat-right"></span>
-            <span class="merchant-arm arm-left"></span>
-            <span class="merchant-arm arm-right"></span>
-            <span class="merchant-hood"></span>
-            <span class="merchant-head"></span>
-            <span class="merchant-mask"></span>
-            <span class="merchant-hand hand-left"></span>
-            <span class="merchant-hand hand-right"></span>
+            <span class="merchant-sprite"></span>
+            <span class="merchant-fig-card card-1"></span>
+            <span class="merchant-fig-card card-2"></span>
+            <span class="merchant-fig-card card-3"></span>
+            <span class="merchant-fig-card card-4"></span>
           </div>
           <div>
             <div class="merchant-speech" id="merchantSpeech">Tenho repetidas no balcao e faco troca de creditos.</div>

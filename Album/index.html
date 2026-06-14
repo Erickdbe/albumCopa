@@ -8867,7 +8867,7 @@
 
     function sendTaunt(emoji) {
       emoji = normalizeTauntEmoji(emoji);
-      const hasActiveRoom = mp.roomId || mp.blackjackRoomId || mp.horseRoomId || mp.buttonRoomId || mp.headRoomId || mp.slitherRoomId || mp.crashRoomId;
+      const hasActiveRoom = mp.roomId || mp.blackjackRoomId || mp.horseRoomId || mp.buttonRoomId || mp.headRoomId || mp.slitherRoomId || mp.crashRoomId || mp.artilleryRoomId;
       if (!emoji || !mp.socket?.connected || !hasActiveRoom) return;
 
       const payload = { emoji };
@@ -8901,6 +8901,15 @@
 
       if (mp.crashRoom && !document.getElementById("crashOverlay").classList.contains("hidden")) {
         payload.game = "crash";
+      }
+
+      if (mp.artilleryRoom && !document.getElementById("artilleryOverlay").classList.contains("hidden")) {
+        const me = getArtilleryMe();
+        if (me) {
+          payload.game = "artillery";
+          payload.x = me.x;
+          payload.y = me.y - 34;
+        }
       }
 
       mp.socket.emit("game:taunt", payload);
@@ -8970,6 +8979,27 @@
         el.style.setProperty("--x", `${(point.x / slitherCanvas.width) * 100}%`);
         el.style.setProperty("--y", `${(point.y / slitherCanvas.height) * 100}%`);
         slitherLayer.appendChild(el);
+        setTimeout(() => el.remove(), 1700);
+        return;
+      }
+
+      const artilleryOverlay = document.getElementById("artilleryOverlay");
+      const artilleryLayer = document.getElementById("artilleryTauntLayer");
+      if (artilleryLayer && mp.artilleryRoom && !artilleryOverlay.classList.contains("hidden")) {
+        const field = mp.artilleryRoom.field || { width: 1200, height: 680 };
+        let x = Number(payload.x);
+        let y = Number(payload.y);
+        if (!Number.isFinite(x) || !Number.isFinite(y)) {
+          const player = mp.artilleryRoom.players?.find(item => item.socketId === payload.fromSocketId) || getArtilleryMe();
+          x = player?.x ?? field.width / 2;
+          y = (player?.y ?? field.height / 2) - 34;
+        }
+        const el = document.createElement("span");
+        el.className = "taunt-pop";
+        el.textContent = emoji;
+        el.style.setProperty("--x", `${(x / field.width) * 100}%`);
+        el.style.setProperty("--y", `${(y / field.height) * 100}%`);
+        artilleryLayer.appendChild(el);
         setTimeout(() => el.remove(), 1700);
         return;
       }
@@ -10128,6 +10158,403 @@
       document.getElementById("crashCashoutBtn").disabled = isSpectator || !(isPlaying && me?.status === "flying");
       document.getElementById("crashLeaveBtn").textContent = isSpectator ? "Sair da transmissao" : isFinished ? "Fechar" : "Sair";
     }
+
+    function openArtilleryFromSidebar() {
+      if (!mp.isOnline) {
+        showToast("Faca login para abrir o Canhao Arena.");
+        document.getElementById("authOverlay").classList.remove("hidden");
+        return;
+      }
+      openLobby();
+      window.setTimeout(() => {
+        document.querySelector("[onclick='createArtilleryRoom()']")?.focus();
+      }, 0);
+    }
+
+    function createArtilleryRoom() {
+      if (!mp.isOnline) {
+        showToast("Faca login para abrir uma sala.");
+        document.getElementById("authOverlay").classList.remove("hidden");
+        return;
+      }
+      const bet = Number(document.getElementById("myBetInput").value) || 10;
+      if (bet < 5) { showToast("Aposta minima: 5 creditos."); return; }
+      if (bet > state.betCredits) { showToast("Creditos de aposta insuficientes."); return; }
+      mp.socket.emit("artillery:create", { bet });
+      document.getElementById("lobbyOverlay").classList.add("hidden");
+    }
+
+    function acceptArtilleryInvite() {
+      if (!mp.artilleryInviteRoomId) return;
+      document.getElementById("artilleryInviteToast").classList.add("hidden");
+      mp.socket.emit("artillery:join", { roomId: mp.artilleryInviteRoomId });
+      mp.artilleryInviteRoomId = null;
+    }
+
+    function rejectArtilleryInvite() {
+      mp.artilleryInviteRoomId = null;
+      document.getElementById("artilleryInviteToast").classList.add("hidden");
+    }
+
+    function startArtilleryRound() {
+      if (!mp.artilleryRoomId) return;
+      if (mp.artilleryRoom?.isSpectator) {
+        showToast("Voce esta assistindo esta partida.");
+        return;
+      }
+      if (mp.artilleryRoom?.status === "finished") {
+        const bet = Number(mp.artilleryRoom.bet || document.getElementById("myBetInput").value || 10);
+        closeArtilleryOverlay(true);
+        mp.socket.emit("artillery:create", { bet });
+        return;
+      }
+      mp.socket.emit("artillery:start", { roomId: mp.artilleryRoomId });
+    }
+
+    function shootArtillery() {
+      const me = getArtilleryMe();
+      if (!mp.artilleryRoomId || mp.artilleryRoom?.isSpectator || !me?.alive) return;
+      if (mp.artilleryRoom?.turnSocketId !== mp.socket?.id) {
+        showToast("Aguarde sua vez.");
+        return;
+      }
+      mp.socket.emit("artillery:shoot", {
+        roomId: mp.artilleryRoomId,
+        angle: Number(artilleryAngle.value) || 45,
+        power: Number(artilleryPower.value) || 58
+      });
+      document.getElementById("artilleryShootBtn").disabled = true;
+    }
+
+    function leaveArtilleryRoom() {
+      if (mp.artilleryRoomId && mp.artilleryRoom?.status !== "finished") {
+        mp.socket?.emit(mp.artilleryRoom?.isSpectator ? "artillery:unwatch" : "artillery:leave", { roomId: mp.artilleryRoomId });
+      }
+      closeArtilleryOverlay(false);
+    }
+
+    function closeArtilleryOverlay(fromServer = false) {
+      document.getElementById("artilleryOverlay").classList.add("hidden");
+      document.getElementById("artilleryInviteToast").classList.add("hidden");
+      document.getElementById("artilleryTauntLayer").innerHTML = "";
+      if (mp.artilleryRenderId) {
+        cancelAnimationFrame(mp.artilleryRenderId);
+        mp.artilleryRenderId = 0;
+      }
+      mp.artilleryInviteRoomId = null;
+      mp.artilleryRoomId = null;
+      mp.artilleryRoom = null;
+      mp.artilleryLastShotId = null;
+      mp.artilleryShotAnimation = null;
+      if (!fromServer) updateLobbyHeader();
+    }
+
+    function getArtilleryMe() {
+      return mp.artilleryRoom?.players?.find(player => player.isMe) || null;
+    }
+
+    function updateArtilleryControlLabels() {
+      artilleryAngleValue.textContent = `${Number(artilleryAngle.value) || 0} deg`;
+      artilleryPowerValue.textContent = `${Number(artilleryPower.value) || 0}`;
+    }
+
+    function updateArtilleryTimer(room = mp.artilleryRoom) {
+      const timer = document.getElementById("artilleryTimerLabel");
+      if (!timer || !room) return;
+      if (room.status !== "playing") {
+        timer.textContent = room.status === "finished" ? "fim" : "aguardando";
+        return;
+      }
+      const left = Math.max(0, Number(room.turnEndsAt || Date.now()) - Date.now());
+      timer.textContent = `${Math.ceil(left / 1000)}s`;
+    }
+
+    function renderArtilleryRoom(room) {
+      if (!room) return;
+      mp.artilleryRoom = room;
+      mp.artilleryRoomId = room.roomId;
+      document.getElementById("artilleryOverlay").classList.remove("hidden");
+      document.getElementById("artilleryInviteToast").classList.add("hidden");
+
+      const me = getArtilleryMe();
+      const isWaiting = room.status === "waiting";
+      const isPlaying = room.status === "playing";
+      const isFinished = room.status === "finished";
+      const isHost = room.hostSocketId === mp.socket?.id;
+      const isSpectator = Boolean(room.isSpectator);
+      const current = (room.players || []).find(player => player.socketId === room.turnSocketId);
+
+      if (me && (!isPlaying || room.turnSocketId === me.socketId)) {
+        artilleryAngle.value = Number(me.angle || artilleryAngle.value || 45);
+        artilleryPower.value = Number(me.power || artilleryPower.value || 58);
+      }
+      updateArtilleryControlLabels();
+
+      if (room.lastShot?.id && room.lastShot.id !== mp.artilleryLastShotId) {
+        mp.artilleryLastShotId = room.lastShot.id;
+        mp.artilleryShotAnimation = { id: room.lastShot.id, startedAt: performance.now() };
+      } else if (!room.lastShot) {
+        mp.artilleryLastShotId = null;
+        mp.artilleryShotAnimation = null;
+      }
+
+      document.getElementById("artilleryBetLabel").textContent = `Aposta: ${room.bet} creditos`;
+      document.getElementById("artilleryMessage").textContent = room.message || "";
+      document.getElementById("artilleryWindLabel").textContent = `Vento ${Number(room.wind || 0) >= 0 ? "+" : ""}${Number(room.wind || 0)}`;
+      document.getElementById("artilleryTurnLabel").textContent = isPlaying
+        ? `Turno: ${current?.username || "?"}`
+        : isFinished
+          ? "Partida encerrada"
+          : `${room.players?.length || 0} jogadores na sala`;
+      updateArtilleryTimer(room);
+
+      document.getElementById("artilleryPlayers").innerHTML = (room.players || []).map(player => `
+        <div class="artillery-player-row ${player.isMe ? "is-me" : ""} ${player.isTurn ? "is-turn" : ""} ${!player.alive ? "is-dead" : ""}" data-socket-id="${escHtml(player.socketId)}">
+          <span class="artillery-color-dot" style="--artillery-color:${escHtml(player.color || "#f05a48")}"></span>
+          <span>
+            <strong>${escHtml(player.username)}${player.isMe ? " (voce)" : ""}${player.isHost ? " *" : ""}</strong>
+            <small>${player.alive ? `${player.hp} HP` : "fora"}${player.isTurn ? " | turno" : ""}</small>
+          </span>
+          <strong>${player.bet} cr</strong>
+        </div>
+      `).join("");
+
+      document.getElementById("artilleryStartBtn").textContent = isFinished ? "Jogar novamente" : "Comecar";
+      document.getElementById("artilleryStartBtn").disabled = isSpectator || !(isFinished || (isWaiting && isHost && (room.players?.length || 0) >= 2));
+      document.getElementById("artilleryShootBtn").disabled = isSpectator || !(isPlaying && me?.alive && room.turnSocketId === mp.socket?.id);
+      document.getElementById("artilleryLeaveBtn").textContent = isSpectator ? "Sair da transmissao" : isFinished ? "Fechar" : "Sair";
+
+      ensureArtilleryRenderLoop();
+    }
+
+    function ensureArtilleryRenderLoop() {
+      if (mp.artilleryRenderId) return;
+      const frame = () => {
+        if (!mp.artilleryRoom || document.getElementById("artilleryOverlay").classList.contains("hidden")) {
+          mp.artilleryRenderId = 0;
+          return;
+        }
+        updateArtilleryTimer(mp.artilleryRoom);
+        drawArtilleryRoom(mp.artilleryRoom);
+        mp.artilleryRenderId = requestAnimationFrame(frame);
+      };
+      mp.artilleryRenderId = requestAnimationFrame(frame);
+    }
+
+    function artilleryTerrainYClient(room, x) {
+      const points = room?.terrain || [];
+      if (!points.length) return 510;
+      if (x <= points[0].x) return points[0].y;
+      for (let index = 1; index < points.length; index += 1) {
+        const prev = points[index - 1];
+        const next = points[index];
+        if (x <= next.x) {
+          const ratio = (x - prev.x) / Math.max(1, next.x - prev.x);
+          return prev.y + (next.y - prev.y) * ratio;
+        }
+      }
+      return points[points.length - 1].y;
+    }
+
+    function drawArtilleryRoom(room) {
+      const field = room.field || { width: 1200, height: 680, playerRadius: 18, blastRadius: 86 };
+      const ctx = artilleryCtx;
+      ctx.clearRect(0, 0, artilleryCanvas.width, artilleryCanvas.height);
+      ctx.save();
+      ctx.scale(artilleryCanvas.width / field.width, artilleryCanvas.height / field.height);
+
+      const sky = ctx.createLinearGradient(0, 0, 0, field.height);
+      sky.addColorStop(0, "#15344c");
+      sky.addColorStop(.52, "#315b78");
+      sky.addColorStop(1, "#513f34");
+      ctx.fillStyle = sky;
+      ctx.fillRect(0, 0, field.width, field.height);
+
+      ctx.fillStyle = "rgba(255,234,161,.18)";
+      ctx.beginPath();
+      ctx.arc(1020, 92, 54, 0, Math.PI * 2);
+      ctx.fill();
+
+      drawArtilleryTerrain(ctx, room, field);
+      drawArtilleryAim(ctx, room, field);
+      (room.players || []).forEach(player => drawArtilleryPlayer(ctx, player, field));
+      drawArtilleryShot(ctx, room, field);
+
+      if (room.status === "finished") {
+        ctx.fillStyle = "rgba(4,10,16,.34)";
+        ctx.fillRect(0, 0, field.width, 72);
+        ctx.fillStyle = "#fff9e8";
+        ctx.font = "900 22px Segoe UI, Arial";
+        ctx.textAlign = "center";
+        ctx.fillText(room.message || "Partida encerrada.", field.width / 2, 43);
+      }
+
+      ctx.restore();
+    }
+
+    function drawArtilleryTerrain(ctx, room, field) {
+      const points = room.terrain || [];
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(0, field.height);
+      if (points.length) {
+        ctx.lineTo(points[0].x, points[0].y);
+        points.forEach(point => ctx.lineTo(point.x, point.y));
+      } else {
+        ctx.lineTo(0, 510);
+        ctx.lineTo(field.width, 510);
+      }
+      ctx.lineTo(field.width, field.height);
+      ctx.closePath();
+      const earth = ctx.createLinearGradient(0, 390, 0, field.height);
+      earth.addColorStop(0, "#4e7b48");
+      earth.addColorStop(.38, "#406536");
+      earth.addColorStop(1, "#24321e");
+      ctx.fillStyle = earth;
+      ctx.fill();
+      ctx.strokeStyle = "rgba(255,249,232,.28)";
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      if (points.length) {
+        ctx.moveTo(points[0].x, points[0].y);
+        points.forEach(point => ctx.lineTo(point.x, point.y));
+      } else {
+        ctx.moveTo(0, 510);
+        ctx.lineTo(field.width, 510);
+      }
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    function drawArtilleryPlayer(ctx, player, field) {
+      const radius = field.playerRadius || 18;
+      const color = player.color || "#f05a48";
+      const x = Number(player.x || 0);
+      const y = Number(player.y || 0);
+      const angle = (Number(player.angle || 45) * Math.PI) / 180;
+      ctx.save();
+      ctx.globalAlpha = player.alive ? 1 : .42;
+      ctx.lineCap = "round";
+
+      ctx.strokeStyle = player.alive ? color : "rgba(255,255,255,.35)";
+      ctx.lineWidth = 7;
+      ctx.beginPath();
+      ctx.moveTo(x, y - 2);
+      ctx.lineTo(x + Math.cos(angle) * 38, y - Math.sin(angle) * 38);
+      ctx.stroke();
+
+      ctx.fillStyle = player.alive ? color : "#6d737c";
+      ctx.beginPath();
+      ctx.arc(x, y, radius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "rgba(7,14,18,.78)";
+      ctx.fillRect(x - 27, y + radius - 4, 54, 12);
+
+      ctx.fillStyle = "rgba(0,0,0,.54)";
+      ctx.fillRect(x - 31, y - 49, 62, 8);
+      ctx.fillStyle = player.hp > 45 ? "#57d39b" : player.hp > 20 ? "#f6c453" : "#f05a48";
+      ctx.fillRect(x - 31, y - 49, 62 * Math.max(0, Number(player.hp || 0)) / 100, 8);
+      ctx.strokeStyle = "rgba(255,255,255,.18)";
+      ctx.strokeRect(x - 31, y - 49, 62, 8);
+
+      ctx.font = "900 14px Segoe UI, Arial";
+      ctx.textAlign = "center";
+      ctx.fillStyle = "#fff9e8";
+      ctx.shadowColor = "rgba(0,0,0,.85)";
+      ctx.shadowBlur = 5;
+      ctx.fillText(player.username || "?", x, y - 56);
+      if (!player.alive) {
+        ctx.strokeStyle = "rgba(255,255,255,.8)";
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.moveTo(x - 15, y - 15);
+        ctx.lineTo(x + 15, y + 15);
+        ctx.moveTo(x + 15, y - 15);
+        ctx.lineTo(x - 15, y + 15);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    function drawArtilleryAim(ctx, room, field) {
+      const me = getArtilleryMe();
+      if (!me || !me.alive || room.status !== "playing" || room.turnSocketId !== mp.socket?.id || room.isSpectator) return;
+      const angle = (Number(artilleryAngle.value || 45) * Math.PI) / 180;
+      const power = Number(artilleryPower.value || 58);
+      let x = Number(me.x || 0);
+      let y = Number(me.y || 0) - 24;
+      let vx = Math.cos(angle) * power * 7.8;
+      let vy = -Math.sin(angle) * power * 7.8;
+      const gravity = 470;
+      const wind = Number(room.wind || 0) * .55;
+
+      ctx.save();
+      ctx.setLineDash([9, 9]);
+      ctx.strokeStyle = "rgba(255,249,232,.72)";
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      for (let step = 0; step < 58; step += 1) {
+        const dt = 1 / 30;
+        vx += wind * dt;
+        vy += gravity * dt;
+        x += vx * dt;
+        y += vy * dt;
+        ctx.lineTo(x, y);
+        if (x < -60 || x > field.width + 60 || y > field.height + 40) break;
+        if (x >= 0 && x <= field.width && y >= artilleryTerrainYClient(room, x)) break;
+      }
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    function drawArtilleryShot(ctx, room, field) {
+      const shot = room.lastShot;
+      const path = shot?.path || [];
+      if (!path.length) return;
+
+      const anim = mp.artilleryShotAnimation?.id === shot.id ? mp.artilleryShotAnimation : null;
+      const progress = anim ? Math.min(1, (performance.now() - anim.startedAt) / 980) : 1;
+      const index = Math.max(0, Math.min(path.length - 1, Math.floor((path.length - 1) * progress)));
+      const visiblePath = path.slice(0, index + 1);
+
+      ctx.save();
+      ctx.strokeStyle = "rgba(255,249,232,.48)";
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      visiblePath.forEach((point, pointIndex) => {
+        if (pointIndex === 0) ctx.moveTo(point.x, point.y);
+        else ctx.lineTo(point.x, point.y);
+      });
+      ctx.stroke();
+
+      const point = path[index];
+      if (progress < 1) {
+        ctx.fillStyle = "#fff3a6";
+        ctx.shadowColor = "#fff3a6";
+        ctx.shadowBlur = 18;
+        ctx.beginPath();
+        ctx.arc(point.x, point.y, 7, 0, Math.PI * 2);
+        ctx.fill();
+      } else {
+        const impact = shot.impact || point;
+        const pulse = 1 + Math.sin(performance.now() / 90) * .08;
+        ctx.strokeStyle = "rgba(255,215,92,.7)";
+        ctx.lineWidth = 5;
+        ctx.beginPath();
+        ctx.arc(impact.x, impact.y, (field.blastRadius || 86) * .42 * pulse, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.fillStyle = "rgba(255,88,72,.20)";
+        ctx.beginPath();
+        ctx.arc(impact.x, impact.y, (field.blastRadius || 86) * .24 * pulse, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+
+    artilleryAngle.addEventListener("input", updateArtilleryControlLabels);
+    artilleryPower.addEventListener("input", updateArtilleryControlLabels);
+    updateArtilleryControlLabels();
 
     function createSlitherRoom() {
       if (!mp.isOnline) {

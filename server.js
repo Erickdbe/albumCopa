@@ -13,11 +13,47 @@ const cors       = require("cors");
 const fs         = require("fs");
 const path       = require("path");
 
+function loadLocalEnv() {
+  const envFile = path.join(__dirname, ".env");
+  if (!fs.existsSync(envFile)) return;
+
+  fs.readFileSync(envFile, "utf8").split(/\r?\n/).forEach((line) => {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) return;
+
+    const separator = trimmed.indexOf("=");
+    if (separator <= 0) return;
+
+    const key = trimmed.slice(0, separator).trim();
+    let value = trimmed.slice(separator + 1).trim();
+    if (!key || process.env[key] !== undefined) return;
+
+    if (
+      (value.startsWith("\"") && value.endsWith("\""))
+      || (value.startsWith("'") && value.endsWith("'"))
+    ) {
+      value = value.slice(1, -1);
+    }
+
+    process.env[key] = value;
+  });
+}
+
+loadLocalEnv();
+
 // ─── Config ────────────────────────────────────────────────────────────────
 const PORT        = process.env.PORT || 3000;
 const JWT_SECRET  = process.env.JWT_SECRET || "albumcopa_secret_mude_em_producao";
 const SALT_ROUNDS = 10;
-const DB_FILE     = path.join(__dirname, "db.json");
+const DB_PATH_CONFIGURED = Boolean(process.env.DB_FILE || process.env.DATA_DIR);
+const DATA_DIR    = process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : null;
+const DB_FILE     = process.env.DB_FILE
+  ? path.resolve(process.env.DB_FILE)
+  : path.join(DATA_DIR || __dirname, "db.json");
+const DB_BACKUP_DIR = process.env.DB_BACKUP_DIR
+  ? path.resolve(process.env.DB_BACKUP_DIR)
+  : path.join(path.dirname(DB_FILE), "backups");
+const MAX_DB_BACKUPS = Math.max(1, Number(process.env.MAX_DB_BACKUPS || 20));
 const DAILY_ALBUM_CREDITS = 30;
 const INITIAL_BET_CREDITS = 550;
 const PACK_COST = 15;
@@ -132,11 +168,45 @@ function todayKey() {
 }
 
 // ─── Banco de dados JSON ───────────────────────────────────────────────────
+function ensureDbDir() {
+  fs.mkdirSync(path.dirname(DB_FILE), { recursive: true });
+}
+
+let lastBackupDate = "";
+
+function pruneDbBackups() {
+  if (!fs.existsSync(DB_BACKUP_DIR)) return;
+
+  const backups = fs.readdirSync(DB_BACKUP_DIR)
+    .filter(name => /^db-\d{4}-\d{2}-\d{2}\.json$/.test(name))
+    .sort();
+
+  while (backups.length > MAX_DB_BACKUPS) {
+    const oldBackup = backups.shift();
+    fs.unlinkSync(path.join(DB_BACKUP_DIR, oldBackup));
+  }
+}
+
+function backupDbIfNeeded() {
+  const date = todayKey();
+  if (lastBackupDate === date || !fs.existsSync(DB_FILE)) return;
+
+  fs.mkdirSync(DB_BACKUP_DIR, { recursive: true });
+  const backupFile = path.join(DB_BACKUP_DIR, `db-${date}.json`);
+  if (!fs.existsSync(backupFile)) {
+    fs.copyFileSync(DB_FILE, backupFile);
+    pruneDbBackups();
+  }
+  lastBackupDate = date;
+}
+
 function loadDb() {
+  ensureDbDir();
   if (!fs.existsSync(DB_FILE)) {
-    fs.writeFileSync(DB_FILE, JSON.stringify({ users: [], matches: [], market_listings: [], nextUserId: 1, nextMatchId: 1, nextMarketId: 1 }));
+    saveDb({ users: [], matches: [], market_listings: [], nextUserId: 1, nextMatchId: 1, nextMarketId: 1 });
   }
   const data = JSON.parse(fs.readFileSync(DB_FILE, "utf8"));
+  backupDbIfNeeded();
   let changed = false;
 
   if (!Array.isArray(data.users)) {
@@ -169,7 +239,10 @@ function loadDb() {
 }
 
 function saveDb(db) {
-  fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2));
+  ensureDbDir();
+  const tempFile = `${DB_FILE}.tmp`;
+  fs.writeFileSync(tempFile, JSON.stringify(db, null, 2));
+  fs.renameSync(tempFile, DB_FILE);
 }
 
 // Helpers de consulta (síncronos, thread-safe pelo event loop do Node)
@@ -2199,5 +2272,6 @@ function broadcastOnlineList() {
 
 // ─── Start ─────────────────────────────────────────────────────────────────
 server.listen(PORT, () => {
+  console.log(`[db] Dados em: ${DB_FILE}`);
   console.log(`\n🏟️  Servidor Álbum da Copa rodando em http://localhost:${PORT}\n`);
 });

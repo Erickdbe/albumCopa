@@ -816,6 +816,62 @@
       font-weight: 900;
     }
 
+    .pirate-side-button {
+      position: relative;
+      width: 100%;
+      min-height: 72px;
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 10px;
+      margin-top: 8px;
+      padding: 12px;
+      overflow: hidden;
+      border: 0;
+      border-radius: var(--radius);
+      color: #fff9e8;
+      background:
+        radial-gradient(circle at 78% 30%, rgba(255, 224, 111, .9) 0 8px, transparent 10px),
+        radial-gradient(circle at 62% 62%, rgba(255, 107, 117, .58) 0 15px, transparent 17px),
+        linear-gradient(135deg, #432116, #7b2f2f 54%, #151a27);
+      box-shadow: 0 14px 28px rgba(100, 43, 28, 0.24);
+      cursor: pointer;
+      font-weight: 950;
+      text-align: left;
+    }
+
+    .pirate-side-button::after {
+      content: "";
+      position: absolute;
+      right: 17px;
+      bottom: 15px;
+      width: 42px;
+      height: 42px;
+      border-radius: 50%;
+      background:
+        radial-gradient(circle at 68% 20%, #fff9e8 0 3px, transparent 4px),
+        radial-gradient(circle at 50% 50%, #30323e 0 52%, #171923 53% 100%);
+      box-shadow: -18px -18px 0 -14px #f7c948, 0 0 22px rgba(255, 107, 117, .38);
+      opacity: .95;
+    }
+
+    .pirate-side-button span,
+    .pirate-side-button small {
+      position: relative;
+      z-index: 2;
+    }
+
+    .pirate-side-button span {
+      font-size: 1.02rem;
+      text-transform: uppercase;
+    }
+
+    .pirate-side-button small {
+      color: rgba(255, 249, 232, 0.82);
+      font-size: 0.72rem;
+      font-weight: 900;
+    }
+
     .filter-group {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
@@ -3690,6 +3746,182 @@
       .relic-canvas { min-height: 310px; }
     }
 
+    .pirate-open-btn { background: linear-gradient(135deg, #7b2f2f, #151a27); }
+
+    .pirate-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      color: #fff9e8;
+      background: rgba(12, 8, 10, 0.86);
+      backdrop-filter: blur(6px);
+    }
+
+    .pirate-overlay.hidden { display: none; }
+
+    .pirate-table {
+      width: min(1240px, 98vw);
+      max-height: calc(100vh - 32px);
+      display: grid;
+      gap: 12px;
+      padding: 14px;
+      overflow: auto;
+      border: 2px solid rgba(247, 201, 72, 0.34);
+      border-radius: 12px;
+      background:
+        radial-gradient(circle at 16% 0%, rgba(255,107,117,.16), transparent 18rem),
+        radial-gradient(circle at 88% 18%, rgba(247,201,72,.15), transparent 16rem),
+        linear-gradient(145deg, #241417, #111725);
+      box-shadow: 0 24px 76px rgba(0, 0, 0, 0.52);
+    }
+
+    .pirate-top,
+    .pirate-scorebar,
+    .pirate-actions {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .pirate-top h3 {
+      margin: 0;
+      font-size: 1.18rem;
+      text-transform: uppercase;
+    }
+
+    .pirate-top span,
+    .pirate-scorebar span {
+      color: rgba(255, 249, 232, 0.74);
+      font-size: .8rem;
+      font-weight: 850;
+    }
+
+    .pirate-message {
+      min-height: 38px;
+      padding: 10px 12px;
+      border: 1px solid rgba(255, 248, 232, 0.12);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.07);
+      font-size: .86rem;
+      font-weight: 850;
+    }
+
+    .pirate-main {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 280px;
+      gap: 12px;
+      min-height: 0;
+    }
+
+    .pirate-field-shell {
+      position: relative;
+      min-width: 0;
+      overflow: hidden;
+      border: 2px solid rgba(255, 248, 232, 0.16);
+      border-radius: 10px;
+      background: #090b12;
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,.06);
+    }
+
+    .pirate-canvas {
+      width: 100%;
+      aspect-ratio: 16 / 9;
+      min-height: 390px;
+      display: block;
+      image-rendering: pixelated;
+      touch-action: none;
+      background: #090b12;
+    }
+
+    .pirate-taunt-layer {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+    }
+
+    .pirate-panel {
+      display: grid;
+      align-content: start;
+      gap: 10px;
+      padding: 12px;
+      border: 1px solid rgba(255, 248, 232, 0.12);
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.07);
+    }
+
+    .pirate-actions .mp-btn {
+      width: auto;
+      min-width: 100px;
+      padding: 9px 14px;
+      font-size: .84rem;
+    }
+
+    .pirate-players {
+      display: grid;
+      gap: 7px;
+      max-height: 390px;
+      overflow: auto;
+    }
+
+    .pirate-player-row {
+      display: grid;
+      grid-template-columns: 10px minmax(0, 1fr) auto;
+      gap: 8px;
+      align-items: center;
+      padding: 8px;
+      border: 1px solid rgba(255, 248, 232, 0.10);
+      border-radius: 8px;
+      background: rgba(0, 0, 0, 0.2);
+    }
+
+    .pirate-player-row.is-me {
+      border-color: rgba(247, 201, 72, 0.64);
+      background: rgba(247, 201, 72, 0.10);
+    }
+
+    .pirate-player-row.is-winner {
+      box-shadow: inset 0 0 0 2px rgba(247, 201, 72, 0.48);
+    }
+
+    .pirate-player-row.is-out {
+      opacity: .55;
+      filter: grayscale(.5);
+    }
+
+    .pirate-color-dot {
+      width: 10px;
+      height: 32px;
+      border-radius: 999px;
+      background: var(--pirate-color);
+      box-shadow: 0 0 12px var(--pirate-color);
+    }
+
+    .pirate-player-row strong,
+    .pirate-player-row small {
+      display: block;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .pirate-player-row small {
+      color: rgba(255, 249, 232, 0.66);
+      font-size: .72rem;
+      font-weight: 850;
+    }
+
+    @media (max-width: 900px) {
+      .pirate-main { grid-template-columns: 1fr; }
+      .pirate-canvas { min-height: 310px; }
+    }
+
     /* Waiting overlay (esperando oponente aceitar) */
     .waiting-overlay {
       position: fixed; inset: 0;
@@ -5006,6 +5238,10 @@
             <span>Relic Rush</span>
             <small>Reliquias e portais</small>
           </button>
+          <button class="pirate-side-button" id="openPirateGame" type="button">
+            <span>Pirate Bomb</span>
+            <small>Bombas no conves</small>
+          </button>
           <button class="blackjack-side-button" id="openBlackjackGame" type="button">
             <span>Mesa 21</span>
             <small>Cartas online</small>
@@ -5117,6 +5353,7 @@
         <button class="mp-btn crash-open-btn" type="button" onclick="createCrashRoom()">Crash</button>
         <button class="mp-btn artillery-open-btn" type="button" onclick="createArtilleryRoom()">Canhao</button>
         <button class="mp-btn relic-open-btn" type="button" onclick="createRelicRoom()">Relic Rush</button>
+        <button class="mp-btn pirate-open-btn" type="button" onclick="createPirateRoom()">Pirate Bomb</button>
         <button class="mp-btn blackjack-open-btn" type="button" onclick="createBlackjackRoom()">Mesa 21</button>
         <button class="mp-btn horse-open-btn" type="button" onclick="createHorseRoom()">🏇 Corrida</button>
       </div>
@@ -5404,6 +5641,57 @@
             <button class="button-emoji-btn" type="button" onclick="sendTaunt('&#128142;')">&#128142;</button>
             <button class="button-emoji-btn" type="button" onclick="sendTaunt('&#9889;')">&#9889;</button>
             <button class="button-emoji-btn" type="button" onclick="sendTaunt('&#128293;')">&#128293;</button>
+          </div>
+        </aside>
+      </div>
+    </div>
+  </div>
+
+  <div class="challenge-toast hidden" id="pirateInviteToast">
+    <h4>Pirate Bomb</h4>
+    <p id="pirateInviteMsg"></p>
+    <div class="challenge-toast-btns">
+      <button class="btn-accept" onclick="acceptPirateInvite()">Entrar</button>
+      <button class="btn-reject" onclick="rejectPirateInvite()">Agora nao</button>
+    </div>
+  </div>
+
+  <div class="pirate-overlay hidden" id="pirateOverlay">
+    <div class="pirate-table">
+      <div class="pirate-top">
+        <div>
+          <h3>Pirate Bomb</h3>
+          <span id="pirateBetLabel">Aposta: 0</span>
+        </div>
+        <button class="mp-btn" style="width:auto;padding:8px 16px" type="button" onclick="leavePirateRoom()">Fechar</button>
+      </div>
+
+      <div class="pirate-scorebar">
+        <span id="pirateStatusLabel">Aguardando sala</span>
+        <strong id="pirateTimerLabel">0s</strong>
+        <span id="pirateSpectatorLabel">0 assistindo</span>
+      </div>
+
+      <div class="pirate-message" id="pirateMessage">Aguardando sala.</div>
+
+      <div class="pirate-main">
+        <div class="pirate-field-shell" id="pirateFieldShell">
+          <canvas class="pirate-canvas" id="pirateCanvas" width="1600" height="900"></canvas>
+          <div class="pirate-taunt-layer" id="pirateTauntLayer"></div>
+        </div>
+
+        <aside class="pirate-panel">
+          <div class="pirate-actions">
+            <button class="mp-btn" id="pirateStartBtn" type="button" onclick="startPirateRound()">Comecar</button>
+            <button class="mp-btn" id="pirateLeaveBtn" type="button" onclick="leavePirateRoom()">Sair</button>
+          </div>
+          <div class="pirate-players" id="piratePlayers"></div>
+          <div class="button-emoji-bar">
+            <button class="button-emoji-btn" type="button" onclick="sendTaunt('&#128514;')">&#128514;</button>
+            <button class="button-emoji-btn" type="button" onclick="sendTaunt('&#128163;')">&#128163;</button>
+            <button class="button-emoji-btn" type="button" onclick="sendTaunt('&#128293;')">&#128293;</button>
+            <button class="button-emoji-btn" type="button" onclick="sendTaunt('&#9760;')">&#9760;</button>
+            <button class="button-emoji-btn" type="button" onclick="sendTaunt('&#127919;')">&#127919;</button>
           </div>
         </aside>
       </div>
@@ -5967,6 +6255,7 @@
     const openCrashGame = document.getElementById("openCrashGame");
     const openArtilleryGame = document.getElementById("openArtilleryGame");
     const openRelicGame = document.getElementById("openRelicGame");
+    const openPirateGame = document.getElementById("openPirateGame");
     const openBlackjackGame = document.getElementById("openBlackjackGame");
     const openMarket = document.getElementById("openMarket");
     const marketOverlay = document.getElementById("marketOverlay");
@@ -6027,6 +6316,8 @@
     const artilleryPowerValue = document.getElementById("artilleryPowerValue");
     const relicCanvas = document.getElementById("relicCanvas");
     const relicCtx = relicCanvas.getContext("2d");
+    const pirateCanvas = document.getElementById("pirateCanvas");
+    const pirateCtx = pirateCanvas.getContext("2d");
     const FIELD = {
       width: 1500,
       height: 675,
@@ -7612,6 +7903,7 @@
     openCrashGame.addEventListener("click", openCrashFromSidebar);
     openArtilleryGame.addEventListener("click", openArtilleryFromSidebar);
     openRelicGame.addEventListener("click", openRelicFromSidebar);
+    openPirateGame.addEventListener("click", openPirateFromSidebar);
     openBlackjackGame.addEventListener("click", openBlackjackFromSidebar);
     openMarket.addEventListener("click", openMarketplace);
     closeMarket.addEventListener("click", closeMarketplace);
@@ -7808,6 +8100,12 @@
       relicPointerActive: false,
       relicPointerInput: { x: 0, y: 0 },
       relicLastInputAt: 0,
+      pirateInviteRoomId: null,
+      pirateRoomId: null,
+      pirateRoom: null,
+      pirateRenderId: 0,
+      pirateKeys: new Set(),
+      pirateLastInputAt: 0,
       headInviteRoomId: null,
       headRoomId: null,
       headRoom: null,
@@ -8363,6 +8661,37 @@
         showToast(msg || "Nao foi possivel jogar Relic Rush.");
       });
 
+      mp.socket.on("pirate:invite", ({ roomId, fromUsername, bet }) => {
+        mp.pirateInviteRoomId = roomId;
+        document.getElementById("pirateInviteMsg").textContent =
+          `${fromUsername} abriu uma sala de Pirate Bomb. Aposta: ${bet} creditos.`;
+        document.getElementById("pirateInviteToast").classList.remove("hidden");
+      });
+
+      mp.socket.on("pirate:update", (room) => {
+        renderPirateRoom(room);
+      });
+
+      mp.socket.on("pirate:finished", ({ room, updatedUser }) => {
+        if (updatedUser) {
+          applyServerData(updatedUser);
+        }
+        renderPirateRoom(room);
+        renderBetPanel();
+        updateLobbyHeader();
+        showToast(room.message || "Pirate Bomb encerrado.");
+      });
+
+      mp.socket.on("pirate:cancelled", ({ message }) => {
+        closePirateOverlay(true);
+        showToast(message || "Sala de Pirate Bomb cancelada.");
+        updateLobbyHeader();
+      });
+
+      mp.socket.on("pirate:error", (msg) => {
+        showToast(msg || "Nao foi possivel jogar Pirate Bomb.");
+      });
+
       mp.socket.on("market:sold", ({ listing, buyer, updatedUser }) => {
         if (updatedUser) {
           applyServerData(updatedUser);
@@ -8453,7 +8782,8 @@
         horse: "Corrida",
         crash: "Crash",
         artillery: "Canhao Arena",
-        relic: "Relic Rush"
+        relic: "Relic Rush",
+        pirate: "Pirate Bomb"
       };
       return labels[game] || "Em jogo";
     }
@@ -9254,7 +9584,7 @@
 
     function sendTaunt(emoji) {
       emoji = normalizeTauntEmoji(emoji);
-      const hasActiveRoom = mp.roomId || mp.blackjackRoomId || mp.horseRoomId || mp.buttonRoomId || mp.headRoomId || mp.slitherRoomId || mp.crashRoomId || mp.artilleryRoomId || mp.relicRoomId;
+      const hasActiveRoom = mp.roomId || mp.blackjackRoomId || mp.horseRoomId || mp.buttonRoomId || mp.headRoomId || mp.slitherRoomId || mp.crashRoomId || mp.artilleryRoomId || mp.relicRoomId || mp.pirateRoomId;
       if (!emoji || !mp.socket?.connected || !hasActiveRoom) return;
 
       const payload = { emoji };
@@ -9305,6 +9635,15 @@
           payload.game = "relic";
           payload.x = me.x;
           payload.y = me.y - 34;
+        }
+      }
+
+      if (mp.pirateRoom && !document.getElementById("pirateOverlay").classList.contains("hidden")) {
+        const me = getPirateMe();
+        if (me) {
+          payload.game = "pirate";
+          payload.x = me.x;
+          payload.y = me.y - 60;
         }
       }
 
@@ -9417,6 +9756,27 @@
         el.style.setProperty("--x", `${(x / field.width) * 100}%`);
         el.style.setProperty("--y", `${(y / field.height) * 100}%`);
         relicLayer.appendChild(el);
+        setTimeout(() => el.remove(), 1700);
+        return;
+      }
+
+      const pirateOverlay = document.getElementById("pirateOverlay");
+      const pirateLayer = document.getElementById("pirateTauntLayer");
+      if (pirateLayer && mp.pirateRoom && !pirateOverlay.classList.contains("hidden")) {
+        const field = mp.pirateRoom.field || { width: 1600, height: 900 };
+        let x = Number(payload.x);
+        let y = Number(payload.y);
+        if (!Number.isFinite(x) || !Number.isFinite(y)) {
+          const player = mp.pirateRoom.players?.find(item => item.socketId === payload.fromSocketId) || getPirateMe();
+          x = player?.x ?? field.width / 2;
+          y = (player?.y ?? field.height / 2) - 60;
+        }
+        const el = document.createElement("span");
+        el.className = "taunt-pop";
+        el.textContent = emoji;
+        el.style.setProperty("--x", `${(x / field.width) * 100}%`);
+        el.style.setProperty("--y", `${(y / field.height) * 100}%`);
+        pirateLayer.appendChild(el);
         setTimeout(() => el.remove(), 1700);
         return;
       }
@@ -11388,6 +11748,445 @@
     relicCanvas.addEventListener("lostpointercapture", stopRelicPointer);
     relicCanvas.addEventListener("contextmenu", (event) => event.preventDefault());
 
+    const PIRATE_ASSET_BASE = "Pirate Bomb/Sprites";
+    const PIRATE_SKINS = [
+      { folder: "1-Player-Bomb Guy", idle: ["1-Idle", 26], run: ["2-Run", 14], jump: ["4-Jump", 4], fall: ["5-Fall", 2], hit: ["7-Hit", 8], dead: ["9-Dead Ground", 4] },
+      { folder: "2-Enemy-Bald Pirate", idle: ["1-Idle", 34], run: ["2-Run", 14], jump: ["4-Jump", 4], fall: ["5-Fall", 2], hit: ["8-Hit", 8], dead: ["10-Dead Ground", 4] },
+      { folder: "3-Enemy-Cucumber", idle: ["1-Idle", 36], run: ["2-Run", 12], jump: ["4-Jump", 4], fall: ["5-Fall", 2], hit: ["9-Hit", 8], dead: ["11-Dead Ground", 4] },
+      { folder: "4-Enemy-Big Guy", idle: ["1-Idle", 38], run: ["2-Run", 16], jump: ["4-Jump", 4], fall: ["5-Fall", 2], hit: ["12-Hit", 8], dead: ["14-Dead Ground", 4] },
+      { folder: "5-Enemy-Captain", idle: ["1-Idle", 32], run: ["2-Run", 14], jump: ["4-Jump", 4], fall: ["5-Fall", 2], hit: ["9-Hit", 8], dead: ["11-Dead Ground", 4] },
+      { folder: "6-Enemy-Whale", idle: ["1-Idle", 44], run: ["2-Run", 14], jump: ["4-Jump", 4], fall: ["5-Fall", 2], hit: ["9-Hit", 7], dead: ["11-Dead Ground", 4] }
+    ];
+    const pirateImageCache = new Map();
+    let pirateAssets = null;
+
+    function getPirateAssets() {
+      if (pirateAssets) return pirateAssets;
+      pirateAssets = {
+        skins: PIRATE_SKINS.map(skin => ({
+          folder: skin.folder,
+          idle: makePirateFrames(skin.folder, skin.idle[0], skin.idle[1]),
+          run: makePirateFrames(skin.folder, skin.run[0], skin.run[1]),
+          jump: makePirateFrames(skin.folder, skin.jump[0], skin.jump[1]),
+          fall: makePirateFrames(skin.folder, skin.fall[0], skin.fall[1]),
+          hit: makePirateFrames(skin.folder, skin.hit[0], skin.hit[1]),
+          dead: makePirateFrames(skin.folder, skin.dead[0], skin.dead[1])
+        })),
+        bomb: makePirateObjectFrames("1-BOMB/2-Bomb On", 10),
+        explosion: makePirateObjectFrames("1-BOMB/3-Explotion", 9),
+        heart: makePirateObjectFrames("17-Heart/1-Idle", 22),
+        tileSet: loadPirateImage(`${PIRATE_ASSET_BASE}/8-Tile-Sets/Tile-Sets (64-64).png`),
+        barrel: loadPirateImage(`${PIRATE_ASSET_BASE}/7-Objects/12-Other Objects/Barrel.png`),
+        skull: loadPirateImage(`${PIRATE_ASSET_BASE}/7-Objects/12-Other Objects/Skull.png`),
+        table: loadPirateImage(`${PIRATE_ASSET_BASE}/7-Objects/12-Other Objects/Table.png`)
+      };
+      return pirateAssets;
+    }
+
+    function loadPirateImage(path) {
+      const url = encodeURI(path);
+      if (pirateImageCache.has(url)) return pirateImageCache.get(url);
+      const image = new Image();
+      image.src = url;
+      pirateImageCache.set(url, image);
+      return image;
+    }
+
+    function makePirateFrames(folder, action, count) {
+      return Array.from({ length: count }, (_, index) =>
+        loadPirateImage(`${PIRATE_ASSET_BASE}/${folder}/${action}/${index + 1}.png`)
+      );
+    }
+
+    function makePirateObjectFrames(folder, count) {
+      return Array.from({ length: count }, (_, index) =>
+        loadPirateImage(`${PIRATE_ASSET_BASE}/7-Objects/${folder}/${index + 1}.png`)
+      );
+    }
+
+    function openPirateFromSidebar() {
+      if (!mp.isOnline) {
+        showToast("Faca login para abrir o Pirate Bomb.");
+        document.getElementById("authOverlay").classList.remove("hidden");
+        return;
+      }
+      openLobby();
+      window.setTimeout(() => {
+        document.querySelector("[onclick='createPirateRoom()']")?.focus();
+      }, 0);
+    }
+
+    function createPirateRoom() {
+      if (!mp.isOnline) {
+        showToast("Faca login para abrir uma sala.");
+        document.getElementById("authOverlay").classList.remove("hidden");
+        return;
+      }
+      const bet = Number(document.getElementById("myBetInput").value) || 10;
+      if (bet < 5) { showToast("Aposta minima: 5 creditos."); return; }
+      if (bet > state.betCredits) { showToast("Creditos de aposta insuficientes."); return; }
+      mp.socket.emit("pirate:create", { bet });
+      document.getElementById("lobbyOverlay").classList.add("hidden");
+    }
+
+    function acceptPirateInvite() {
+      if (!mp.pirateInviteRoomId) return;
+      document.getElementById("pirateInviteToast").classList.add("hidden");
+      mp.socket.emit("pirate:join", { roomId: mp.pirateInviteRoomId });
+      mp.pirateInviteRoomId = null;
+    }
+
+    function rejectPirateInvite() {
+      mp.pirateInviteRoomId = null;
+      document.getElementById("pirateInviteToast").classList.add("hidden");
+    }
+
+    function startPirateRound() {
+      if (!mp.pirateRoomId) return;
+      if (mp.pirateRoom?.isSpectator) {
+        showToast("Voce esta assistindo esta partida.");
+        return;
+      }
+      if (mp.pirateRoom?.status === "finished") {
+        const bet = Number(mp.pirateRoom.bet || document.getElementById("myBetInput").value || 10);
+        closePirateOverlay(true);
+        mp.socket.emit("pirate:create", { bet });
+        return;
+      }
+      mp.socket.emit("pirate:start", { roomId: mp.pirateRoomId });
+    }
+
+    function leavePirateRoom() {
+      if (mp.pirateRoomId && mp.pirateRoom?.status !== "finished") {
+        sendPirateInput(true, { left: false, right: false, jump: false, bomb: false });
+        mp.socket?.emit(mp.pirateRoom?.isSpectator ? "pirate:unwatch" : "pirate:leave", { roomId: mp.pirateRoomId });
+      }
+      closePirateOverlay(false);
+    }
+
+    function closePirateOverlay(fromServer = false) {
+      document.getElementById("pirateOverlay").classList.add("hidden");
+      document.getElementById("pirateInviteToast").classList.add("hidden");
+      document.getElementById("pirateTauntLayer").innerHTML = "";
+      if (mp.pirateRenderId) {
+        cancelAnimationFrame(mp.pirateRenderId);
+        mp.pirateRenderId = 0;
+      }
+      mp.pirateInviteRoomId = null;
+      mp.pirateRoomId = null;
+      mp.pirateRoom = null;
+      mp.pirateKeys.clear();
+      mp.pirateLastInputAt = 0;
+      if (!fromServer) updateLobbyHeader();
+    }
+
+    function getPirateMe() {
+      return mp.pirateRoom?.players?.find(player => player.isMe && !player.disconnected) || null;
+    }
+
+    function pirateOverlayIsOpen() {
+      return !document.getElementById("pirateOverlay").classList.contains("hidden");
+    }
+
+    function pirateInputFromKeys() {
+      return {
+        left: mp.pirateKeys.has("ArrowLeft") || mp.pirateKeys.has("a") || mp.pirateKeys.has("A"),
+        right: mp.pirateKeys.has("ArrowRight") || mp.pirateKeys.has("d") || mp.pirateKeys.has("D"),
+        jump: mp.pirateKeys.has("ArrowUp") || mp.pirateKeys.has("w") || mp.pirateKeys.has("W") || mp.pirateKeys.has(" "),
+        bomb: mp.pirateKeys.has("e") || mp.pirateKeys.has("E") || mp.pirateKeys.has("b") || mp.pirateKeys.has("B") || mp.pirateKeys.has("x") || mp.pirateKeys.has("X")
+      };
+    }
+
+    function sendPirateInput(force = false, input = null) {
+      if (!mp.pirateRoomId || !mp.socket?.connected || mp.pirateRoom?.status !== "playing" || mp.pirateRoom?.isSpectator) return;
+      const now = performance.now();
+      if (!force && now - Number(mp.pirateLastInputAt || 0) < 55) return;
+      mp.pirateLastInputAt = now;
+      mp.socket.emit("pirate:input", {
+        roomId: mp.pirateRoomId,
+        input: input || pirateInputFromKeys()
+      });
+    }
+
+    function renderPirateRoom(room) {
+      if (!room) return;
+      getPirateAssets();
+      mp.pirateRoom = room;
+      mp.pirateRoomId = room.roomId;
+      document.getElementById("pirateOverlay").classList.remove("hidden");
+      document.getElementById("pirateInviteToast").classList.add("hidden");
+
+      const isWaiting = room.status === "waiting";
+      const isPlaying = room.status === "playing";
+      const isFinished = room.status === "finished";
+      const isHost = room.hostSocketId === mp.socket?.id;
+      const isSpectator = Boolean(room.isSpectator);
+      const players = room.players || [];
+      const ranked = players.slice().sort((a, b) => {
+        if (Number(b.lives || 0) !== Number(a.lives || 0)) return Number(b.lives || 0) - Number(a.lives || 0);
+        if (Number(b.kills || 0) !== Number(a.kills || 0)) return Number(b.kills || 0) - Number(a.kills || 0);
+        return Number(a.order || 0) - Number(b.order || 0);
+      });
+      const leader = ranked.find(player => player.alive && !player.disconnected) || ranked[0];
+
+      document.getElementById("pirateBetLabel").textContent = `Aposta: ${room.bet} creditos`;
+      document.getElementById("pirateMessage").textContent = room.message || "";
+      document.getElementById("pirateStatusLabel").textContent = isPlaying
+        ? `Sobrevivendo: ${players.filter(player => player.alive && !player.disconnected).length}`
+        : isFinished
+          ? "Partida encerrada"
+          : `${players.length} jogadores na sala`;
+      document.getElementById("pirateTimerLabel").textContent = isPlaying
+        ? `${Math.ceil(Number(room.timeLeftMs || 0) / 1000)}s`
+        : isFinished ? "fim" : "aguardando";
+      document.getElementById("pirateSpectatorLabel").textContent = `${Number(room.spectatorCount || 0)} assistindo`;
+
+      document.getElementById("piratePlayers").innerHTML = ranked.map(player => `
+        <div class="pirate-player-row ${player.isMe ? "is-me" : ""} ${room.winnerSocketId === player.socketId ? "is-winner" : ""} ${(!player.alive || player.disconnected) ? "is-out" : ""}" data-socket-id="${escHtml(player.socketId)}">
+          <span class="pirate-color-dot" style="--pirate-color:${escHtml(player.color || "#f7c948")}"></span>
+          <span>
+            <strong>${escHtml(player.username)}${player.isMe ? " (voce)" : ""}${player.isHost ? " *" : ""}</strong>
+            <small>${player.disconnected ? "saiu" : player.alive ? escHtml(player.skinName || "Pirata") : "eliminado"}</small>
+          </span>
+          <strong>${"♥".repeat(Math.max(0, Number(player.lives || 0))) || "0"} ${Number(player.kills || 0) ? `+${player.kills}` : ""}</strong>
+        </div>
+      `).join("");
+
+      document.getElementById("pirateStartBtn").textContent = isFinished ? "Jogar novamente" : "Comecar";
+      document.getElementById("pirateStartBtn").disabled = isSpectator || !(isFinished || (isWaiting && isHost && players.length >= 2));
+      document.getElementById("pirateLeaveBtn").textContent = isSpectator ? "Sair da transmissao" : isFinished ? "Fechar" : "Sair";
+      ensurePirateRenderLoop();
+    }
+
+    function ensurePirateRenderLoop() {
+      if (mp.pirateRenderId) return;
+      const frame = () => {
+        if (!mp.pirateRoom || !pirateOverlayIsOpen()) {
+          mp.pirateRenderId = 0;
+          return;
+        }
+        if (mp.pirateRoom.status === "playing") {
+          const left = Math.max(0, Number(mp.pirateRoom.gameEndsAt || Date.now()) - Date.now());
+          document.getElementById("pirateTimerLabel").textContent = `${Math.ceil(left / 1000)}s`;
+          sendPirateInput(false);
+        }
+        drawPirateRoom(mp.pirateRoom);
+        mp.pirateRenderId = requestAnimationFrame(frame);
+      };
+      mp.pirateRenderId = requestAnimationFrame(frame);
+    }
+
+    function drawPirateRoom(room) {
+      getPirateAssets();
+      const field = room.field || { width: 1600, height: 900 };
+      const ctx = pirateCtx;
+      ctx.clearRect(0, 0, pirateCanvas.width, pirateCanvas.height);
+      ctx.save();
+      ctx.scale(pirateCanvas.width / field.width, pirateCanvas.height / field.height);
+
+      drawPirateBackground(ctx, field);
+      (room.map?.platforms || []).forEach(platform => drawPiratePlatform(ctx, platform));
+      (room.map?.objects || []).forEach(object => drawPirateObject(ctx, object));
+      (room.pickups || []).forEach(pickup => drawPiratePickup(ctx, pickup));
+      (room.bombs || []).forEach(bomb => drawPirateBomb(ctx, bomb));
+      (room.explosions || []).forEach(explosion => drawPirateExplosion(ctx, explosion));
+      (room.players || []).filter(player => !player.disconnected).forEach(player => drawPiratePlayer(ctx, player));
+
+      if (room.status === "waiting") {
+        drawPirateBanner(ctx, field, "Aguardando inicio");
+      } else if (room.status === "finished") {
+        drawPirateBanner(ctx, field, room.message || "Partida encerrada");
+      }
+      ctx.restore();
+    }
+
+    function drawPirateBackground(ctx, field) {
+      const bg = ctx.createLinearGradient(0, 0, 0, field.height);
+      bg.addColorStop(0, "#141725");
+      bg.addColorStop(.54, "#251725");
+      bg.addColorStop(1, "#0b0c12");
+      ctx.fillStyle = bg;
+      ctx.fillRect(0, 0, field.width, field.height);
+      ctx.fillStyle = "rgba(255,211,111,.08)";
+      for (let x = 84; x < field.width; x += 260) {
+        ctx.fillRect(x, 90 + (x % 3) * 20, 70, 90);
+        ctx.fillStyle = "rgba(255,211,111,.18)";
+        ctx.fillRect(x + 12, 106 + (x % 3) * 20, 46, 50);
+        ctx.fillStyle = "rgba(255,211,111,.08)";
+      }
+      ctx.strokeStyle = "rgba(255,249,232,.045)";
+      ctx.lineWidth = 2;
+      for (let y = 110; y < field.height; y += 96) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(field.width, y + Math.sin(y) * 10);
+        ctx.stroke();
+      }
+    }
+
+    function drawPiratePlatform(ctx, platform) {
+      const tile = pirateAssets.tileSet;
+      const sx = platform.tile === "wood-dark" ? 64 : 0;
+      const sy = 0;
+      const y = Number(platform.y || 0);
+      const h = Math.max(34, Number(platform.h || 34));
+      if (!tile.complete || !tile.naturalWidth) {
+        ctx.fillStyle = platform.tile === "wood-dark" ? "#6b4254" : "#9e5a42";
+        ctx.fillRect(platform.x, y, platform.w, h);
+        return;
+      }
+      for (let x = Number(platform.x || 0); x < Number(platform.x || 0) + Number(platform.w || 0); x += 64) {
+        const w = Math.min(64, Number(platform.x || 0) + Number(platform.w || 0) - x);
+        ctx.drawImage(tile, sx, sy, 64, 64, x, y - 18, w, 64);
+      }
+    }
+
+    function drawPirateObject(ctx, object) {
+      if (!object.alive) return;
+      const image = pirateAssets[object.type];
+      if (image?.complete && image.naturalWidth) {
+        ctx.drawImage(image, object.x, object.y, object.w || image.naturalWidth, object.h || image.naturalHeight);
+      } else {
+        ctx.fillStyle = object.type === "barrel" ? "#8b5141" : "#d9c7a1";
+        ctx.fillRect(object.x, object.y, object.w || 32, object.h || 32);
+      }
+    }
+
+    function drawPiratePickup(ctx, pickup) {
+      const frames = pirateAssets.heart;
+      const frame = frames[Math.floor(performance.now() / 70) % frames.length];
+      ctx.save();
+      ctx.translate(pickup.x, pickup.y);
+      if (frame?.complete && frame.naturalWidth) {
+        ctx.drawImage(frame, -18, -18, 36, 36);
+      } else {
+        ctx.fillStyle = "#ff6b7d";
+        ctx.beginPath();
+        ctx.arc(0, 0, 14, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+
+    function drawPirateBomb(ctx, bomb) {
+      const frames = pirateAssets.bomb;
+      const progress = 1 - Math.max(0, Number(bomb.fuseLeftMs || 0)) / 1850;
+      const frame = frames[Math.min(frames.length - 1, Math.floor(progress * frames.length))] || frames[0];
+      ctx.save();
+      ctx.translate(bomb.x, bomb.y);
+      if (frame?.complete && frame.naturalWidth) {
+        ctx.drawImage(frame, -36, -42, 72, 82);
+      } else {
+        ctx.fillStyle = "#252735";
+        ctx.beginPath();
+        ctx.arc(0, 0, 24, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+
+    function drawPirateExplosion(ctx, explosion) {
+      const frames = pirateAssets.explosion;
+      const age = Math.max(0, Number(explosion.ageMs || 0));
+      const frame = frames[Math.min(frames.length - 1, Math.floor((age / 520) * frames.length))] || frames[frames.length - 1];
+      const radius = Number(explosion.radius || 132);
+      ctx.save();
+      ctx.translate(explosion.x, explosion.y);
+      ctx.globalAlpha = Math.max(.22, Number(explosion.leftMs || 0) / 520);
+      ctx.fillStyle = "rgba(255,88,72,.18)";
+      ctx.beginPath();
+      ctx.arc(0, 0, radius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+      if (frame?.complete && frame.naturalWidth) {
+        ctx.drawImage(frame, -radius, -radius, radius * 2, radius * 2);
+      } else {
+        ctx.fillStyle = "rgba(255,249,232,.7)";
+        ctx.beginPath();
+        ctx.arc(0, 0, radius * .45, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+
+    function drawPiratePlayer(ctx, player) {
+      const skin = pirateAssets.skins[player.skinIndex || 0] || pirateAssets.skins[0];
+      const action = player.alive ? (player.action || "idle") : "dead";
+      const frames = skin[action] || skin.idle;
+      const speed = action === "run" ? 72 : action === "idle" ? 96 : 86;
+      const frame = frames[Math.floor(performance.now() / speed) % frames.length] || frames[0];
+      const scale = action === "dead" ? 1.25 : 1.38;
+      const drawW = (frame?.naturalWidth || 64) * scale;
+      const drawH = (frame?.naturalHeight || 64) * scale;
+
+      ctx.save();
+      ctx.translate(player.x, player.y);
+      if (player.dir < 0) ctx.scale(-1, 1);
+      if (player.invulnerableMs > 0 && Math.floor(performance.now() / 90) % 2 === 0) ctx.globalAlpha = .52;
+      if (frame?.complete && frame.naturalWidth) {
+        ctx.drawImage(frame, -drawW / 2, -drawH, drawW, drawH);
+      } else {
+        ctx.fillStyle = player.color || "#60d7ff";
+        ctx.fillRect(-21, -64, 42, 64);
+      }
+      ctx.restore();
+
+      ctx.save();
+      ctx.textAlign = "center";
+      ctx.font = "900 15px Segoe UI, Arial";
+      ctx.fillStyle = "#fff9e8";
+      ctx.shadowColor = "rgba(0,0,0,.95)";
+      ctx.shadowBlur = 5;
+      ctx.fillText(player.username || "?", player.x, player.y - 86);
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = "rgba(0,0,0,.46)";
+      ctx.fillRect(player.x - 32, player.y - 80, 64, 8);
+      ctx.fillStyle = player.color || "#f7c948";
+      ctx.fillRect(player.x - 32, player.y - 80, 64 * (Math.max(0, Number(player.lives || 0)) / 3), 8);
+      ctx.restore();
+    }
+
+    function drawPirateBanner(ctx, field, text) {
+      ctx.save();
+      ctx.fillStyle = "rgba(8, 8, 12, .48)";
+      ctx.fillRect(0, 0, field.width, 74);
+      ctx.fillStyle = "#fff9e8";
+      ctx.font = "900 25px Segoe UI, Arial";
+      ctx.textAlign = "center";
+      ctx.fillText(text, field.width / 2, 46);
+      ctx.restore();
+    }
+
+    function isPirateControlKey(key) {
+      return ["ArrowLeft", "ArrowRight", "ArrowUp", "a", "A", "d", "D", "w", "W", " ", "e", "E", "b", "B", "x", "X"].includes(key);
+    }
+
+    document.addEventListener("keydown", (event) => {
+      if (!pirateOverlayIsOpen() || !isPirateControlKey(event.key) || isTypingTarget(event.target)) return;
+      event.preventDefault();
+      mp.pirateKeys.add(event.key);
+      sendPirateInput(true);
+    });
+
+    document.addEventListener("keyup", (event) => {
+      if (!pirateOverlayIsOpen() || !isPirateControlKey(event.key)) return;
+      event.preventDefault();
+      mp.pirateKeys.delete(event.key);
+      sendPirateInput(true);
+    });
+
+    pirateCanvas.addEventListener("pointerdown", (event) => {
+      if (!pirateOverlayIsOpen() || mp.pirateRoom?.isSpectator) return;
+      event.preventDefault();
+      mp.pirateKeys.add("e");
+      sendPirateInput(true);
+      window.setTimeout(() => {
+        mp.pirateKeys.delete("e");
+        sendPirateInput(true);
+      }, 80);
+    });
+    pirateCanvas.addEventListener("contextmenu", (event) => event.preventDefault());
+
     function createSlitherRoom() {
       if (!mp.isOnline) {
         showToast("Faca login para abrir uma sala.");
@@ -11426,7 +12225,8 @@
         horse: "horse:spectate",
         crash: "crash:spectate",
         artillery: "artillery:spectate",
-        relic: "relic:spectate"
+        relic: "relic:spectate",
+        pirate: "pirate:spectate"
       };
       const eventName = events[game];
       if (!roomId || !eventName) {

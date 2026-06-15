@@ -903,6 +903,7 @@ const slitherRooms       = new Map();   // roomId -> cobrinhas estilo slither
 const crashRooms         = new Map();   // roomId -> crash do aviao
 const artilleryRooms     = new Map();   // roomId -> artilharia por turnos
 const relicRooms         = new Map();   // roomId -> caca as reliquias em arena
+const pirateRooms        = new Map();   // roomId -> Pirate Bomb em plataforma
 
 function ensureSpectators(room) {
   if (!room.spectators) room.spectators = new Set();
@@ -948,6 +949,9 @@ function clearSocketFromSpectatorRooms(socketId) {
   }
   for (const room of relicRooms.values()) {
     if (clearSpectator(room, socketId)) emitRelicUpdate(room);
+  }
+  for (const room of pirateRooms.values()) {
+    if (clearSpectator(room, socketId)) emitPirateUpdate(room);
   }
 }
 
@@ -3951,6 +3955,642 @@ function removeRelicPlayer(room, socketId, reason = "") {
   broadcastOnlineList();
 }
 
+const PIRATE_FIELD = {
+  width: 1600,
+  height: 900,
+  playerWidth: 42,
+  playerHeight: 64,
+  bombRadius: 28,
+  explosionRadius: 132
+};
+const PIRATE_MAX_PLAYERS = 6;
+const PIRATE_GAME_MS = 120000;
+const PIRATE_TICK_MS = 1000 / 24;
+const PIRATE_SPEED = 300;
+const PIRATE_GRAVITY = 2100;
+const PIRATE_JUMP = 760;
+const PIRATE_MAX_FALL = 980;
+const PIRATE_BOMB_FUSE_MS = 1850;
+const PIRATE_BOMB_COOLDOWN_MS = 900;
+const PIRATE_COLORS = ["#60d7ff", "#ff6b7d", "#57d39b", "#f7c948", "#c678dd", "#ff9f43"];
+const PIRATE_SKINS = [
+  { key: "bomb-guy", name: "Bomb Guy", folder: "1-Player-Bomb Guy" },
+  { key: "bald-pirate", name: "Bald Pirate", folder: "2-Enemy-Bald Pirate" },
+  { key: "cucumber", name: "Cucumber", folder: "3-Enemy-Cucumber" },
+  { key: "big-guy", name: "Big Guy", folder: "4-Enemy-Big Guy" },
+  { key: "captain", name: "Captain", folder: "5-Enemy-Captain" },
+  { key: "whale", name: "Whale", folder: "6-Enemy-Whale" }
+];
+const PIRATE_PLATFORMS = [
+  { id: "floor", x: 0, y: 830, w: 1600, h: 70, tile: "floor" },
+  { id: "left-low", x: 86, y: 668, w: 370, h: 34, tile: "wood" },
+  { id: "right-low", x: 1144, y: 668, w: 370, h: 34, tile: "wood" },
+  { id: "mid-low", x: 555, y: 704, w: 490, h: 34, tile: "wood-dark" },
+  { id: "left-mid", x: 264, y: 520, w: 300, h: 34, tile: "wood-dark" },
+  { id: "right-mid", x: 1036, y: 520, w: 300, h: 34, tile: "wood-dark" },
+  { id: "center-high", x: 632, y: 386, w: 336, h: 34, tile: "wood" },
+  { id: "left-high", x: 92, y: 350, w: 274, h: 34, tile: "wood" },
+  { id: "right-high", x: 1234, y: 350, w: 274, h: 34, tile: "wood" },
+  { id: "top-mid", x: 514, y: 214, w: 572, h: 34, tile: "wood-dark" }
+];
+const PIRATE_SPAWNS = [
+  { x: 172, y: 830 },
+  { x: 1428, y: 830 },
+  { x: 362, y: 668 },
+  { x: 1238, y: 668 },
+  { x: 720, y: 704 },
+  { x: 880, y: 704 }
+];
+const PIRATE_OBJECTS = [
+  { id: "barrel-a", type: "barrel", x: 200, y: 786, w: 42, h: 44 },
+  { id: "barrel-b", type: "barrel", x: 1348, y: 786, w: 42, h: 44 },
+  { id: "barrel-c", type: "barrel", x: 675, y: 660, w: 42, h: 44 },
+  { id: "barrel-d", type: "barrel", x: 930, y: 660, w: 42, h: 44 },
+  { id: "skull-a", type: "skull", x: 110, y: 650, w: 19, h: 14 },
+  { id: "skull-b", type: "skull", x: 1468, y: 650, w: 19, h: 14 },
+  { id: "table-a", type: "table", x: 716, y: 182, w: 83, h: 32 },
+  { id: "table-b", type: "table", x: 805, y: 182, w: 83, h: 32 }
+];
+
+function makePirateMap() {
+  return {
+    platforms: PIRATE_PLATFORMS.map(platform => ({ ...platform })),
+    objects: PIRATE_OBJECTS.map(item => ({ ...item, alive: true }))
+  };
+}
+
+function makePiratePlayer(socket, index, bet) {
+  const skin = PIRATE_SKINS[index % PIRATE_SKINS.length];
+  return {
+    socketId: socket.id,
+    userId: socket.userId,
+    username: socket.username,
+    avatar: socket.avatar || "",
+    color: PIRATE_COLORS[index % PIRATE_COLORS.length],
+    skinIndex: index % PIRATE_SKINS.length,
+    skinKey: skin.key,
+    skinName: skin.name,
+    skinFolder: skin.folder,
+    bet,
+    x: 0,
+    y: 0,
+    vx: 0,
+    vy: 0,
+    dir: index % 2 === 0 ? 1 : -1,
+    lives: 3,
+    kills: 0,
+    deaths: 0,
+    alive: true,
+    grounded: false,
+    action: "idle",
+    input: { left: false, right: false, jump: false, bomb: false },
+    jumpQueued: false,
+    bombQueued: false,
+    hitUntil: 0,
+    invulnerableUntil: 0,
+    bombCooldownUntil: 0,
+    disconnected: false,
+    joinedAt: Date.now()
+  };
+}
+
+function positionPiratePlayers(room) {
+  room.players.forEach((player, index) => {
+    const spawn = PIRATE_SPAWNS[index % PIRATE_SPAWNS.length];
+    const skin = PIRATE_SKINS[index % PIRATE_SKINS.length];
+    player.color = PIRATE_COLORS[index % PIRATE_COLORS.length];
+    player.skinIndex = index % PIRATE_SKINS.length;
+    player.skinKey = skin.key;
+    player.skinName = skin.name;
+    player.skinFolder = skin.folder;
+    player.x = spawn.x;
+    player.y = spawn.y;
+    player.vx = 0;
+    player.vy = 0;
+    player.dir = index % 2 === 0 ? 1 : -1;
+    player.lives = 3;
+    player.kills = 0;
+    player.deaths = 0;
+    player.alive = true;
+    player.grounded = false;
+    player.action = "idle";
+    player.input = { left: false, right: false, jump: false, bomb: false };
+    player.jumpQueued = false;
+    player.bombQueued = false;
+    player.hitUntil = 0;
+    player.invulnerableUntil = 0;
+    player.bombCooldownUntil = 0;
+    player.disconnected = false;
+  });
+}
+
+function activePiratePlayers(room) {
+  return room.players.filter(player => !player.disconnected);
+}
+
+function alivePiratePlayers(room) {
+  return activePiratePlayers(room).filter(player => player.alive && Number(player.lives || 0) > 0);
+}
+
+function serializePirateRoom(room, viewerSocketId) {
+  const now = Date.now();
+  const isSpectator = !room.players.some(player => player.socketId === viewerSocketId && !player.disconnected);
+  return {
+    roomId: room.roomId,
+    hostSocketId: room.hostSocketId,
+    hostUsername: room.hostUsername,
+    bet: room.bet,
+    status: room.status,
+    message: room.message,
+    field: PIRATE_FIELD,
+    map: room.map || makePirateMap(),
+    bombs: (room.bombs || []).map(bomb => ({
+      id: bomb.id,
+      ownerSocketId: bomb.ownerSocketId,
+      x: Math.round(Number(bomb.x || 0)),
+      y: Math.round(Number(bomb.y || 0)),
+      fuseLeftMs: Math.max(0, Number(bomb.explodesAt || now) - now)
+    })),
+    explosions: (room.explosions || []).map(explosion => ({
+      id: explosion.id,
+      ownerSocketId: explosion.ownerSocketId,
+      x: Math.round(Number(explosion.x || 0)),
+      y: Math.round(Number(explosion.y || 0)),
+      radius: explosion.radius,
+      ageMs: Math.max(0, now - Number(explosion.createdAt || now)),
+      leftMs: Math.max(0, Number(explosion.endsAt || now) - now)
+    })),
+    pickups: room.pickups || [],
+    gameEndsAt: room.gameEndsAt || null,
+    timeLeftMs: room.status === "playing" ? Math.max(0, Number(room.gameEndsAt || now) - now) : 0,
+    winnerSocketId: room.winnerSocketId || null,
+    isSpectator,
+    spectatorCount: roomSpectatorCount(room),
+    players: room.players.map((player, index) => ({
+      socketId: player.socketId,
+      username: player.username,
+      avatar: player.avatar || "",
+      color: player.color,
+      skinIndex: player.skinIndex,
+      skinKey: player.skinKey,
+      skinName: player.skinName,
+      skinFolder: player.skinFolder,
+      x: Math.round(Number(player.x || 0)),
+      y: Math.round(Number(player.y || 0)),
+      vx: Math.round(Number(player.vx || 0)),
+      vy: Math.round(Number(player.vy || 0)),
+      dir: Number(player.dir || 1) >= 0 ? 1 : -1,
+      lives: Math.max(0, Math.round(Number(player.lives || 0))),
+      kills: Math.max(0, Math.round(Number(player.kills || 0))),
+      deaths: Math.max(0, Math.round(Number(player.deaths || 0))),
+      alive: Boolean(player.alive && Number(player.lives || 0) > 0),
+      grounded: Boolean(player.grounded),
+      action: player.action || "idle",
+      invulnerableMs: Math.max(0, Number(player.invulnerableUntil || 0) - now),
+      disconnected: Boolean(player.disconnected),
+      isHost: player.socketId === room.hostSocketId,
+      isMe: player.socketId === viewerSocketId,
+      order: index
+    }))
+  };
+}
+
+function emitPirateUpdate(room) {
+  const targets = new Set(activePiratePlayers(room).map(player => player.socketId));
+  for (const spectatorId of room.spectators || []) targets.add(spectatorId);
+  targets.forEach(socketId => {
+    io.to(socketId).emit("pirate:update", serializePirateRoom(room, socketId));
+  });
+}
+
+function findPirateRoomBySocket(socketId) {
+  for (const room of pirateRooms.values()) {
+    if (room.players.some(player => player.socketId === socketId && !player.disconnected) || room.spectators?.has(socketId)) return room;
+  }
+  return null;
+}
+
+function setPirateInput(player, input) {
+  const next = {
+    left: Boolean(input?.left),
+    right: Boolean(input?.right),
+    jump: Boolean(input?.jump),
+    bomb: Boolean(input?.bomb)
+  };
+  if (next.jump && !player.input?.jump) player.jumpQueued = true;
+  if (next.bomb && !player.input?.bomb) player.bombQueued = true;
+  player.input = next;
+}
+
+function placePirateBomb(room, player, now) {
+  if (!player.alive || now < Number(player.bombCooldownUntil || 0)) return;
+  const activeBombs = (room.bombs || []).filter(bomb => bomb.ownerSocketId === player.socketId);
+  if (activeBombs.length >= 2) return;
+  room.bombs.push({
+    id: `bomb-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    ownerSocketId: player.socketId,
+    ownerUserId: player.userId,
+    x: Math.round(player.x),
+    y: Math.round(player.y - 28),
+    radius: PIRATE_FIELD.bombRadius,
+    explodesAt: now + PIRATE_BOMB_FUSE_MS
+  });
+  player.bombCooldownUntil = now + PIRATE_BOMB_COOLDOWN_MS;
+}
+
+function updatePiratePlayerPhysics(room, player, dt, now) {
+  if (!player.alive || player.disconnected) return;
+
+  const input = player.input || {};
+  const move = (input.right ? 1 : 0) - (input.left ? 1 : 0);
+  if (move) player.dir = move > 0 ? 1 : -1;
+
+  player.vx = move * PIRATE_SPEED;
+  if (player.jumpQueued && player.grounded) {
+    player.vy = -PIRATE_JUMP;
+    player.grounded = false;
+  }
+  player.jumpQueued = false;
+
+  player.vy = clampNumber(Number(player.vy || 0) + PIRATE_GRAVITY * dt, -PIRATE_JUMP, PIRATE_MAX_FALL);
+
+  const prevY = Number(player.y || 0);
+  player.x = clampNumber(Number(player.x || 0) + player.vx * dt, PIRATE_FIELD.playerWidth / 2, PIRATE_FIELD.width - PIRATE_FIELD.playerWidth / 2);
+  player.y = Number(player.y || 0) + player.vy * dt;
+  player.grounded = false;
+
+  const platforms = room.map?.platforms || PIRATE_PLATFORMS;
+  const halfWidth = PIRATE_FIELD.playerWidth / 2;
+  const bottom = player.y;
+  const prevBottom = prevY;
+  const candidate = platforms
+    .filter(platform => {
+      const platformTop = Number(platform.y || 0);
+      return player.vy >= 0
+        && prevBottom <= platformTop + 6
+        && bottom >= platformTop
+        && player.x + halfWidth > Number(platform.x || 0)
+        && player.x - halfWidth < Number(platform.x || 0) + Number(platform.w || 0);
+    })
+    .sort((a, b) => Number(a.y || 0) - Number(b.y || 0))[0];
+
+  if (candidate) {
+    player.y = Number(candidate.y || 0);
+    player.vy = 0;
+    player.grounded = true;
+  }
+
+  if (player.y > PIRATE_FIELD.height + 120) {
+    damagePiratePlayer(room, player, null, now, 1, "caiu no porao");
+    if (player.alive) {
+      const spawn = PIRATE_SPAWNS[Math.max(0, room.players.indexOf(player)) % PIRATE_SPAWNS.length];
+      player.x = spawn.x;
+      player.y = spawn.y;
+      player.vx = 0;
+      player.vy = 0;
+    }
+  }
+
+  if (player.bombQueued) placePirateBomb(room, player, now);
+  player.bombQueued = false;
+
+  if (!player.alive) {
+    player.action = "dead";
+  } else if (now < Number(player.hitUntil || 0)) {
+    player.action = "hit";
+  } else if (!player.grounded && player.vy < -40) {
+    player.action = "jump";
+  } else if (!player.grounded && player.vy >= -40) {
+    player.action = "fall";
+  } else if (Math.abs(player.vx) > 10) {
+    player.action = "run";
+  } else {
+    player.action = "idle";
+  }
+}
+
+function damagePiratePlayer(room, player, ownerSocketId, now, amount = 1, reason = "explodiu") {
+  if (!player || !player.alive || player.disconnected) return false;
+  if (now < Number(player.invulnerableUntil || 0) && !String(reason).startsWith("caiu")) return false;
+
+  player.lives = Math.max(0, Number(player.lives || 0) - amount);
+  player.hitUntil = now + 420;
+  player.invulnerableUntil = now + 1050;
+  player.vy = -520;
+  player.vx = clampNumber((player.x - (room.lastExplosionX || player.x)) * 5, -520, 520);
+
+  if (player.lives <= 0) {
+    player.alive = false;
+    player.action = "dead";
+    player.deaths = Math.max(0, Number(player.deaths || 0) + 1);
+    const owner = room.players.find(item => item.socketId === ownerSocketId);
+    if (owner && owner.socketId !== player.socketId) {
+      owner.kills = Math.max(0, Number(owner.kills || 0) + 1);
+    }
+    room.message = `${player.username} ${reason} e foi eliminado.`;
+  } else {
+    player.action = "hit";
+    room.message = `${player.username} tomou dano.`;
+  }
+  return true;
+}
+
+function explodePirateBomb(room, bomb, now) {
+  room.lastExplosionX = Number(bomb.x || 0);
+  const explosion = {
+    id: `explosion-${bomb.id}`,
+    ownerSocketId: bomb.ownerSocketId,
+    ownerUserId: bomb.ownerUserId,
+    x: Number(bomb.x || 0),
+    y: Number(bomb.y || 0),
+    radius: PIRATE_FIELD.explosionRadius,
+    createdAt: now,
+    endsAt: now + 520
+  };
+  room.explosions.push(explosion);
+
+  activePiratePlayers(room).forEach(player => {
+    if (!player.alive) return;
+    const targetX = Number(player.x || 0);
+    const targetY = Number(player.y || 0) - PIRATE_FIELD.playerHeight / 2;
+    if (Math.hypot(targetX - explosion.x, targetY - explosion.y) <= explosion.radius) {
+      damagePiratePlayer(room, player, bomb.ownerSocketId, now, 1, "foi pego pela bomba");
+    }
+  });
+
+  const objects = room.map?.objects || [];
+  objects.forEach(item => {
+    if (!item.alive || item.type !== "barrel") return;
+    const cx = Number(item.x || 0) + Number(item.w || 0) / 2;
+    const cy = Number(item.y || 0) + Number(item.h || 0) / 2;
+    if (Math.hypot(cx - explosion.x, cy - explosion.y) <= explosion.radius) {
+      item.alive = false;
+      if (Math.random() < 0.35) {
+        room.pickups.push({
+          id: `heart-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+          type: "heart",
+          x: Math.round(cx),
+          y: Math.round(cy),
+          expiresAt: now + 9500
+        });
+      }
+    }
+  });
+}
+
+function tickPirateRoom(room) {
+  if (!room || !pirateRooms.has(room.roomId) || room.status !== "playing") return;
+
+  const now = Date.now();
+  const dt = Math.min((now - (room.lastTick || now)) / 1000, 0.08);
+  room.lastTick = now;
+
+  activePiratePlayers(room).forEach(player => updatePiratePlayerPhysics(room, player, dt, now));
+
+  for (let index = room.bombs.length - 1; index >= 0; index -= 1) {
+    const bomb = room.bombs[index];
+    if (now >= Number(bomb.explodesAt || 0)) {
+      room.bombs.splice(index, 1);
+      explodePirateBomb(room, bomb, now);
+    }
+  }
+  room.explosions = (room.explosions || []).filter(explosion => now < Number(explosion.endsAt || 0));
+
+  for (let index = room.pickups.length - 1; index >= 0; index -= 1) {
+    const pickup = room.pickups[index];
+    if (now >= Number(pickup.expiresAt || 0)) {
+      room.pickups.splice(index, 1);
+      continue;
+    }
+    const player = alivePiratePlayers(room).find(item => Math.hypot(item.x - pickup.x, (item.y - 34) - pickup.y) <= 46);
+    if (player) {
+      player.lives = Math.min(3, Number(player.lives || 0) + 1);
+      room.pickups.splice(index, 1);
+      room.message = `${player.username} pegou um coracao.`;
+    }
+  }
+
+  const alive = alivePiratePlayers(room);
+  if (alive.length <= 1) {
+    finishPirateRoom(room, alive.length === 1 ? "Ultimo pirata de pe." : "Todo mundo explodiu.");
+    return;
+  }
+
+  if (now >= Number(room.gameEndsAt || 0)) {
+    finishPirateRoom(room, "Tempo encerrado.");
+    return;
+  }
+
+  emitPirateUpdate(room);
+}
+
+function pickPirateWinner(room) {
+  const alive = alivePiratePlayers(room);
+  if (alive.length === 1) return alive[0];
+  if (alive.length > 1 && Date.now() >= Number(room.gameEndsAt || 0)) {
+    return alive.slice().sort((a, b) => {
+      if (Number(b.lives || 0) !== Number(a.lives || 0)) return Number(b.lives || 0) - Number(a.lives || 0);
+      if (Number(b.kills || 0) !== Number(a.kills || 0)) return Number(b.kills || 0) - Number(a.kills || 0);
+      if (Number(a.deaths || 0) !== Number(b.deaths || 0)) return Number(a.deaths || 0) - Number(b.deaths || 0);
+      return Number(a.joinedAt || 0) - Number(b.joinedAt || 0);
+    })[0] || null;
+  }
+  return null;
+}
+
+function startPirateRound(room, requestedBet = room.bet) {
+  const maxBet = room.players.length >= 3 ? 20 : 50;
+  const tableBet = clampNumber(requestedBet, 5, maxBet);
+  if (room.players.length < 2) {
+    room.message = "Precisa de pelo menos 2 jogadores para iniciar.";
+    emitPirateUpdate(room);
+    return false;
+  }
+
+  for (const player of room.players) {
+    const user = db.findUser("id", player.userId);
+    if (!user || Number(user.bet_credits || 0) < tableBet) {
+      room.message = `${player.username} nao tem creditos para ${tableBet}.`;
+      emitPirateUpdate(room);
+      return false;
+    }
+  }
+
+  room.players.forEach(player => {
+    const user = db.findUser("id", player.userId);
+    db.updateUser(player.userId, {
+      bet_credits: Math.max(0, Number(user.bet_credits || 0) - tableBet)
+    });
+    player.bet = tableBet;
+  });
+
+  room.bet = tableBet;
+  room.pot = room.players.reduce((sum, player) => sum + Number(player.bet || tableBet || 0), 0);
+  room.status = "playing";
+  room.startedAt = Date.now();
+  room.gameEndsAt = room.startedAt + PIRATE_GAME_MS;
+  room.winnerSocketId = null;
+  room.map = makePirateMap();
+  room.bombs = [];
+  room.explosions = [];
+  room.pickups = [];
+  room.message = "A batalha comecou. Pule, corra e solte bombas.";
+  positionPiratePlayers(room);
+
+  clearInterval(room.tickTimer);
+  room.lastTick = Date.now();
+  room.tickTimer = setInterval(() => tickPirateRoom(room), PIRATE_TICK_MS);
+  emitPirateUpdate(room);
+  broadcastOnlineList();
+  return true;
+}
+
+function finishPirateRoom(room, reason = "") {
+  if (!room || room.status === "finished") return;
+
+  clearInterval(room.tickTimer);
+  room.tickTimer = null;
+  room.status = "finished";
+  room.gameEndsAt = null;
+
+  const winner = pickPirateWinner(room);
+  room.winnerSocketId = winner?.socketId || null;
+  const totalPot = Number(room.pot || 0) || room.players.reduce((sum, player) => sum + Number(player.bet || room.bet || 0), 0);
+
+  if (winner) {
+    const user = db.findUser("id", winner.userId);
+    if (user) {
+      db.updateUser(winner.userId, {
+        bet_credits: Number(user.bet_credits || 0) + totalPot
+      });
+      addExchangeWin(winner.userId);
+    }
+    room.message = `${reason ? `${reason} ` : ""}${winner.username} venceu Pirate Bomb e levou ${totalPot} creditos.`;
+  } else {
+    activePiratePlayers(room).forEach(player => {
+      const user = db.findUser("id", player.userId);
+      if (user) {
+        db.updateUser(player.userId, {
+          bet_credits: Number(user.bet_credits || 0) + Number(player.bet || room.bet || 0)
+        });
+      }
+    });
+    room.message = `${reason ? `${reason} ` : ""}Pirate Bomb terminou empatado. Apostas devolvidas.`;
+  }
+  resetExchangeLosses(room.players.map(player => player.userId), winner ? [winner.userId] : []);
+
+  const targets = new Set(activePiratePlayers(room).map(player => player.socketId));
+  for (const spectatorId of room.spectators || []) targets.add(spectatorId);
+  targets.forEach(socketId => {
+    const participant = room.players.find(player => player.socketId === socketId && !player.disconnected);
+    io.to(socketId).emit("pirate:finished", {
+      room: serializePirateRoom(room, socketId),
+      updatedUser: participant ? safeUser(db.findUser("id", participant.userId)) : null
+    });
+    const liveSocket = io.sockets.sockets.get(socketId);
+    if (liveSocket) liveSocket.leave(room.roomId);
+  });
+
+  room.players.forEach(player => {
+    const online = onlinePlayers.get(player.socketId);
+    if (online && online.roomId === room.roomId) {
+      online.inGame = false;
+      online.roomId = null;
+      online.game = null;
+    }
+  });
+
+  pirateRooms.delete(room.roomId);
+  broadcastOnlineList();
+}
+
+function cancelPirateRoom(room, reason = "Sala de Pirate Bomb cancelada.") {
+  if (!room) return;
+  clearInterval(room.tickTimer);
+
+  if (room.status === "playing") {
+    activePiratePlayers(room).forEach(player => {
+      const user = db.findUser("id", player.userId);
+      if (user) {
+        db.updateUser(player.userId, {
+          bet_credits: Number(user.bet_credits || 0) + Number(player.bet || room.bet || 0)
+        });
+      }
+    });
+  }
+
+  const targets = new Set(activePiratePlayers(room).map(player => player.socketId));
+  for (const spectatorId of room.spectators || []) targets.add(spectatorId);
+  targets.forEach(socketId => {
+    io.to(socketId).emit("pirate:cancelled", { message: reason });
+    const participant = room.players.find(player => player.socketId === socketId && !player.disconnected);
+    if (participant) {
+      const online = onlinePlayers.get(socketId);
+      if (online && online.roomId === room.roomId) {
+        online.inGame = false;
+        online.roomId = null;
+        online.game = null;
+      }
+    }
+    const liveSocket = io.sockets.sockets.get(socketId);
+    if (liveSocket) liveSocket.leave(room.roomId);
+  });
+
+  pirateRooms.delete(room.roomId);
+  broadcastOnlineList();
+}
+
+function removePiratePlayer(room, socketId, reason = "") {
+  const player = room.players.find(item => item.socketId === socketId && !item.disconnected);
+  if (!player) {
+    clearSpectator(room, socketId);
+    emitPirateUpdate(room);
+    broadcastOnlineList();
+    return;
+  }
+
+  const online = onlinePlayers.get(socketId);
+  if (online && online.roomId === room.roomId) {
+    online.inGame = false;
+    online.roomId = null;
+    online.game = null;
+  }
+  const liveSocket = io.sockets.sockets.get(socketId);
+  if (liveSocket) liveSocket.leave(room.roomId);
+
+  if (room.status === "playing") {
+    player.disconnected = true;
+    player.alive = false;
+    player.lives = 0;
+    player.input = { left: false, right: false, jump: false, bomb: false };
+    resetExchangeWinStreak(player.userId);
+    room.message = reason || `${player.username} saiu e perdeu a batalha.`;
+    if (alivePiratePlayers(room).length <= 1) {
+      finishPirateRoom(room, room.message);
+      return;
+    }
+    emitPirateUpdate(room);
+    broadcastOnlineList();
+    return;
+  }
+
+  room.players = room.players.filter(item => item.socketId !== socketId);
+  if (!room.players.length) {
+    pirateRooms.delete(room.roomId);
+    broadcastOnlineList();
+    return;
+  }
+
+  if (room.hostSocketId === socketId) {
+    room.hostSocketId = room.players[0].socketId;
+    room.hostUsername = room.players[0].username;
+  }
+  positionPiratePlayers(room);
+  room.message = reason || `${player.username} saiu da sala.`;
+  emitPirateUpdate(room);
+  broadcastOnlineList();
+}
+
 io.on("connection", (socket) => {
   console.log(`[+] ${socket.username} conectado`);
   const connectedUser = normalizeUserProgress(db.findUser("id", socket.userId));
@@ -4129,6 +4769,12 @@ io.on("connection", (socket) => {
     if (relicRoom) {
       activeRelicPlayers(relicRoom).forEach(player => targets.add(player.socketId));
       for (const spectatorId of relicRoom.spectators || []) targets.add(spectatorId);
+    }
+
+    const pirateRoom = findPirateRoomBySocket(socket.id);
+    if (pirateRoom) {
+      activePiratePlayers(pirateRoom).forEach(player => targets.add(player.socketId));
+      for (const spectatorId of pirateRoom.spectators || []) targets.add(spectatorId);
     }
 
     if (p?.roomId) {
@@ -5233,6 +5879,136 @@ io.on("connection", (socket) => {
     broadcastOnlineList();
   });
 
+  // Pirate Bomb
+  socket.on("pirate:create", ({ bet }) => {
+    const tableBet = clampNumber(bet || 10, 5, 50);
+    const user = db.findUser("id", socket.userId);
+    const player = onlinePlayers.get(socket.id);
+    if (!user || Number(user.bet_credits || 0) < tableBet)
+      return socket.emit("pirate:error", "Creditos de aposta insuficientes.");
+    if (player?.inGame)
+      return socket.emit("pirate:error", "Voce ja esta em uma partida.");
+
+    const roomId = `pirate-${Date.now()}-${socket.id}`;
+    const room = {
+      roomId,
+      hostSocketId: socket.id,
+      hostUsername: socket.username,
+      bet: tableBet,
+      pot: tableBet,
+      status: "waiting",
+      gameEndsAt: null,
+      winnerSocketId: null,
+      tickTimer: null,
+      lastTick: Date.now(),
+      map: makePirateMap(),
+      bombs: [],
+      explosions: [],
+      pickups: [],
+      spectators: new Set(),
+      message: "Sala aberta. Entre no conves e prepare as bombas.",
+      players: [makePiratePlayer(socket, 0, tableBet)]
+    };
+    positionPiratePlayers(room);
+    pirateRooms.set(roomId, room);
+    socket.join(roomId);
+    if (player) { player.inGame = true; player.roomId = roomId; player.game = "pirate"; }
+
+    for (const [, target] of onlinePlayers) {
+      if (target.socketId !== socket.id && !target.inGame) {
+        io.to(target.socketId).emit("pirate:invite", { roomId, fromUsername: socket.username, bet: tableBet });
+      }
+    }
+
+    emitPirateUpdate(room);
+    broadcastOnlineList();
+  });
+
+  socket.on("pirate:join", ({ roomId }) => {
+    const room = pirateRooms.get(roomId);
+    if (!room || room.status !== "waiting")
+      return socket.emit("pirate:error", "Sala indisponivel.");
+    if (room.players.some(player => player.socketId === socket.id))
+      return emitPirateUpdate(room);
+    if (room.players.length >= PIRATE_MAX_PLAYERS)
+      return socket.emit("pirate:error", `Sala cheia (max. ${PIRATE_MAX_PLAYERS} jogadores).`);
+
+    const maxBet = room.players.length >= 2 ? 20 : 50;
+    if (room.bet > maxBet) {
+      return socket.emit("pirate:error", `Esta sala teria ${room.players.length + 1} jogadores. Aposta maxima: ${maxBet} creditos.`);
+    }
+
+    const user = db.findUser("id", socket.userId);
+    const player = onlinePlayers.get(socket.id);
+    if (!user || Number(user.bet_credits || 0) < room.bet)
+      return socket.emit("pirate:error", "Creditos de aposta insuficientes.");
+    if (player?.inGame)
+      return socket.emit("pirate:error", "Voce ja esta em uma partida.");
+
+    room.players.push(makePiratePlayer(socket, room.players.length, room.bet));
+    positionPiratePlayers(room);
+    room.message = `${socket.username} entrou no Pirate Bomb.`;
+    socket.join(roomId);
+    if (player) { player.inGame = true; player.roomId = roomId; player.game = "pirate"; }
+    emitPirateUpdate(room);
+    broadcastOnlineList();
+  });
+
+  socket.on("pirate:start", ({ roomId }) => {
+    const room = pirateRooms.get(roomId);
+    if (!room || room.status !== "waiting") return;
+    if (room.hostSocketId !== socket.id)
+      return socket.emit("pirate:error", "So o dono da sala pode iniciar.");
+    startPirateRound(room, room.bet);
+  });
+
+  socket.on("pirate:input", ({ roomId, input }) => {
+    const room = pirateRooms.get(roomId);
+    if (!room || room.status !== "playing") return;
+    const player = room.players.find(item => item.socketId === socket.id && !item.disconnected);
+    if (!player) return;
+    setPirateInput(player, input);
+  });
+
+  socket.on("pirate:leave", ({ roomId }) => {
+    const room = pirateRooms.get(roomId);
+    if (!room) return;
+    if (room.spectators?.has(socket.id)) {
+      clearSpectator(room, socket.id);
+      emitPirateUpdate(room);
+      broadcastOnlineList();
+      return;
+    }
+    if (room.status === "waiting" && room.hostSocketId === socket.id) {
+      cancelPirateRoom(room, "O dono cancelou o Pirate Bomb.");
+      return;
+    }
+    removePiratePlayer(room, socket.id, `${socket.username} saiu do Pirate Bomb.`);
+  });
+
+  socket.on("pirate:spectate", ({ roomId }) => {
+    const room = pirateRooms.get(roomId);
+    if (!room || room.status !== "playing")
+      return socket.emit("pirate:error", "Partida indisponivel para assistir.");
+    if (room.players.some(player => player.socketId === socket.id && !player.disconnected))
+      return emitPirateUpdate(room);
+    const online = onlinePlayers.get(socket.id);
+    if (online?.inGame)
+      return socket.emit("pirate:error", "Termine sua partida antes de assistir outra.");
+    ensureSpectators(room).add(socket.id);
+    socket.join(roomId);
+    emitPirateUpdate(room);
+    broadcastOnlineList();
+  });
+
+  socket.on("pirate:unwatch", ({ roomId }) => {
+    const room = pirateRooms.get(roomId);
+    if (!room) return;
+    clearSpectator(room, socket.id);
+    emitPirateUpdate(room);
+    broadcastOnlineList();
+  });
+
   socket.on("horse:create", ({ bet }) => {
     const tableBet = Math.max(5, Math.min(50, Number(bet) || 10));
     const user = db.findUser("id", socket.userId);
@@ -5490,6 +6266,15 @@ io.on("connection", (socket) => {
       }
     }
 
+    const pirateRoom = findPirateRoomBySocket(socket.id);
+    if (pirateRoom) {
+      if (pirateRoom.status === "waiting" && pirateRoom.hostSocketId === socket.id) {
+        cancelPirateRoom(pirateRoom, `${socket.username} cancelou o Pirate Bomb.`);
+      } else {
+        removePiratePlayer(pirateRoom, socket.id, `${socket.username} desconectou do Pirate Bomb.`);
+      }
+    }
+
     const blackjackRoom = findBlackjackRoomBySocket(socket.id);
     if (blackjackRoom) {
       const participant = blackjackRoom.players.find(item => item.socketId === socket.id);
@@ -5584,6 +6369,7 @@ function getSpectatableRoom(game, roomId) {
   if (game === "crash") return crashRooms.get(roomId) || null;
   if (game === "artillery") return artilleryRooms.get(roomId) || null;
   if (game === "relic") return relicRooms.get(roomId) || null;
+  if (game === "pirate") return pirateRooms.get(roomId) || null;
   return null;
 }
 

@@ -3985,6 +3985,67 @@
     .online-avatar { width:32px; height:32px; border-radius:50%; background:#2d4a3e; border:1px solid rgba(255,255,255,0.2); overflow:hidden; flex-shrink:0; }
     .online-avatar img { width:100%; height:100%; object-fit:cover; }
 
+    .legendary-username {
+      position: relative;
+      display: inline-flex;
+      max-width: 100%;
+      align-items: center;
+      overflow: hidden;
+      color: #ffe28a;
+      background: linear-gradient(90deg, #fff6b8 0%, #d8ad3f 26%, #fff1a1 48%, #b56b17 70%, #fff8d6 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+      text-shadow:
+        0 0 6px rgba(255, 245, 166, .86),
+        0 0 18px rgba(216, 173, 63, .70),
+        0 1px 0 rgba(78, 44, 5, .60);
+      animation: legendaryNameGlow 1.8s ease-in-out infinite;
+    }
+
+    .legendary-username::after {
+      content: "";
+      position: absolute;
+      inset: -40% -70%;
+      background: linear-gradient(110deg, transparent 34%, rgba(255, 255, 255, .94) 48%, transparent 62%);
+      transform: translateX(-120%);
+      mix-blend-mode: screen;
+      animation: legendaryNameSweep 2.35s ease-in-out infinite;
+      pointer-events: none;
+    }
+
+    @keyframes legendaryNameGlow {
+      0%, 100% { filter: drop-shadow(0 0 2px rgba(255, 236, 139, .65)); }
+      50% { filter: drop-shadow(0 0 10px rgba(255, 216, 82, .92)); }
+    }
+
+    @keyframes legendaryNameSweep {
+      0% { transform: translateX(-120%); opacity: 0; }
+      18% { opacity: .92; }
+      48% { transform: translateX(120%); opacity: .72; }
+      100% { transform: translateX(120%); opacity: 0; }
+    }
+
+    .has-legendary-username {
+      position: relative;
+      overflow: hidden;
+      color: #ffe28a !important;
+      text-shadow:
+        0 0 6px rgba(255, 245, 166, .86),
+        0 0 18px rgba(216, 173, 63, .70);
+      box-shadow: inset 0 0 0 1px rgba(255, 226, 138, .42), 0 0 18px rgba(216, 173, 63, .18);
+    }
+
+    .has-legendary-username::after {
+      content: "";
+      position: absolute;
+      inset: -60% -80%;
+      background: linear-gradient(110deg, transparent 34%, rgba(255, 255, 255, .68) 48%, transparent 62%);
+      transform: translateX(-120%);
+      animation: legendaryNameSweep 2.35s ease-in-out infinite;
+      pointer-events: none;
+    }
+
     .online-board {
       display: grid;
       grid-template-columns: auto minmax(0, 1fr) auto;
@@ -8763,7 +8824,7 @@
 
     function updateLobbyHeader() {
       if (!mp.user) return;
-      document.getElementById("lobbyUsername").textContent    = mp.user.username;
+      document.getElementById("lobbyUsername").innerHTML      = renderPlayerName(mp.user.username);
       document.getElementById("lobbyBetCredits").textContent  = state.betCredits;
       document.getElementById("lobbyCredits").textContent     = state.credits;
       document.getElementById("betAvail").textContent         = `(você tem ${state.betCredits})`;
@@ -8771,6 +8832,17 @@
 
     function renderAvatar(avatar, label = "") {
       return `<div class="online-avatar">${avatar ? `<img src="${escHtml(avatar)}" alt="${escHtml(label)}">` : ""}</div>`;
+    }
+
+    function isLegendaryUsername(username) {
+      return String(username || "").trim().toLowerCase() === "erick";
+    }
+
+    function renderPlayerName(username, suffix = "") {
+      const safeName = escHtml(username || "?");
+      const safeSuffix = suffix ? escHtml(suffix) : "";
+      if (!isLegendaryUsername(username)) return `${safeName}${safeSuffix}`;
+      return `<span class="legendary-username" title="Lendario">${safeName}</span>${safeSuffix}`;
     }
 
     function getLobbyGameLabel(game) {
@@ -8815,7 +8887,7 @@
         <div class="online-pill${player.socketId === self ? " is-self" : ""}" title="${escHtml(player.username)}">
           ${renderAvatar(player.avatar, player.username)}
           <span>
-            <strong>${escHtml(player.username)}${player.socketId === self ? " (voce)" : ""}</strong>
+            <strong>${renderPlayerName(player.username, player.socketId === self ? " (voce)" : "")}</strong>
             <small>${player.inGame ? getLobbyGameLabel(player.game) : "Disponivel"}</small>
             ${renderWatcherBadge(player.watcherCount)}
           </span>
@@ -8837,7 +8909,7 @@
       ul.innerHTML = others.map(p => `
         <li>
           ${renderAvatar(p.avatar, p.username)}
-          <span class="player-name">${escHtml(p.username)}${renderWatcherBadge(p.watcherCount)}</span>
+          <span class="player-name">${renderPlayerName(p.username)}${renderWatcherBadge(p.watcherCount)}</span>
           <span class="status-badge ${p.inGame ? "in-game" : "available"}">
             ${p.inGame ? getLobbyGameLabel(p.game) : "Disponível"}
           </span>
@@ -8935,7 +9007,7 @@
             <strong>${escHtml(listing.code)} - ${escHtml(listing.name)}</strong>
             <div class="market-seller">
               ${renderAvatar(listing.seller_avatar, listing.seller_username)}
-              <span>${escHtml(listing.seller_username)}${isMine ? " (voce)" : ""}</span>
+              <span>${renderPlayerName(listing.seller_username, isMine ? " (voce)" : "")}</span>
             </div>
             <div class="market-price">
               <span>${escHtml(getRarityLabel(listing.rarity))}</span>
@@ -9065,7 +9137,7 @@
           <div class="chat-message">
             ${renderAvatar(message.avatar, message.username)}
             <span>
-              <strong>${escHtml(message.username || "?")}</strong>
+              <strong>${renderPlayerName(message.username || "?")}</strong>
               <span>${escHtml(message.text || "")}</span>
             </span>
           </div>
@@ -9183,7 +9255,7 @@
             <strong>
               <span style="display:flex;align-items:center;gap:7px;min-width:0">
                 ${renderAvatar(player.avatar, player.username)}
-                <span>${escHtml(player.username)}${player.isHost ? " ★" : ""}</span>
+                <span>${renderPlayerName(player.username, player.isHost ? " *" : "")}</span>
               </span>
               <span>${player.total || 0}</span>
             </strong>
@@ -9925,7 +9997,7 @@
           ? "Fim de jogo"
           : "Aguardando";
       if (turnPlayer && room.status === "playing") {
-        document.getElementById("buttonSoccerMessage").textContent = `${turnPlayer.username} na vez. ${room.message || ""}`;
+        document.getElementById("buttonSoccerMessage").innerHTML = `${renderPlayerName(turnPlayer.username)} na vez. ${escHtml(room.message || "")}`;
       }
       if (!mp.buttonShotAnimating) drawButtonSoccerField(room);
     }
@@ -9961,7 +10033,7 @@
         <div class="button-player-chip ${player.isMe ? "is-me" : ""} ${player.isTurn ? "is-turn" : ""}">
           <span class="button-color-dot" style="--button-color:${escHtml(player.color || "#fff")}"></span>
           <span>
-            <strong>${escHtml(player.username)}${player.isMe ? " (voce)" : ""}</strong>
+            <strong>${renderPlayerName(player.username, player.isMe ? " (voce)" : "")}</strong>
             <small>${escHtml(player.teamName || player.team)}${player.isHost ? " | dono" : ""}</small>
           </span>
           <span class="button-ready-badge">${player.ready ? `Pronto ${player.voteBet}` : player.isTurn ? "Vez" : ""}</span>
@@ -10905,7 +10977,7 @@
         <div class="crash-player-row ${player.isMe ? "is-me" : ""}" data-socket-id="${escHtml(player.socketId)}">
           ${renderAvatar(player.avatar, player.username)}
           <span>
-            <strong>${escHtml(player.username)}${player.isMe ? " (voce)" : ""}${player.isHost ? " *" : ""}</strong>
+            <strong>${renderPlayerName(player.username, `${player.isMe ? " (voce)" : ""}${player.isHost ? " *" : ""}`)}</strong>
             <small>${crashStatusLabel(player)}</small>
           </span>
           <strong>${player.status === "cashed" ? `${player.payout} cr` : `${player.bet} cr`}</strong>
@@ -10918,7 +10990,7 @@
           <div class="crash-player-row">
             <span></span>
             <span>
-              <strong>${escHtml(item.username)}</strong>
+              <strong>${renderPlayerName(item.username)}</strong>
               <small>${Number(item.multiplier || 0).toFixed(2)}x</small>
             </span>
             <strong>${item.payout} cr</strong>
@@ -11078,8 +11150,8 @@
       document.getElementById("artilleryBetLabel").textContent = `Aposta: ${room.bet} creditos`;
       document.getElementById("artilleryMessage").textContent = room.message || "";
       document.getElementById("artilleryWindLabel").textContent = `Vento ${Number(room.wind || 0) >= 0 ? "+" : ""}${Number(room.wind || 0)}`;
-      document.getElementById("artilleryTurnLabel").textContent = isPlaying
-        ? `Turno: ${current?.username || "?"}`
+      document.getElementById("artilleryTurnLabel").innerHTML = isPlaying
+        ? `Turno: ${current ? renderPlayerName(current.username) : "?"}`
         : isFinished
           ? "Partida encerrada"
           : `${room.players?.length || 0} jogadores na sala`;
@@ -11089,7 +11161,7 @@
         <div class="artillery-player-row ${player.isMe ? "is-me" : ""} ${player.isTurn ? "is-turn" : ""} ${!player.alive ? "is-dead" : ""}" data-socket-id="${escHtml(player.socketId)}">
           <span class="artillery-color-dot" style="--artillery-color:${escHtml(player.color || "#f05a48")}"></span>
           <span>
-            <strong>${escHtml(player.username)}${player.isMe ? " (voce)" : ""}${player.isHost ? " *" : ""}</strong>
+            <strong>${renderPlayerName(player.username, `${player.isMe ? " (voce)" : ""}${player.isHost ? " *" : ""}`)}</strong>
             <small>${player.alive ? `${player.hp} HP` : "fora"}${player.isTurn ? " | turno" : ""}</small>
           </span>
           <strong>${player.bet} cr</strong>
@@ -11499,8 +11571,8 @@
 
       document.getElementById("relicBetLabel").textContent = `Aposta: ${room.bet} creditos`;
       document.getElementById("relicMessage").textContent = room.message || "";
-      document.getElementById("relicStatusLabel").textContent = isPlaying
-        ? `Lider: ${leader?.username || "-"} (${leader?.score || 0})`
+      document.getElementById("relicStatusLabel").innerHTML = isPlaying
+        ? `Lider: ${leader ? renderPlayerName(leader.username) : "-"} (${leader?.score || 0})`
         : isFinished
           ? "Partida encerrada"
           : `${players.length} jogadores na sala`;
@@ -11513,7 +11585,7 @@
         <div class="relic-player-row ${player.isMe ? "is-me" : ""} ${room.winnerSocketId === player.socketId ? "is-winner" : ""} ${player.disconnected ? "is-out" : ""}" data-socket-id="${escHtml(player.socketId)}">
           <span class="relic-color-dot" style="--relic-color:${escHtml(player.color || "#60d7ff")}"></span>
           <span>
-            <strong>${escHtml(player.username)}${player.isMe ? " (voce)" : ""}${player.isHost ? " *" : ""}</strong>
+            <strong>${renderPlayerName(player.username, `${player.isMe ? " (voce)" : ""}${player.isHost ? " *" : ""}`)}</strong>
             <small>${player.disconnected ? "saiu" : player.stunnedMs > 0 ? "atordoado" : `${player.collected || 0} reliquias`}</small>
           </span>
           <strong>${player.score || 0}</strong>
@@ -11965,7 +12037,7 @@
         <div class="pirate-player-row ${player.isMe ? "is-me" : ""} ${room.winnerSocketId === player.socketId ? "is-winner" : ""} ${(!player.alive || player.disconnected) ? "is-out" : ""}" data-socket-id="${escHtml(player.socketId)}">
           <span class="pirate-color-dot" style="--pirate-color:${escHtml(player.color || "#f7c948")}"></span>
           <span>
-            <strong>${escHtml(player.username)}${player.isMe ? " (voce)" : ""}${player.isHost ? " *" : ""}</strong>
+            <strong>${renderPlayerName(player.username, `${player.isMe ? " (voce)" : ""}${player.isHost ? " *" : ""}`)}</strong>
             <small>${player.disconnected ? "saiu" : player.alive ? escHtml(player.skinName || "Pirata") : "eliminado"}</small>
           </span>
           <strong>${"♥".repeat(Math.max(0, Number(player.lives || 0))) || "0"} ${Number(player.kills || 0) ? `+${player.kills}` : ""}</strong>
@@ -12669,7 +12741,7 @@
         <button class="slither-player-chip ${player.isMe ? "is-me" : ""} ${isFollowed ? "is-followed" : ""} ${player.boosting ? "is-boosting" : ""} ${!player.alive || player.eliminated ? "is-dead" : ""}" type="button" data-socket-id="${escHtml(player.socketId)}">
           <span class="slither-color-dot" style="--slither-color:${escHtml(player.color || "#7c8cff")}"></span>
           <span>
-            <strong>${escHtml(player.username)}${player.isMe ? " (voce)" : ""}</strong>
+            <strong>${renderPlayerName(player.username, player.isMe ? " (voce)" : "")}</strong>
             <small>${player.eliminated ? "eliminado" : player.alive ? `${Math.round(player.length || 0)} pts` : "renascendo"}${boostLabel}${followLabel}${player.isHost ? " | dono" : ""}</small>
           </span>
           <span class="slither-side-badges">
@@ -12987,7 +13059,7 @@
       // Players list
       document.getElementById("horseRacers").innerHTML = room.players.map(p => {
         const horse = room.horses.find(h=>h.id===p.pickedHorse);
-        return `<div class="horse-racer-chip ${p.isMe?'is-me':''}" data-socket-id="${escHtml(p.socketId)}">
+        return `<div class="horse-racer-chip ${p.isMe?'is-me':''} ${isLegendaryUsername(p.username) ? 'has-legendary-username' : ''}" data-socket-id="${escHtml(p.socketId)}">
           ${p.avatar ? `<img src="${p.avatar}" style="width:20px;height:20px;border-radius:50%;object-fit:cover">` : ''}
           ${escHtml(p.username)}${horse ? ` → ${HORSE_EMOJIS[horse.id-1]}${horse.name}` : ' (sem cavalo)'}
         </div>`;

@@ -3972,14 +3972,22 @@ const PIRATE_JUMP = 760;
 const PIRATE_MAX_FALL = 980;
 const PIRATE_BOMB_FUSE_MS = 1850;
 const PIRATE_BOMB_COOLDOWN_MS = 900;
+const PIRATE_BOMB_THROW_X = 670;
+const PIRATE_BOMB_THROW_Y = 430;
+const PIRATE_BOMB_GRAVITY = 1550;
+const PIRATE_BOMB_MAX_FALL = 860;
+const PIRATE_BOMB_BOUNCE = 0.44;
+const PIRATE_BOMB_FRICTION = 0.82;
+const PIRATE_BOMB_REACT_COOLDOWN_MS = 850;
+const PIRATE_THROW_ACTION_MS = 360;
 const PIRATE_COLORS = ["#60d7ff", "#ff6b7d", "#57d39b", "#f7c948", "#c678dd", "#ff9f43"];
 const PIRATE_SKINS = [
-  { key: "bomb-guy", name: "Bomb Guy", folder: "1-Player-Bomb Guy" },
-  { key: "bald-pirate", name: "Bald Pirate", folder: "2-Enemy-Bald Pirate" },
-  { key: "cucumber", name: "Cucumber", folder: "3-Enemy-Cucumber" },
-  { key: "big-guy", name: "Big Guy", folder: "4-Enemy-Big Guy" },
-  { key: "captain", name: "Captain", folder: "5-Enemy-Captain" },
-  { key: "whale", name: "Whale", folder: "6-Enemy-Whale" }
+  { key: "bomb-guy", name: "Bomb Guy", folder: "1-Player-Bomb Guy", bombReaction: "throw" },
+  { key: "bald-pirate", name: "Bald Pirate", folder: "2-Enemy-Bald Pirate", bombReaction: "kick" },
+  { key: "cucumber", name: "Cucumber", folder: "3-Enemy-Cucumber", bombReaction: "ignite" },
+  { key: "big-guy", name: "Big Guy", folder: "4-Enemy-Big Guy", bombReaction: "kick" },
+  { key: "captain", name: "Captain", folder: "5-Enemy-Captain", bombReaction: "kick" },
+  { key: "whale", name: "Whale", folder: "6-Enemy-Whale", bombReaction: "swallow" }
 ];
 const PIRATE_PLATFORMS = [
   { id: "floor", x: 0, y: 830, w: 1600, h: 70, tile: "floor" },
@@ -4043,12 +4051,14 @@ function makePiratePlayer(socket, index, bet) {
     alive: true,
     grounded: false,
     action: "idle",
+    actionUntil: 0,
     input: { left: false, right: false, jump: false, bomb: false },
     jumpQueued: false,
     bombQueued: false,
     hitUntil: 0,
     invulnerableUntil: 0,
     bombCooldownUntil: 0,
+    bombReactCooldownUntil: 0,
     disconnected: false,
     joinedAt: Date.now()
   };
@@ -4074,12 +4084,14 @@ function positionPiratePlayers(room) {
     player.alive = true;
     player.grounded = false;
     player.action = "idle";
+    player.actionUntil = 0;
     player.input = { left: false, right: false, jump: false, bomb: false };
     player.jumpQueued = false;
     player.bombQueued = false;
     player.hitUntil = 0;
     player.invulnerableUntil = 0;
     player.bombCooldownUntil = 0;
+    player.bombReactCooldownUntil = 0;
     player.disconnected = false;
   });
 }
@@ -4090,6 +4102,10 @@ function activePiratePlayers(room) {
 
 function alivePiratePlayers(room) {
   return activePiratePlayers(room).filter(player => player.alive && Number(player.lives || 0) > 0);
+}
+
+function getPirateSkin(player) {
+  return PIRATE_SKINS[Number(player?.skinIndex || 0)] || PIRATE_SKINS[0];
 }
 
 function serializePirateRoom(room, viewerSocketId) {
@@ -4109,6 +4125,9 @@ function serializePirateRoom(room, viewerSocketId) {
       ownerSocketId: bomb.ownerSocketId,
       x: Math.round(Number(bomb.x || 0)),
       y: Math.round(Number(bomb.y || 0)),
+      vx: Math.round(Number(bomb.vx || 0)),
+      vy: Math.round(Number(bomb.vy || 0)),
+      grounded: Boolean(bomb.grounded),
       fuseLeftMs: Math.max(0, Number(bomb.explodesAt || now) - now)
     })),
     explosions: (room.explosions || []).map(explosion => ({
@@ -4186,16 +4205,25 @@ function placePirateBomb(room, player, now) {
   if (!player.alive || now < Number(player.bombCooldownUntil || 0)) return;
   const activeBombs = (room.bombs || []).filter(bomb => bomb.ownerSocketId === player.socketId);
   if (activeBombs.length >= 2) return;
+  const dir = Number(player.dir || 1) >= 0 ? 1 : -1;
   room.bombs.push({
     id: `bomb-${Date.now()}-${Math.random().toString(16).slice(2)}`,
     ownerSocketId: player.socketId,
     ownerUserId: player.userId,
-    x: Math.round(player.x),
-    y: Math.round(player.y - 28),
+    x: Math.round(Number(player.x || 0) + dir * 36),
+    y: Math.round(Number(player.y || 0) - 48),
+    vx: dir * PIRATE_BOMB_THROW_X + Number(player.vx || 0) * 0.25,
+    vy: -PIRATE_BOMB_THROW_Y,
     radius: PIRATE_FIELD.bombRadius,
+    grounded: false,
+    bounces: 0,
+    armedAt: now + 180,
     explodesAt: now + PIRATE_BOMB_FUSE_MS
   });
   player.bombCooldownUntil = now + PIRATE_BOMB_COOLDOWN_MS;
+  player.action = "throw";
+  player.actionUntil = now + PIRATE_THROW_ACTION_MS;
+  room.message = `${player.username} lancou uma bomba.`;
 }
 
 function updatePiratePlayerPhysics(room, player, dt, now) {
@@ -4258,6 +4286,8 @@ function updatePiratePlayerPhysics(room, player, dt, now) {
     player.action = "dead";
   } else if (now < Number(player.hitUntil || 0)) {
     player.action = "hit";
+  } else if (now < Number(player.actionUntil || 0)) {
+    player.action = player.action || "idle";
   } else if (!player.grounded && player.vy < -40) {
     player.action = "jump";
   } else if (!player.grounded && player.vy >= -40) {
@@ -4267,6 +4297,107 @@ function updatePiratePlayerPhysics(room, player, dt, now) {
   } else {
     player.action = "idle";
   }
+}
+
+function updatePirateBombPhysics(room, bomb, dt, now) {
+  const radius = Number(bomb.radius || PIRATE_FIELD.bombRadius);
+  const prevY = Number(bomb.y || 0);
+
+  bomb.vy = clampNumber(Number(bomb.vy || 0) + PIRATE_BOMB_GRAVITY * dt, -PIRATE_BOMB_THROW_Y, PIRATE_BOMB_MAX_FALL);
+  bomb.x = Number(bomb.x || 0) + Number(bomb.vx || 0) * dt;
+  bomb.y = Number(bomb.y || 0) + Number(bomb.vy || 0) * dt;
+  bomb.grounded = false;
+
+  if (bomb.x < radius) {
+    bomb.x = radius;
+    bomb.vx = Math.abs(Number(bomb.vx || 0)) * 0.58;
+  }
+  if (bomb.x > PIRATE_FIELD.width - radius) {
+    bomb.x = PIRATE_FIELD.width - radius;
+    bomb.vx = -Math.abs(Number(bomb.vx || 0)) * 0.58;
+  }
+
+  const platforms = room.map?.platforms || PIRATE_PLATFORMS;
+  const bottom = Number(bomb.y || 0) + radius;
+  const prevBottom = prevY + radius;
+  const candidate = platforms
+    .filter(platform => {
+      const platformTop = Number(platform.y || 0);
+      return Number(bomb.vy || 0) >= 0
+        && prevBottom <= platformTop + 8
+        && bottom >= platformTop
+        && Number(bomb.x || 0) + radius > Number(platform.x || 0)
+        && Number(bomb.x || 0) - radius < Number(platform.x || 0) + Number(platform.w || 0);
+    })
+    .sort((a, b) => Number(a.y || 0) - Number(b.y || 0))[0];
+
+  if (candidate) {
+    bomb.y = Number(candidate.y || 0) - radius;
+    if (Math.abs(Number(bomb.vy || 0)) > 150) {
+      bomb.vy = -Math.abs(Number(bomb.vy || 0)) * PIRATE_BOMB_BOUNCE;
+      bomb.bounces = Math.max(0, Number(bomb.bounces || 0) + 1);
+    } else {
+      bomb.vy = 0;
+      bomb.grounded = true;
+    }
+    bomb.vx = Number(bomb.vx || 0) * PIRATE_BOMB_FRICTION;
+    if (Math.abs(Number(bomb.vx || 0)) < 16) bomb.vx = 0;
+  }
+
+  if (bomb.y > PIRATE_FIELD.height + 120) {
+    bomb.explodesAt = Math.min(Number(bomb.explodesAt || now), now + 40);
+  }
+}
+
+function handlePirateBombReaction(room, bomb, now) {
+  if (now < Number(bomb.armedAt || 0)) return false;
+
+  for (const player of alivePiratePlayers(room)) {
+    const bodyX = Number(player.x || 0);
+    const bodyY = Number(player.y || 0) - PIRATE_FIELD.playerHeight / 2;
+    const distance = Math.hypot(bodyX - Number(bomb.x || 0), bodyY - Number(bomb.y || 0));
+    if (distance > Number(bomb.radius || PIRATE_FIELD.bombRadius) + 34) continue;
+    if (now < Number(player.bombReactCooldownUntil || 0)) continue;
+    if (bomb.ownerSocketId === player.socketId && now < Number(bomb.armedAt || 0) + 550) continue;
+
+    const reaction = getPirateSkin(player).bombReaction;
+    const dir = Math.sign(Number(bomb.x || 0) - bodyX) || Number(player.dir || 1) || 1;
+
+    if (reaction === "swallow" && bomb.ownerSocketId !== player.socketId) {
+      player.action = "swallow";
+      player.actionUntil = now + 520;
+      player.bombReactCooldownUntil = now + 1700;
+      room.message = `${player.username} engoliu uma bomba inimiga.`;
+      return true;
+    }
+
+    if (reaction === "ignite" && bomb.ownerSocketId !== player.socketId) {
+      bomb.explodesAt = Math.min(Number(bomb.explodesAt || now), now + 620);
+      bomb.vx = Number(bomb.vx || 0) + dir * 170;
+      bomb.vy = Math.min(Number(bomb.vy || 0), -120);
+      player.action = "ignite";
+      player.actionUntil = now + 540;
+      player.bombReactCooldownUntil = now + PIRATE_BOMB_REACT_COOLDOWN_MS;
+      room.message = `${player.username} soprou o pavio da bomba.`;
+      return false;
+    }
+
+    if (reaction === "kick") {
+      bomb.ownerSocketId = player.socketId;
+      bomb.ownerUserId = player.userId;
+      bomb.vx = dir * (720 + Math.min(240, Math.abs(Number(player.vx || 0)) * 0.75));
+      bomb.vy = -320;
+      bomb.grounded = false;
+      bomb.armedAt = now + 160;
+      player.action = "kick";
+      player.actionUntil = now + 360;
+      player.bombReactCooldownUntil = now + PIRATE_BOMB_REACT_COOLDOWN_MS;
+      room.message = `${player.username} chutou a bomba de volta.`;
+      return false;
+    }
+  }
+
+  return false;
 }
 
 function damagePiratePlayer(room, player, ownerSocketId, now, amount = 1, reason = "explodiu") {
@@ -4318,6 +4449,15 @@ function explodePirateBomb(room, bomb, now) {
     }
   });
 
+  (room.bombs || []).forEach(otherBomb => {
+    if (otherBomb.id === bomb.id) return;
+    if (Math.hypot(Number(otherBomb.x || 0) - explosion.x, Number(otherBomb.y || 0) - explosion.y) <= explosion.radius * 0.85) {
+      otherBomb.explodesAt = Math.min(Number(otherBomb.explodesAt || now), now + 90);
+      otherBomb.vx = (Number(otherBomb.x || 0) - explosion.x) * 3;
+      otherBomb.vy = -260;
+    }
+  });
+
   const objects = room.map?.objects || [];
   objects.forEach(item => {
     if (!item.alive || item.type !== "barrel") return;
@@ -4349,6 +4489,11 @@ function tickPirateRoom(room) {
 
   for (let index = room.bombs.length - 1; index >= 0; index -= 1) {
     const bomb = room.bombs[index];
+    updatePirateBombPhysics(room, bomb, dt, now);
+    if (handlePirateBombReaction(room, bomb, now)) {
+      room.bombs.splice(index, 1);
+      continue;
+    }
     if (now >= Number(bomb.explodesAt || 0)) {
       room.bombs.splice(index, 1);
       explodePirateBomb(room, bomb, now);

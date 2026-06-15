@@ -11750,12 +11750,12 @@
 
     const PIRATE_ASSET_BASE = "Pirate Bomb/Sprites";
     const PIRATE_SKINS = [
-      { folder: "1-Player-Bomb Guy", idle: ["1-Idle", 26], run: ["2-Run", 14], jump: ["4-Jump", 4], fall: ["5-Fall", 2], hit: ["7-Hit", 8], dead: ["9-Dead Ground", 4] },
-      { folder: "2-Enemy-Bald Pirate", idle: ["1-Idle", 34], run: ["2-Run", 14], jump: ["4-Jump", 4], fall: ["5-Fall", 2], hit: ["8-Hit", 8], dead: ["10-Dead Ground", 4] },
-      { folder: "3-Enemy-Cucumber", idle: ["1-Idle", 36], run: ["2-Run", 12], jump: ["4-Jump", 4], fall: ["5-Fall", 2], hit: ["9-Hit", 8], dead: ["11-Dead Ground", 4] },
-      { folder: "4-Enemy-Big Guy", idle: ["1-Idle", 38], run: ["2-Run", 16], jump: ["4-Jump", 4], fall: ["5-Fall", 2], hit: ["12-Hit", 8], dead: ["14-Dead Ground", 4] },
-      { folder: "5-Enemy-Captain", idle: ["1-Idle", 32], run: ["2-Run", 14], jump: ["4-Jump", 4], fall: ["5-Fall", 2], hit: ["9-Hit", 8], dead: ["11-Dead Ground", 4] },
-      { folder: "6-Enemy-Whale", idle: ["1-Idle", 44], run: ["2-Run", 14], jump: ["4-Jump", 4], fall: ["5-Fall", 2], hit: ["9-Hit", 7], dead: ["11-Dead Ground", 4] }
+      { folder: "1-Player-Bomb Guy", idle: ["1-Idle", 26], run: ["2-Run", 14], jump: ["4-Jump", 4], fall: ["5-Fall", 2], hit: ["7-Hit", 8], dead: ["9-Dead Ground", 4], throw: ["7-Hit", 8] },
+      { folder: "2-Enemy-Bald Pirate", idle: ["1-Idle", 34], run: ["2-Run", 14], jump: ["4-Jump", 4], fall: ["5-Fall", 2], hit: ["8-Hit", 8], dead: ["10-Dead Ground", 4], kick: ["7-Attack", 12], throw: ["7-Attack", 12] },
+      { folder: "3-Enemy-Cucumber", idle: ["1-Idle", 36], run: ["2-Run", 12], jump: ["4-Jump", 4], fall: ["5-Fall", 2], hit: ["9-Hit", 8], dead: ["11-Dead Ground", 4], kick: ["7-Attack", 11], ignite: ["8-Blow the wick", 11], throw: ["7-Attack", 11] },
+      { folder: "4-Enemy-Big Guy", idle: ["1-Idle", 38], run: ["2-Run", 16], jump: ["4-Jump", 4], fall: ["5-Fall", 2], hit: ["12-Hit", 8], dead: ["14-Dead Ground", 4], pick: ["8-Pick (Bomb)", 8], idleBomb: ["9-Idle (Bomb)", 1], runBomb: ["10-Run (Bomb)", 16], throw: ["11-Throw (Bomb)", 11], kick: ["7-Attack", 11] },
+      { folder: "5-Enemy-Captain", idle: ["1-Idle", 32], run: ["2-Run", 14], jump: ["4-Jump", 4], fall: ["5-Fall", 2], hit: ["9-Hit", 8], dead: ["11-Dead Ground", 4], kick: ["7-Attack", 7], throw: ["7-Attack", 7], scare: ["8-Scare Run", 12] },
+      { folder: "6-Enemy-Whale", idle: ["1-Idle", 44], run: ["2-Run", 14], jump: ["4-Jump", 4], fall: ["5-Fall", 2], hit: ["9-Hit", 7], dead: ["11-Dead Ground", 4], kick: ["7-Attack", 11], swallow: ["8-Swalow (Bomb)", 10], throw: ["7-Attack", 11] }
     ];
     const pirateImageCache = new Map();
     let pirateAssets = null;
@@ -11770,7 +11770,15 @@
           jump: makePirateFrames(skin.folder, skin.jump[0], skin.jump[1]),
           fall: makePirateFrames(skin.folder, skin.fall[0], skin.fall[1]),
           hit: makePirateFrames(skin.folder, skin.hit[0], skin.hit[1]),
-          dead: makePirateFrames(skin.folder, skin.dead[0], skin.dead[1])
+          dead: makePirateFrames(skin.folder, skin.dead[0], skin.dead[1]),
+          throw: makePirateFrames(skin.folder, skin.throw?.[0] || skin.hit[0], skin.throw?.[1] || skin.hit[1]),
+          kick: skin.kick ? makePirateFrames(skin.folder, skin.kick[0], skin.kick[1]) : null,
+          ignite: skin.ignite ? makePirateFrames(skin.folder, skin.ignite[0], skin.ignite[1]) : null,
+          swallow: skin.swallow ? makePirateFrames(skin.folder, skin.swallow[0], skin.swallow[1]) : null,
+          pick: skin.pick ? makePirateFrames(skin.folder, skin.pick[0], skin.pick[1]) : null,
+          idleBomb: skin.idleBomb ? makePirateFrames(skin.folder, skin.idleBomb[0], skin.idleBomb[1]) : null,
+          runBomb: skin.runBomb ? makePirateFrames(skin.folder, skin.runBomb[0], skin.runBomb[1]) : null,
+          scare: skin.scare ? makePirateFrames(skin.folder, skin.scare[0], skin.scare[1]) : null
         })),
         bomb: makePirateObjectFrames("1-BOMB/2-Bomb On", 10),
         explosion: makePirateObjectFrames("1-BOMB/3-Explotion", 9),
@@ -12072,8 +12080,13 @@
       const frames = pirateAssets.bomb;
       const progress = 1 - Math.max(0, Number(bomb.fuseLeftMs || 0)) / 1850;
       const frame = frames[Math.min(frames.length - 1, Math.floor(progress * frames.length))] || frames[0];
+      const rolling = Math.abs(Number(bomb.vx || 0)) + Math.abs(Number(bomb.vy || 0)) > 28;
       ctx.save();
       ctx.translate(bomb.x, bomb.y);
+      if (rolling) {
+        const spinDir = Number(bomb.vx || 1) >= 0 ? 1 : -1;
+        ctx.rotate((performance.now() / 115) * spinDir);
+      }
       if (frame?.complete && frame.naturalWidth) {
         ctx.drawImage(frame, -36, -42, 72, 82);
       } else {
@@ -12112,8 +12125,10 @@
     function drawPiratePlayer(ctx, player) {
       const skin = pirateAssets.skins[player.skinIndex || 0] || pirateAssets.skins[0];
       const action = player.alive ? (player.action || "idle") : "dead";
-      const frames = skin[action] || skin.idle;
-      const speed = action === "run" ? 72 : action === "idle" ? 96 : 86;
+      const frames = skin[action] || (action === "kick" ? skin.throw : null) || skin.hit || skin.idle;
+      const speed = ["throw", "kick", "ignite", "swallow"].includes(action)
+        ? 50
+        : action === "run" ? 72 : action === "idle" ? 96 : 86;
       const frame = frames[Math.floor(performance.now() / speed) % frames.length] || frames[0];
       const scale = action === "dead" ? 1.25 : 1.38;
       const drawW = (frame?.naturalWidth || 64) * scale;

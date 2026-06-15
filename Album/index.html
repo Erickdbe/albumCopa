@@ -11750,12 +11750,12 @@
 
     const PIRATE_ASSET_BASE = "Pirate Bomb/Sprites";
     const PIRATE_SKINS = [
-      { folder: "1-Player-Bomb Guy", idle: ["1-Idle", 26], run: ["2-Run", 14], jump: ["4-Jump", 4], fall: ["5-Fall", 2], hit: ["7-Hit", 8], dead: ["9-Dead Ground", 4], throw: ["7-Hit", 8] },
-      { folder: "2-Enemy-Bald Pirate", idle: ["1-Idle", 34], run: ["2-Run", 14], jump: ["4-Jump", 4], fall: ["5-Fall", 2], hit: ["8-Hit", 8], dead: ["10-Dead Ground", 4], kick: ["7-Attack", 12], throw: ["7-Attack", 12] },
-      { folder: "3-Enemy-Cucumber", idle: ["1-Idle", 36], run: ["2-Run", 12], jump: ["4-Jump", 4], fall: ["5-Fall", 2], hit: ["9-Hit", 8], dead: ["11-Dead Ground", 4], kick: ["7-Attack", 11], ignite: ["8-Blow the wick", 11], throw: ["7-Attack", 11] },
-      { folder: "4-Enemy-Big Guy", idle: ["1-Idle", 38], run: ["2-Run", 16], jump: ["4-Jump", 4], fall: ["5-Fall", 2], hit: ["12-Hit", 8], dead: ["14-Dead Ground", 4], pick: ["8-Pick (Bomb)", 8], idleBomb: ["9-Idle (Bomb)", 1], runBomb: ["10-Run (Bomb)", 16], throw: ["11-Throw (Bomb)", 11], kick: ["7-Attack", 11] },
-      { folder: "5-Enemy-Captain", idle: ["1-Idle", 32], run: ["2-Run", 14], jump: ["4-Jump", 4], fall: ["5-Fall", 2], hit: ["9-Hit", 8], dead: ["11-Dead Ground", 4], kick: ["7-Attack", 7], throw: ["7-Attack", 7], scare: ["8-Scare Run", 12] },
-      { folder: "6-Enemy-Whale", idle: ["1-Idle", 44], run: ["2-Run", 14], jump: ["4-Jump", 4], fall: ["5-Fall", 2], hit: ["9-Hit", 7], dead: ["11-Dead Ground", 4], kick: ["7-Attack", 11], swallow: ["8-Swalow (Bomb)", 10], throw: ["7-Attack", 11] }
+      { folder: "1-Player-Bomb Guy", idle: ["1-Idle", 26], run: ["2-Run", 14], jump: ["4-Jump", 4], fall: ["5-Fall", 2], hit: ["7-Hit", 8], dead: ["9-Dead Ground", 4], throw: ["7-Hit", 8], attack: ["7-Hit", 8] },
+      { folder: "2-Enemy-Bald Pirate", idle: ["1-Idle", 34], run: ["2-Run", 14], jump: ["4-Jump", 4], fall: ["5-Fall", 2], hit: ["8-Hit", 8], dead: ["10-Dead Ground", 4], kick: ["7-Attack", 12], throw: ["7-Attack", 12], attack: ["7-Attack", 12] },
+      { folder: "3-Enemy-Cucumber", idle: ["1-Idle", 36], run: ["2-Run", 12], jump: ["4-Jump", 4], fall: ["5-Fall", 2], hit: ["9-Hit", 8], dead: ["11-Dead Ground", 4], kick: ["7-Attack", 11], ignite: ["8-Blow the wick", 11], throw: ["7-Attack", 11], attack: ["7-Attack", 11] },
+      { folder: "4-Enemy-Big Guy", idle: ["1-Idle", 38], run: ["2-Run", 16], jump: ["4-Jump", 4], fall: ["5-Fall", 2], hit: ["12-Hit", 8], dead: ["14-Dead Ground", 4], pick: ["8-Pick (Bomb)", 8], idleBomb: ["9-Idle (Bomb)", 1], runBomb: ["10-Run (Bomb)", 16], throw: ["11-Throw (Bomb)", 11], kick: ["7-Attack", 11], attack: ["7-Attack", 11] },
+      { folder: "5-Enemy-Captain", idle: ["1-Idle", 32], run: ["2-Run", 14], jump: ["4-Jump", 4], fall: ["5-Fall", 2], hit: ["9-Hit", 8], dead: ["11-Dead Ground", 4], kick: ["7-Attack", 7], throw: ["7-Attack", 7], attack: ["7-Attack", 7], scare: ["8-Scare Run", 12] },
+      { folder: "6-Enemy-Whale", idle: ["1-Idle", 44], run: ["2-Run", 14], jump: ["4-Jump", 4], fall: ["5-Fall", 2], hit: ["9-Hit", 7], dead: ["11-Dead Ground", 4], kick: ["7-Attack", 11], swallow: ["8-Swalow (Bomb)", 10], throw: ["7-Attack", 11], attack: ["7-Attack", 11] }
     ];
     const pirateImageCache = new Map();
     let pirateAssets = null;
@@ -11772,6 +11772,7 @@
           hit: makePirateFrames(skin.folder, skin.hit[0], skin.hit[1]),
           dead: makePirateFrames(skin.folder, skin.dead[0], skin.dead[1]),
           throw: makePirateFrames(skin.folder, skin.throw?.[0] || skin.hit[0], skin.throw?.[1] || skin.hit[1]),
+          attack: skin.attack ? makePirateFrames(skin.folder, skin.attack[0], skin.attack[1]) : null,
           kick: skin.kick ? makePirateFrames(skin.folder, skin.kick[0], skin.kick[1]) : null,
           ignite: skin.ignite ? makePirateFrames(skin.folder, skin.ignite[0], skin.ignite[1]) : null,
           swallow: skin.swallow ? makePirateFrames(skin.folder, skin.swallow[0], skin.swallow[1]) : null,
@@ -11786,7 +11787,17 @@
         tileSet: loadPirateImage(`${PIRATE_ASSET_BASE}/8-Tile-Sets/Tile-Sets (64-64).png`),
         barrel: loadPirateImage(`${PIRATE_ASSET_BASE}/7-Objects/12-Other Objects/Barrel.png`),
         skull: loadPirateImage(`${PIRATE_ASSET_BASE}/7-Objects/12-Other Objects/Skull.png`),
-        table: loadPirateImage(`${PIRATE_ASSET_BASE}/7-Objects/12-Other Objects/Table.png`)
+        table: loadPirateImage(`${PIRATE_ASSET_BASE}/7-Objects/12-Other Objects/Table.png`),
+        chair: loadPirateImage(`${PIRATE_ASSET_BASE}/7-Objects/12-Other Objects/Chair.png`),
+        blueBottle: loadPirateImage(`${PIRATE_ASSET_BASE}/7-Objects/12-Other Objects/Blue Bottle.png`),
+        greenBottle: loadPirateImage(`${PIRATE_ASSET_BASE}/7-Objects/12-Other Objects/Green Bottle.png`),
+        redBottle: loadPirateImage(`${PIRATE_ASSET_BASE}/7-Objects/12-Other Objects/Red Bottle.png`),
+        window: loadPirateImage(`${PIRATE_ASSET_BASE}/7-Objects/12-Other Objects/Windows.png`),
+        cannon: loadPirateImage(`${PIRATE_ASSET_BASE}/7-Objects/16-Enemy-Cannon/1-Idle/1.png`),
+        candle: makePirateObjectFrames("6-Candle", 8),
+        candleLight: makePirateObjectFrames("7-Candle Light", 5),
+        windowLight: makePirateObjectFrames("8-Window Light", 4),
+        chain: makePirateObjectFrames("9-Small Chain", 10)
       };
       return pirateAssets;
     }
@@ -11866,7 +11877,7 @@
 
     function leavePirateRoom() {
       if (mp.pirateRoomId && mp.pirateRoom?.status !== "finished") {
-        sendPirateInput(true, { left: false, right: false, jump: false, bomb: false });
+        sendPirateInput(true, { left: false, right: false, jump: false, bomb: false, attack: false });
         mp.socket?.emit(mp.pirateRoom?.isSpectator ? "pirate:unwatch" : "pirate:leave", { roomId: mp.pirateRoomId });
       }
       closePirateOverlay(false);
@@ -11901,7 +11912,8 @@
         left: mp.pirateKeys.has("ArrowLeft") || mp.pirateKeys.has("a") || mp.pirateKeys.has("A"),
         right: mp.pirateKeys.has("ArrowRight") || mp.pirateKeys.has("d") || mp.pirateKeys.has("D"),
         jump: mp.pirateKeys.has("ArrowUp") || mp.pirateKeys.has("w") || mp.pirateKeys.has("W") || mp.pirateKeys.has(" "),
-        bomb: mp.pirateKeys.has("e") || mp.pirateKeys.has("E") || mp.pirateKeys.has("b") || mp.pirateKeys.has("B") || mp.pirateKeys.has("x") || mp.pirateKeys.has("X")
+        bomb: mp.pirateKeys.has("e") || mp.pirateKeys.has("E") || mp.pirateKeys.has("b") || mp.pirateKeys.has("B") || mp.pirateKeys.has("x") || mp.pirateKeys.has("X"),
+        attack: mp.pirateKeys.has("f") || mp.pirateKeys.has("F") || mp.pirateKeys.has("j") || mp.pirateKeys.has("J") || mp.pirateKeys.has("k") || mp.pirateKeys.has("K")
       };
     }
 
@@ -11996,9 +12008,12 @@
       (room.map?.platforms || []).forEach(platform => drawPiratePlatform(ctx, platform));
       (room.map?.objects || []).forEach(object => drawPirateObject(ctx, object));
       (room.pickups || []).forEach(pickup => drawPiratePickup(ctx, pickup));
-      (room.bombs || []).forEach(bomb => drawPirateBomb(ctx, bomb));
+      const bombs = room.bombs || [];
+      bombs.filter(bomb => !bomb.carriedBySocketId).forEach(bomb => drawPirateBomb(ctx, bomb));
       (room.explosions || []).forEach(explosion => drawPirateExplosion(ctx, explosion));
       (room.players || []).filter(player => !player.disconnected).forEach(player => drawPiratePlayer(ctx, player));
+      bombs.filter(bomb => bomb.carriedBySocketId).forEach(bomb => drawPirateBomb(ctx, bomb));
+      drawPirateAtmosphere(ctx, field);
 
       if (room.status === "waiting") {
         drawPirateBanner(ctx, field, "Aguardando inicio");
@@ -12009,27 +12024,232 @@
     }
 
     function drawPirateBackground(ctx, field) {
+      const now = performance.now();
       const bg = ctx.createLinearGradient(0, 0, 0, field.height);
-      bg.addColorStop(0, "#141725");
-      bg.addColorStop(.54, "#251725");
-      bg.addColorStop(1, "#0b0c12");
+      bg.addColorStop(0, "#232636");
+      bg.addColorStop(.42, "#3a2732");
+      bg.addColorStop(1, "#12131d");
       ctx.fillStyle = bg;
       ctx.fillRect(0, 0, field.width, field.height);
-      ctx.fillStyle = "rgba(255,211,111,.08)";
-      for (let x = 84; x < field.width; x += 260) {
-        ctx.fillRect(x, 90 + (x % 3) * 20, 70, 90);
-        ctx.fillStyle = "rgba(255,211,111,.18)";
-        ctx.fillRect(x + 12, 106 + (x % 3) * 20, 46, 50);
-        ctx.fillStyle = "rgba(255,211,111,.08)";
+
+      drawPiratePlankWall(ctx, field);
+      drawPirateCabinFrame(ctx, field);
+
+      drawPirateWindow(ctx, 250, 104, 1.05, false, now);
+      drawPirateWindow(ctx, 970, 96, 1.08, false, now);
+      drawPirateWindow(ctx, 1296, 346, .82, true, now);
+
+      drawPirateChain(ctx, 96, 106, 1.3, now);
+      drawPirateChain(ctx, field.width - 126, 90, 1.35, now);
+      drawPirateChain(ctx, 888, 438, 1.08, now);
+
+      drawPirateShelf(ctx, 140, 288, 232, now, ["barrel", "greenBottle", "skull"]);
+      drawPirateShelf(ctx, 520, 250, 268, now, ["table", "blueBottle"]);
+      drawPirateShelf(ctx, 1034, 286, 280, now, ["redBottle", "greenBottle", "chair"]);
+      drawPirateShelf(ctx, 620, 610, 360, now, ["blueBottle", "table", "redBottle"]);
+
+      drawPirateCandle(ctx, 186, 220, .95, now);
+      drawPirateCandle(ctx, 1180, 224, .9, now);
+      drawPirateCandle(ctx, 748, 566, 1, now);
+      drawPirateCandle(ctx, 1010, 606, .78, now);
+
+      drawPirateCannon(ctx, 72, field.height - 118, 1.18);
+      drawPirateCannon(ctx, field.width - 152, field.height - 118, 1.18, true);
+
+      const floor = ctx.createLinearGradient(0, field.height - 190, 0, field.height);
+      floor.addColorStop(0, "rgba(17,18,28,0)");
+      floor.addColorStop(1, "rgba(8,9,14,.55)");
+      ctx.fillStyle = floor;
+      ctx.fillRect(0, field.height - 210, field.width, 210);
+    }
+
+    function drawPiratePlankWall(ctx, field) {
+      ctx.save();
+      ctx.fillStyle = "#2b2430";
+      ctx.fillRect(0, 0, field.width, field.height);
+      for (let y = 26; y < field.height - 24; y += 42) {
+        const offset = Math.floor(y / 42) % 2 ? 74 : 0;
+        for (let x = -120 + offset; x < field.width + 80; x += 148) {
+          const shade = Math.abs((x * 13 + y * 7) % 5);
+          const colors = ["#704032", "#794737", "#643747", "#80513f", "#593342"];
+          ctx.fillStyle = colors[shade];
+          ctx.fillRect(x + 3, y + 3, 138, 31);
+          ctx.fillStyle = "rgba(255,214,143,.13)";
+          ctx.fillRect(x + 10, y + 8, 54 + shade * 7, 3);
+          ctx.fillStyle = "rgba(28,16,19,.34)";
+          ctx.fillRect(x + 5, y + 29, 126, 3);
+          ctx.fillStyle = "rgba(26,15,19,.5)";
+          ctx.fillRect(x + 18, y + 16, 8, 5);
+          ctx.fillRect(x + 116, y + 15, 8, 5);
+        }
+        ctx.fillStyle = "rgba(13,10,16,.45)";
+        ctx.fillRect(0, y + 37, field.width, 3);
       }
-      ctx.strokeStyle = "rgba(255,249,232,.045)";
-      ctx.lineWidth = 2;
-      for (let y = 110; y < field.height; y += 96) {
+      ctx.restore();
+    }
+
+    function drawPirateCabinFrame(ctx, field) {
+      ctx.save();
+      const beam = ctx.createLinearGradient(0, 0, 0, 70);
+      beam.addColorStop(0, "#a85f42");
+      beam.addColorStop(1, "#5a2f35");
+      ctx.fillStyle = beam;
+      ctx.fillRect(0, 0, field.width, 38);
+      ctx.fillRect(0, field.height - 42, field.width, 42);
+      ctx.fillStyle = "rgba(17,11,16,.52)";
+      ctx.fillRect(0, 38, field.width, 10);
+      ctx.fillRect(0, field.height - 54, field.width, 12);
+      for (const x of [0, 420, 806, 1196, field.width - 42]) {
+        ctx.fillStyle = "#8f543c";
+        ctx.fillRect(x, 0, 42, field.height);
+        ctx.fillStyle = "rgba(18,10,13,.42)";
+        ctx.fillRect(x + 34, 0, 8, field.height);
+      }
+      ctx.restore();
+    }
+
+    function drawPirateWindow(ctx, x, y, scale, mirror, now) {
+      const lightFrames = pirateAssets.windowLight || [];
+      const light = lightFrames[Math.floor(now / 140) % Math.max(1, lightFrames.length)];
+      ctx.save();
+      ctx.globalAlpha = .18 + Math.sin(now / 360 + x) * .025;
+      ctx.globalCompositeOperation = "screen";
+      if (light?.complete && light.naturalWidth) {
+        const w = 420 * scale;
+        const h = 345 * scale;
+        ctx.translate(x + 36 * scale, y + 34 * scale);
+        if (mirror) ctx.scale(-1, 1);
+        ctx.drawImage(light, mirror ? -w : 0, 0, w, h);
+      } else {
+        const beam = ctx.createLinearGradient(x, y, x + 340 * (mirror ? -1 : 1), y + 260);
+        beam.addColorStop(0, "rgba(255,249,211,.35)");
+        beam.addColorStop(1, "rgba(255,249,211,0)");
+        ctx.fillStyle = beam;
         ctx.beginPath();
-        ctx.moveTo(0, y);
-        ctx.lineTo(field.width, y + Math.sin(y) * 10);
+        ctx.moveTo(x + 28, y + 34);
+        ctx.lineTo(x + (mirror ? -280 : 350) * scale, y + 290 * scale);
+        ctx.lineTo(x + (mirror ? -212 : 420) * scale, y + 330 * scale);
+        ctx.lineTo(x + 62, y + 54);
+        ctx.closePath();
+        ctx.fill();
+      }
+      ctx.restore();
+
+      const image = pirateAssets.window;
+      ctx.save();
+      ctx.shadowColor = "rgba(5,5,8,.7)";
+      ctx.shadowBlur = 12;
+      ctx.shadowOffsetY = 7;
+      if (image?.complete && image.naturalWidth) {
+        ctx.drawImage(image, x, y, 78 * scale, 82 * scale);
+      } else {
+        ctx.fillStyle = "#8cc9dd";
+        ctx.beginPath();
+        ctx.arc(x + 39 * scale, y + 41 * scale, 31 * scale, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+
+    function drawPirateShelf(ctx, x, y, w, now, items) {
+      ctx.save();
+      ctx.fillStyle = "rgba(20,11,14,.42)";
+      ctx.fillRect(x + 6, y + 17, w, 8);
+      ctx.fillStyle = "#9c6243";
+      ctx.fillRect(x, y, w, 10);
+      ctx.fillStyle = "#4f2a31";
+      ctx.fillRect(x + 16, y + 10, 9, 24);
+      ctx.fillRect(x + w - 25, y + 10, 9, 24);
+      const slot = w / Math.max(1, items.length + 1);
+      items.forEach((type, index) => {
+        const itemX = x + slot * (index + 1);
+        if (type === "barrel") drawPirateDecorImage(ctx, pirateAssets.barrel, itemX - 18, y - 42, 36, 42);
+        if (type === "skull") drawPirateDecorImage(ctx, pirateAssets.skull, itemX - 12, y - 17, 24, 17);
+        if (type === "table") drawPirateDecorImage(ctx, pirateAssets.table, itemX - 38, y - 27, 76, 29);
+        if (type === "chair") drawPirateDecorImage(ctx, pirateAssets.chair, itemX - 13, y - 31, 27, 33);
+        if (type === "blueBottle") drawPirateDecorImage(ctx, pirateAssets.blueBottle, itemX - 8, y - 29, 16, 29);
+        if (type === "greenBottle") drawPirateDecorImage(ctx, pirateAssets.greenBottle, itemX - 8, y - 28, 16, 28);
+        if (type === "redBottle") drawPirateDecorImage(ctx, pirateAssets.redBottle, itemX - 8, y - 28, 16, 28);
+      });
+      ctx.restore();
+    }
+
+    function drawPirateDecorImage(ctx, image, x, y, w, h) {
+      if (image?.complete && image.naturalWidth) {
+        ctx.drawImage(image, x, y, w, h);
+      } else {
+        ctx.fillStyle = "rgba(255,249,232,.2)";
+        ctx.fillRect(x, y, w, h);
+      }
+    }
+
+    function drawPirateCandle(ctx, x, y, scale, now) {
+      const candleFrames = pirateAssets.candle || [];
+      const lightFrames = pirateAssets.candleLight || [];
+      const candle = candleFrames[Math.floor(now / 92) % Math.max(1, candleFrames.length)];
+      const light = lightFrames[Math.floor(now / 118) % Math.max(1, lightFrames.length)];
+      const flicker = 1 + Math.sin(now / 130 + x) * .05;
+      ctx.save();
+      ctx.globalAlpha = .24;
+      ctx.globalCompositeOperation = "screen";
+      if (light?.complete && light.naturalWidth) {
+        ctx.drawImage(light, x - 42 * scale * flicker, y - 72 * scale * flicker, 86 * scale * flicker, 84 * scale * flicker);
+      } else {
+        const glow = ctx.createRadialGradient(x, y - 30 * scale, 0, x, y - 30 * scale, 62 * scale);
+        glow.addColorStop(0, "rgba(255,229,132,.45)");
+        glow.addColorStop(1, "rgba(255,229,132,0)");
+        ctx.fillStyle = glow;
+        ctx.fillRect(x - 68 * scale, y - 98 * scale, 136 * scale, 136 * scale);
+      }
+      ctx.restore();
+
+      if (candle?.complete && candle.naturalWidth) {
+        ctx.drawImage(candle, x - 7 * scale, y - 32 * scale, 14 * scale, 32 * scale);
+      } else {
+        ctx.fillStyle = "#f4d49a";
+        ctx.fillRect(x - 4 * scale, y - 23 * scale, 8 * scale, 23 * scale);
+      }
+    }
+
+    function drawPirateChain(ctx, x, y, scale, now) {
+      const frames = pirateAssets.chain || [];
+      const frame = frames[Math.floor(now / 120) % Math.max(1, frames.length)];
+      if (frame?.complete && frame.naturalWidth) {
+        ctx.drawImage(frame, x, y, 9 * scale, 52 * scale);
+        ctx.drawImage(frame, x, y + 48 * scale, 9 * scale, 52 * scale);
+      } else {
+        ctx.strokeStyle = "rgba(185,175,162,.32)";
+        ctx.lineWidth = 4 * scale;
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(x, y + 112 * scale);
         ctx.stroke();
       }
+    }
+
+    function drawPirateCannon(ctx, x, y, scale, mirror = false) {
+      const image = pirateAssets.cannon;
+      ctx.save();
+      ctx.translate(x, y);
+      if (mirror) ctx.scale(-1, 1);
+      if (image?.complete && image.naturalWidth) {
+        ctx.drawImage(image, mirror ? -74 * scale : 0, 0, 74 * scale, 55 * scale);
+      } else {
+        ctx.fillStyle = "#383d4d";
+        ctx.fillRect(mirror ? -74 * scale : 0, 10 * scale, 74 * scale, 30 * scale);
+      }
+      ctx.restore();
+    }
+
+    function drawPirateAtmosphere(ctx, field) {
+      ctx.save();
+      const vignette = ctx.createRadialGradient(field.width / 2, field.height * .48, field.width * .18, field.width / 2, field.height * .52, field.width * .72);
+      vignette.addColorStop(0, "rgba(255,255,255,0)");
+      vignette.addColorStop(.72, "rgba(9,9,16,.15)");
+      vignette.addColorStop(1, "rgba(5,5,10,.58)");
+      ctx.fillStyle = vignette;
+      ctx.fillRect(0, 0, field.width, field.height);
+      ctx.restore();
     }
 
     function drawPiratePlatform(ctx, platform) {
@@ -12038,15 +12258,24 @@
       const sy = 0;
       const y = Number(platform.y || 0);
       const h = Math.max(34, Number(platform.h || 34));
+      ctx.save();
+      ctx.fillStyle = "rgba(5,5,8,.34)";
+      ctx.fillRect(Number(platform.x || 0) + 8, y + 25, Number(platform.w || 0) - 16, 18);
       if (!tile.complete || !tile.naturalWidth) {
         ctx.fillStyle = platform.tile === "wood-dark" ? "#6b4254" : "#9e5a42";
         ctx.fillRect(platform.x, y, platform.w, h);
+        ctx.restore();
         return;
       }
       for (let x = Number(platform.x || 0); x < Number(platform.x || 0) + Number(platform.w || 0); x += 64) {
         const w = Math.min(64, Number(platform.x || 0) + Number(platform.w || 0) - x);
         ctx.drawImage(tile, sx, sy, 64, 64, x, y - 18, w, 64);
       }
+      ctx.fillStyle = "rgba(255,226,149,.14)";
+      ctx.fillRect(Number(platform.x || 0), y + 2, Number(platform.w || 0), 4);
+      ctx.fillStyle = "rgba(20,11,15,.38)";
+      ctx.fillRect(Number(platform.x || 0), y + h - 5, Number(platform.w || 0), 6);
+      ctx.restore();
     }
 
     function drawPirateObject(ctx, object) {
@@ -12083,9 +12312,19 @@
       const rolling = Math.abs(Number(bomb.vx || 0)) + Math.abs(Number(bomb.vy || 0)) > 28;
       ctx.save();
       ctx.translate(bomb.x, bomb.y);
-      if (rolling) {
+      if (bomb.carriedBySocketId) {
+        ctx.rotate(Math.sin(performance.now() / 135) * .08);
+      } else if (rolling) {
         const spinDir = Number(bomb.vx || 1) >= 0 ? 1 : -1;
         ctx.rotate((performance.now() / 115) * spinDir);
+      }
+      if (progress > .62) {
+        ctx.globalCompositeOperation = "screen";
+        ctx.fillStyle = `rgba(255, ${Math.round(118 + progress * 80)}, 72, ${.08 + progress * .16})`;
+        ctx.beginPath();
+        ctx.arc(0, -8, 42 + progress * 10, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalCompositeOperation = "source-over";
       }
       if (frame?.complete && frame.naturalWidth) {
         ctx.drawImage(frame, -36, -42, 72, 82);
@@ -12124,11 +12363,19 @@
 
     function drawPiratePlayer(ctx, player) {
       const skin = pirateAssets.skins[player.skinIndex || 0] || pirateAssets.skins[0];
-      const action = player.alive ? (player.action || "idle") : "dead";
-      const frames = skin[action] || (action === "kick" ? skin.throw : null) || skin.hit || skin.idle;
-      const speed = ["throw", "kick", "ignite", "swallow"].includes(action)
+      let action = player.alive ? (player.action || "idle") : "dead";
+      if (player.carryingBombId && (action === "idle" || action === "run")) {
+        action = action === "run" ? "runBomb" : "idleBomb";
+      }
+      const frames = skin[action]
+        || (action === "kick" ? (skin.kick || skin.attack || skin.throw) : null)
+        || (action === "attack" ? (skin.attack || skin.kick || skin.hit) : null)
+        || (action === "pick" ? (skin.pick || skin.throw || skin.hit) : null)
+        || skin.hit
+        || skin.idle;
+      const speed = ["throw", "kick", "attack", "ignite", "swallow", "pick"].includes(action)
         ? 50
-        : action === "run" ? 72 : action === "idle" ? 96 : 86;
+        : action === "run" || action === "runBomb" ? 72 : action === "idle" || action === "idleBomb" ? 96 : 86;
       const frame = frames[Math.floor(performance.now() / speed) % frames.length] || frames[0];
       const scale = action === "dead" ? 1.25 : 1.38;
       const drawW = (frame?.naturalWidth || 64) * scale;
@@ -12173,7 +12420,7 @@
     }
 
     function isPirateControlKey(key) {
-      return ["ArrowLeft", "ArrowRight", "ArrowUp", "a", "A", "d", "D", "w", "W", " ", "e", "E", "b", "B", "x", "X"].includes(key);
+      return ["ArrowLeft", "ArrowRight", "ArrowUp", "a", "A", "d", "D", "w", "W", " ", "e", "E", "b", "B", "x", "X", "f", "F", "j", "J", "k", "K"].includes(key);
     }
 
     document.addEventListener("keydown", (event) => {
@@ -12193,10 +12440,11 @@
     pirateCanvas.addEventListener("pointerdown", (event) => {
       if (!pirateOverlayIsOpen() || mp.pirateRoom?.isSpectator) return;
       event.preventDefault();
-      mp.pirateKeys.add("e");
+      const key = event.button === 2 || event.shiftKey ? "j" : "e";
+      mp.pirateKeys.add(key);
       sendPirateInput(true);
       window.setTimeout(() => {
-        mp.pirateKeys.delete("e");
+        mp.pirateKeys.delete(key);
         sendPirateInput(true);
       }, 80);
     });

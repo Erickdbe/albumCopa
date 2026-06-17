@@ -41,7 +41,7 @@
         radial-gradient(circle at 84% 10%, rgba(22, 104, 159, 0.26), transparent 22rem),
         linear-gradient(125deg, rgba(168, 41, 63, 0.24), transparent 34%),
         linear-gradient(145deg, rgba(12, 101, 70, 0.72), rgba(6, 51, 38, 0.86) 68%),
-        url("assets/album-copa/fundo-cifrao.jpg") center / cover fixed;
+        url("/assets/album-copa/fundo-cifrao.jpg") center / cover fixed;
       background-color: var(--grass-dark);
       overflow-x: hidden;
     }
@@ -867,6 +867,63 @@
     }
 
     .pirate-side-button small {
+      color: rgba(255, 249, 232, 0.82);
+      font-size: 0.72rem;
+      font-weight: 900;
+    }
+
+    .horror-side-button {
+      position: relative;
+      width: 100%;
+      min-height: 72px;
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 10px;
+      margin-top: 8px;
+      padding: 12px;
+      overflow: hidden;
+      border: 0;
+      border-radius: var(--radius);
+      color: #fff9e8;
+      background:
+        linear-gradient(90deg, rgba(8, 10, 9, .16) 0 48%, rgba(255, 249, 232, .05) 49% 51%, transparent 52%),
+        radial-gradient(circle at 74% 24%, rgba(212, 138, 61, .74) 0 7px, transparent 9px),
+        linear-gradient(135deg, #111b17, #263f35 48%, #682a30);
+      box-shadow: 0 14px 28px rgba(16, 27, 23, 0.28);
+      cursor: pointer;
+      font-weight: 950;
+      text-align: left;
+    }
+
+    .horror-side-button::after {
+      content: "";
+      position: absolute;
+      right: 16px;
+      bottom: 12px;
+      width: 58px;
+      height: 48px;
+      background:
+        radial-gradient(circle at 36% 30%, #f04747 0 3px, transparent 4px),
+        radial-gradient(circle at 62% 30%, #f04747 0 3px, transparent 4px),
+        linear-gradient(180deg, #1a1e1a 0 54%, #0c0f0d 55% 100%);
+      clip-path: polygon(50% 0, 84% 24%, 72% 100%, 28% 100%, 16% 24%);
+      box-shadow: 0 0 24px rgba(150, 53, 59, .46);
+      opacity: .95;
+    }
+
+    .horror-side-button span,
+    .horror-side-button small {
+      position: relative;
+      z-index: 2;
+    }
+
+    .horror-side-button span {
+      font-size: 1.02rem;
+      text-transform: uppercase;
+    }
+
+    .horror-side-button small {
       color: rgba(255, 249, 232, 0.82);
       font-size: 0.72rem;
       font-weight: 900;
@@ -5303,6 +5360,10 @@
             <span>Pirate Bomb</span>
             <small>Bombas no conves</small>
           </button>
+          <button class="horror-side-button" type="button" onclick="window.location.href='/HorrorEscape/index.html'">
+            <span>Casa Sombria</span>
+            <small>Fuga 3D</small>
+          </button>
           <button class="blackjack-side-button" id="openBlackjackGame" type="button">
             <span>Mesa 21</span>
             <small>Cartas online</small>
@@ -6396,8 +6457,8 @@
       legendary: 30
     };
     const gameSounds = {
-      hit: new Audio("hitboll.mp3"),
-      jump: new Audio("jump.mp3")
+      hit: new Audio("/hitboll.mp3"),
+      jump: new Audio("/jump.mp3")
     };
     gameSounds.hit.preload = "auto";
     gameSounds.jump.preload = "auto";

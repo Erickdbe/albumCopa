@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Casa Sombria</title>
+  <link rel="stylesheet" href="./styles.css">
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "/node_modules/three/build/three.module.js",
+        "three/addons/": "/node_modules/three/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <main id="gameShell" aria-label="Casa Sombria">
+    <canvas id="gameCanvas"></canvas>
+
+    <div class="reticle" aria-hidden="true"></div>
+    <div class="vignette" aria-hidden="true"></div>
+
+    <section class="hud hud-top" aria-label="Estado da partida">
+      <div class="hud-block">
+        <span class="hud-label">Objetivo</span>
+        <strong id="objectiveText">Encontre a chave</strong>
+      </div>
+      <div class="hud-block">
+        <span class="hud-label">Inventario</span>
+        <strong id="inventoryText">Vazio</strong>
+      </div>
+      <div class="hud-block alert-state" id="alertPanel">
+        <span class="hud-label">Presenca</span>
+        <strong id="alertText">Distante</strong>
+      </div>
+    </section>
+
+    <section class="hud hud-bottom" aria-label="Interacao">
+      <div id="promptText" class="prompt-text"></div>
+      <div id="eventText" class="event-text"></div>
+    </section>
+
+    <section id="startOverlay" class="overlay is-visible" aria-label="Inicio">
+      <div class="overlay-panel">
+        <p class="eyebrow">Novo modo</p>
+        <h1>Casa Sombria</h1>
+        <p class="overlay-copy">A porta principal esta trancada. A criatura ronda a casa e reage ao menor barulho.</p>
+        <button id="startButton" class="primary-button" type="button">Entrar</button>
+        <a class="ghost-link" href="/Album/index.html">Voltar ao album</a>
+      </div>
+    </section>
+
+    <section id="endOverlay" class="overlay" aria-label="Fim da partida">
+      <div class="overlay-panel">
+        <p class="eyebrow" id="endEyebrow">Fim</p>
+        <h2 id="endTitle">Voce escapou</h2>
+        <p class="overlay-copy" id="endCopy"></p>
+        <div class="overlay-actions">
+          <button id="restartButton" class="primary-button" type="button">Jogar de novo</button>
+          <a class="ghost-link" href="/Album/index.html">Voltar ao album</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script type="module" src="./game.js"></script>
+</body>
+</html>

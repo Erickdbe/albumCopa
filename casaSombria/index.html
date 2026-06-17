@@ -4,33 +4,60 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Casa Sombria</title>
-  <link rel="stylesheet" href="./launcher.css?v=2" />
+  <link rel="stylesheet" href="./styles.css?v=1" />
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "/node_modules/three/build/three.module.js",
+        "three/addons/": "/node_modules/three/examples/jsm/"
+      }
+    }
+  </script>
 </head>
 <body>
-  <main class="launcher">
-    <section class="hero" aria-label="Casa Sombria">
-      <div class="hero-copy">
-        <p class="eyebrow">Album da Copa</p>
-        <h1>Casa Sombria</h1>
-        <p class="summary">O jogo 3D nativo agora esta conectado ao album.</p>
-      </div>
+  <main id="gameShell" aria-label="Casa Sombria">
+    <canvas id="gameCanvas"></canvas>
 
-      <div class="actions" aria-live="polite">
-        <div class="status" id="statusText">Verificando o jogo...</div>
-        <button class="primary" id="launchGame" type="button" disabled>Abrir jogo</button>
-        <a class="secondary" href="/Album/index.html">Voltar ao album</a>
+    <section class="hud hud-top" aria-label="Status do jogo">
+      <div>
+        <span>Objetivo</span>
+        <strong id="objectiveText">Entrar na casa</strong>
+      </div>
+      <div>
+        <span>Inventario</span>
+        <strong id="inventoryText">Vazio</strong>
+      </div>
+      <div>
+        <span>Risco</span>
+        <strong id="dangerText">Baixo</strong>
       </div>
     </section>
 
-    <section class="build-panel" id="buildPanel" hidden>
-      <div>
-        <h2>Build necessario</h2>
-        <p>Quando o executavel existir em <code>casaSombria/casaSombria/bin/GAME_APPLICATION.exe</code>, o botao abre o jogo direto.</p>
+    <div class="reticle" aria-hidden="true"></div>
+    <div class="interaction" id="interactionText" aria-live="polite"></div>
+
+    <section class="overlay" id="startOverlay" aria-label="Inicio">
+      <div class="title-block">
+        <p>Album da Copa</p>
+        <h1>Casa Sombria</h1>
+        <span>Encontre as chaves, o martelo e o parafuso antes que ela alcance voce.</span>
       </div>
-      <pre id="buildCommands"></pre>
+      <div class="overlay-actions">
+        <button id="startButton" type="button">Entrar na casa</button>
+        <a href="/Album/index.html">Voltar ao album</a>
+      </div>
+    </section>
+
+    <section class="end-overlay hidden" id="endOverlay" aria-live="assertive">
+      <h2 id="endTitle">Fim</h2>
+      <p id="endMessage"></p>
+      <div class="overlay-actions">
+        <button id="restartButton" type="button">Jogar de novo</button>
+        <a href="/Album/index.html">Voltar ao album</a>
+      </div>
     </section>
   </main>
 
-  <script src="./launcher.js?v=2"></script>
+  <script type="module" src="./game.js?v=1"></script>
 </body>
 </html>

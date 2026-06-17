@@ -1,0 +1,254 @@
+:root {
+  color-scheme: dark;
+  --ink: #f8f4ea;
+  --muted: #c7bbab;
+  --panel: rgba(8, 9, 8, .68);
+  --line: rgba(248, 244, 234, .16);
+  --gold: #d9ab50;
+  --red: #c54c45;
+  --green: #6bbf8a;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  width: 100vw;
+  min-height: 100vh;
+  margin: 0;
+  overflow: hidden;
+  color: var(--ink);
+  background: #050605;
+  font-family: Inter, "Segoe UI", Arial, sans-serif;
+}
+
+button,
+a {
+  font: inherit;
+}
+
+#gameShell {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  background: #050605;
+}
+
+#gameCanvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.hud {
+  position: absolute;
+  z-index: 4;
+  pointer-events: none;
+}
+
+.hud-top {
+  top: 16px;
+  left: 16px;
+  right: 16px;
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) minmax(112px, .58fr);
+  gap: 8px;
+}
+
+.hud-top > div {
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  backdrop-filter: blur(10px);
+}
+
+.hud span {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--muted);
+  font-size: .68rem;
+  font-weight: 900;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.hud strong {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ink);
+  font-size: .92rem;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reticle {
+  position: absolute;
+  z-index: 3;
+  top: 50%;
+  left: 50%;
+  width: 18px;
+  height: 18px;
+  border: 2px solid rgba(248, 244, 234, .72);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.reticle::after {
+  content: "";
+  position: absolute;
+  inset: 6px;
+  border-radius: 50%;
+  background: rgba(248, 244, 234, .88);
+}
+
+.interaction {
+  position: absolute;
+  z-index: 4;
+  left: 50%;
+  bottom: 72px;
+  width: min(420px, calc(100vw - 32px));
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 14px;
+  color: var(--ink);
+  background: rgba(8, 9, 8, .78);
+  border: 1px solid var(--line);
+  transform: translateX(-50%);
+  opacity: 0;
+  transition: opacity .16s ease;
+  text-align: center;
+  pointer-events: none;
+}
+
+.interaction.is-visible {
+  opacity: 1;
+}
+
+.overlay,
+.end-overlay {
+  position: absolute;
+  z-index: 8;
+  inset: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 380px);
+  align-items: end;
+  gap: clamp(18px, 5vw, 72px);
+  padding: clamp(24px, 5vw, 76px);
+  background:
+    linear-gradient(90deg, rgba(4, 5, 4, .95), rgba(4, 5, 4, .62) 56%, rgba(4, 5, 4, .88)),
+    url("./casaSombria/assets/textures/granny/house2.png") center / cover;
+}
+
+.end-overlay {
+  align-items: center;
+  grid-template-columns: minmax(0, 620px);
+  justify-content: center;
+  background:
+    linear-gradient(180deg, rgba(4, 5, 4, .82), rgba(4, 5, 4, .96)),
+    url("./casaSombria/assets/textures/end.jpg") center / cover;
+  text-align: center;
+}
+
+.hidden {
+  display: none;
+}
+
+.title-block p {
+  margin: 0 0 12px;
+  color: var(--gold);
+  font-size: .78rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.title-block h1,
+.end-overlay h2 {
+  margin: 0;
+  color: var(--ink);
+  font-size: clamp(3.1rem, 9vw, 8rem);
+  line-height: .9;
+  letter-spacing: 0;
+  text-transform: uppercase;
+  text-shadow: 0 18px 42px rgba(0, 0, 0, .58);
+}
+
+.title-block span,
+.end-overlay p {
+  display: block;
+  max-width: 620px;
+  margin-top: 18px;
+  color: var(--muted);
+  font-size: clamp(1rem, 2vw, 1.18rem);
+  line-height: 1.55;
+}
+
+.overlay-actions {
+  display: grid;
+  gap: 10px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  background: rgba(8, 9, 8, .74);
+  box-shadow: 0 26px 70px rgba(0, 0, 0, .42);
+  backdrop-filter: blur(10px);
+}
+
+.end-overlay .overlay-actions {
+  width: min(380px, 100%);
+  margin: 24px auto 0;
+}
+
+.overlay-actions button,
+.overlay-actions a {
+  min-height: 48px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  text-decoration: none;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.overlay-actions button {
+  border: 0;
+  color: #15120b;
+  background: var(--gold);
+  cursor: pointer;
+}
+
+.overlay-actions a {
+  color: var(--ink);
+  border: 1px solid rgba(248, 244, 234, .28);
+  background: rgba(255, 255, 255, .05);
+}
+
+@media (max-width: 760px) {
+  .hud-top {
+    grid-template-columns: 1fr;
+  }
+
+  .hud strong {
+    white-space: normal;
+  }
+
+  .overlay,
+  .end-overlay {
+    grid-template-columns: 1fr;
+    align-content: end;
+  }
+
+  .title-block h1,
+  .end-overlay h2 {
+    font-size: clamp(3rem, 16vw, 5.4rem);
+  }
+}

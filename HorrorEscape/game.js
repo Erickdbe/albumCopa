@@ -58,7 +58,6 @@ const endCopy = document.getElementById("endCopy");
 const renderer = new THREE.WebGLRenderer({
   canvas,
   antialias: true,
-  preserveDrawingBuffer: true,
   powerPreference: "high-performance"
 });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.8));
@@ -126,6 +125,8 @@ let pointerLocked = false;
 let audioCtx = null;
 let eventTimer = 0;
 let lastPrompt = "";
+
+window.__casaSombriaMonsterLoaded = false;
 
 init();
 
@@ -391,9 +392,9 @@ function buildMonster() {
   scene.add(fallback);
   setMonsterAction("walk");
 
-  const baseUrl = "/assets/horror/wraith/";
+  const baseUrl = "/Meshy_AI_Ragged_Wraith_biped/Meshy_AI_Ragged_Wraith_biped/";
   fbxLoader.load(
-    `${baseUrl}Meshy_AI_Ragged_Wraith_biped_Animation_Walking_withSkin.fbx`,
+    `${baseUrl}Meshy_AI_Ragged_Wraith_biped_Animation_Elderly_Shaky_Walk_inplace_withSkin.fbx`,
     (object) => {
       scene.remove(fallback);
       const wrapped = wrapMonsterModel(object);
@@ -408,10 +409,12 @@ function buildMonster() {
       });
       scene.add(wrapped);
       setMonsterAction("walk");
+      window.__casaSombriaMonsterLoaded = true;
       loadMonsterRunAnimation(baseUrl);
     },
     undefined,
-    () => {
+    (error) => {
+      console.error("Falha ao carregar o monstro 3D:", error);
       showEvent("O modelo 3D nao carregou, usando sombra provisoria.");
     }
   );
@@ -419,7 +422,7 @@ function buildMonster() {
 
 function loadMonsterRunAnimation(baseUrl) {
   fbxLoader.load(
-    `${baseUrl}Meshy_AI_Ragged_Wraith_biped_Animation_Running_withSkin.fbx`,
+    `${baseUrl}Meshy_AI_Ragged_Wraith_biped_Animation_run_fast_8_inplace_withSkin.fbx`,
     (object) => {
       if (!monster.mixer || !object.animations.length) return;
       const clip = object.animations[0];
@@ -427,17 +430,21 @@ function loadMonsterRunAnimation(baseUrl) {
       monster.actions.run = monster.mixer.clipAction(clip, monster.model);
     },
     undefined,
-    () => {}
+    (error) => {
+      console.warn("Falha ao carregar animacao de corrida do monstro:", error);
+    }
   );
 }
 
 function wrapMonsterModel(object) {
   object.traverse((child) => {
     if (child.isMesh) {
+      child.frustumCulled = false;
       child.castShadow = true;
       child.receiveShadow = true;
       if (child.material) {
         child.material.roughness = Math.max(0.72, child.material.roughness || 0.72);
+        child.material.side = THREE.DoubleSide;
       }
     }
   });

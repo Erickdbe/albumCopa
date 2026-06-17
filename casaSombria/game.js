@@ -3,12 +3,30 @@ import { OBJLoader } from "three/addons/loaders/OBJLoader.js";
 
 const ASSET_ROOT = "./Granny_Game-main/assets";
 const PLAYER_START = new THREE.Vector3(55, 8, 18);
-const GRANNY_START = new THREE.Vector3(45.7, 11.25, 14.45);
+const GRANNY_ORIGIN_Y = {
+  basement: 2.84,
+  main: 5.76,
+  top: 9.15
+};
+const GRANNY_START = new THREE.Vector3(44.7, GRANNY_ORIGIN_Y.top, 25.45);
 const PLAYER_SPEED = 5.2;
 const SPRINT_SPEED = 7.2;
+const PLAYER_RADIUS = 0.42;
+const PLAYER_EYE_HEIGHT = 1.34;
+const PLAYER_STEP_HEIGHT = 0.72;
+const PLAYER_MAX_DROP = 1.15;
+const FLOOR_RAY_LIFT = 1.25;
+const FLOOR_RAY_DEPTH = 4.8;
+const WALKABLE_NORMAL_MIN = 0.42;
 const INTERACT_DISTANCE = 3.4;
 const GRANNY_CATCH_DISTANCE = 3.0;
 const GRANNY_NOTICE_DISTANCE = 8.5;
+const MAP_BOUNDS = {
+  minX: 40.05,
+  maxX: 60.65,
+  minZ: 13.2,
+  maxZ: 29.25
+};
 
 const canvas = document.getElementById("gameCanvas");
 const startOverlay = document.getElementById("startOverlay");
@@ -54,7 +72,14 @@ const loaded = [];
 const pickables = new Map();
 const doors = new Map();
 const spiders = [];
+const walkableMeshes = [];
+const wallMeshes = [];
+const solidObjects = [];
 const tempVec = new THREE.Vector3();
+const tempBox = new THREE.Box3();
+const downVector = new THREE.Vector3(0, -1, 0);
+const groundRaycaster = new THREE.Raycaster();
+const wallRaycaster = new THREE.Raycaster();
 
 let running = false;
 let loadedCount = 0;
@@ -78,27 +103,23 @@ const player = {
 const granny = {
   object: null,
   pos: GRANNY_START.clone(),
-  targetIndex: 14,
+  targetIndex: 0,
   noiseTarget: null,
   state: "patrol"
 };
 
 const patrolPoints = [
-  [3.7, 11.4, 25.7],
-  [46.85, 11.4, 20.2],
-  [52.0, 11.4, 19.1],
-  [57.6, 11.4, 14.8],
-  [48.45, 7.8, 20.2],
-  [53.0, 7.8, 23.3],
-  [0.0, 0.0, 0.0],
-  [44.7, 10.1, 25.45],
-  [57.0, 10.8, 19.63],
-  [57.8, 7.16, 18.2],
-  [47.7, 6.65, 21.45],
-  [50.8, 4.7, 28.4],
-  [54.8, 11.2, 18.7],
-  [54.0, 7.3, 23.0],
-  [45.7, 11.25, 14.45]
+  [44.7, GRANNY_ORIGIN_Y.top, 25.45],
+  [46.85, GRANNY_ORIGIN_Y.top, 20.2],
+  [52.0, GRANNY_ORIGIN_Y.top, 19.1],
+  [57.0, GRANNY_ORIGIN_Y.top, 19.63],
+  [45.7, GRANNY_ORIGIN_Y.top, 14.45],
+  [48.45, GRANNY_ORIGIN_Y.main, 20.2],
+  [53.0, GRANNY_ORIGIN_Y.main, 23.3],
+  [57.8, GRANNY_ORIGIN_Y.main, 18.2],
+  [50.25, GRANNY_ORIGIN_Y.main, 27.0],
+  [50.7, GRANNY_ORIGIN_Y.basement, 23.45],
+  [53.0, GRANNY_ORIGIN_Y.basement, 20.2]
 ].map(([x, y, z]) => new THREE.Vector3(x, y, z));
 
 const audio = {
@@ -462,6 +483,7 @@ function loadModel(def) {
         child.receiveShadow = true;
       });
       scene.add(object);
+      object.updateMatrixWorld(true);
       loaded.push(object);
       registerEntity(def, object);
       onAssetLoaded();
@@ -469,6 +491,7 @@ function loadModel(def) {
     .catch(() => {
       const fallback = makeFallback(def, material);
       scene.add(fallback);
+      fallback.updateMatrixWorld(true);
       registerEntity(def, fallback);
       onAssetLoaded();
     });
@@ -496,6 +519,9 @@ function makeFallback(def, material) {
 function registerEntity(def, object) {
   const pos = new THREE.Vector3().fromArray(def.position || [0, 0, 0]);
   if (def.hidden) object.visible = false;
+
+  if (def.id === "house") registerHouseCollision(object);
+  if (isSolidObject(def)) solidObjects.push({ id: def.id, kind: def.kind, object });
 
   if (def.kind === "item") {
     pickables.set(def.id, {
@@ -537,7 +563,38 @@ function registerEntity(def, object) {
   if (def.kind === "granny") {
     granny.object = object;
     granny.pos.copy(pos);
+    prepareGrannyModel(object);
   }
+}
+
+function prepareGrannyModel(object) {
+  object.visible = true;
+  object.traverse((child) => {
+    if (!child.isMesh) return;
+    child.frustumCulled = false;
+    child.castShadow = true;
+    child.receiveShadow = true;
+    if (child.material?.isMaterial) {
+      child.material = child.material.clone();
+      child.material.emissive = new THREE.Color(0x210606);
+      child.material.emissiveIntensity = 0.16;
+      child.material.needsUpdate = true;
+    }
+  });
+}
+
+function registerHouseCollision(object) {
+  object.traverse((child) => {
+    if (!child.isMesh) return;
+    if (/HouseFloor|HouseWalls/i.test(child.name)) walkableMeshes.push(child);
+    if (/HouseWalls|ExitDoor|ElectricCabinet/i.test(child.name)) wallMeshes.push(child);
+  });
+}
+
+function isSolidObject(def) {
+  if (def.id === "house") return false;
+  if (["item", "spider", "granny", "boy"].includes(def.kind)) return false;
+  return def.kind === "door" || def.kind === "container" || ["table", "prison1"].includes(def.id);
 }
 
 function onAssetLoaded() {
@@ -662,22 +719,91 @@ function updatePlayer(dt) {
   if (keys.has("s")) move.sub(forward);
   if (keys.has("d")) move.add(right);
   if (keys.has("a")) move.sub(right);
-  if (keys.has(" ")) player.pos.y += dt * 2.8;
-  if (keys.has("control")) player.pos.y -= dt * 2.8;
 
   if (move.lengthSq() > 0) {
     move.normalize();
     const speed = keys.has("shift") ? SPRINT_SPEED : PLAYER_SPEED;
-    const next = player.pos.clone().addScaledVector(move, speed * dt);
-    next.x = THREE.MathUtils.clamp(next.x, 39.6, 61.0);
-    next.z = THREE.MathUtils.clamp(next.z, 12.6, 29.4);
-    next.y = THREE.MathUtils.clamp(next.y, 3.5, 12.2);
-    if (!blockedByClosedDoor(next)) {
-      player.pos.copy(next);
+    const step = move.multiplyScalar(speed * dt);
+    const movedX = movePlayerAxis(step.x, 0, dt);
+    const movedZ = movePlayerAxis(0, step.z, dt);
+    if (movedX || movedZ) {
+      if (keys.has("shift")) emitNoise(player.pos, 7);
+      if (Math.random() < dt * 1.5) playAudio(audio.step, true);
     }
-    if (keys.has("shift")) emitNoise(player.pos, 7);
-    if (Math.random() < dt * 1.5) playAudio(audio.step, true);
+  } else {
+    settlePlayerOnGround(dt);
   }
+}
+
+function movePlayerAxis(deltaX, deltaZ, dt) {
+  if (Math.abs(deltaX) + Math.abs(deltaZ) < 0.0001) return false;
+
+  const next = player.pos.clone();
+  next.x = THREE.MathUtils.clamp(next.x + deltaX, MAP_BOUNDS.minX, MAP_BOUNDS.maxX);
+  next.z = THREE.MathUtils.clamp(next.z + deltaZ, MAP_BOUNDS.minZ, MAP_BOUNDS.maxZ);
+
+  const grounded = resolveGroundedPosition(next, dt, true);
+  if (!grounded || blockedByWorld(player.pos, grounded)) return false;
+
+  player.pos.copy(grounded);
+  return true;
+}
+
+function settlePlayerOnGround(dt) {
+  const grounded = resolveGroundedPosition(player.pos.clone(), dt, false);
+  if (grounded) player.pos.y = grounded.y;
+}
+
+function resolveGroundedPosition(position, dt, allowStep) {
+  const groundY = findGroundHeight(position, player.pos.y);
+  if (groundY === null) return null;
+
+  const targetY = groundY + PLAYER_EYE_HEIGHT;
+  const rise = targetY - player.pos.y;
+  if (rise > PLAYER_STEP_HEIGHT) return null;
+  if (allowStep && rise < -PLAYER_MAX_DROP) return null;
+
+  if (targetY < player.pos.y) {
+    position.y = Math.max(targetY, player.pos.y - Math.max(PLAYER_MAX_DROP, dt * 12));
+  } else {
+    position.y = targetY;
+  }
+
+  return position;
+}
+
+function findGroundHeight(position, currentEyeY) {
+  if (!walkableMeshes.length) return null;
+
+  groundRaycaster.set(
+    new THREE.Vector3(position.x, currentEyeY + FLOOR_RAY_LIFT, position.z),
+    downVector
+  );
+  groundRaycaster.near = 0;
+  groundRaycaster.far = FLOOR_RAY_DEPTH;
+
+  const hits = groundRaycaster.intersectObjects(walkableMeshes, false);
+  for (const hit of hits) {
+    if (!isWalkableHit(hit)) continue;
+    const eyeY = hit.point.y + PLAYER_EYE_HEIGHT;
+    const rise = eyeY - currentEyeY;
+    if (rise <= PLAYER_STEP_HEIGHT + 0.04 && rise >= -PLAYER_MAX_DROP) {
+      return hit.point.y;
+    }
+  }
+
+  return null;
+}
+
+function isWalkableHit(hit) {
+  const normal = hit.face?.normal?.clone();
+  if (!normal) return false;
+  normal.transformDirection(hit.object.matrixWorld);
+  return normal.y >= WALKABLE_NORMAL_MIN;
+}
+
+function blockedByWorld(from, nextPos) {
+  return blockedByClosedDoor(nextPos) || blockedBySolidObject(nextPos) || blockedByHouseWall(from, nextPos);
 }
 
 function blockedByClosedDoor(nextPos) {
@@ -687,6 +813,79 @@ function blockedByClosedDoor(nextPos) {
     if (dist < 0.82 && Math.abs(nextPos.y - door.object.position.y) < 2.2) return true;
   }
   return false;
+}
+
+function blockedBySolidObject(nextPos) {
+  const bodyBottom = nextPos.y - PLAYER_EYE_HEIGHT + 0.12;
+  const bodyTop = nextPos.y - 0.08;
+
+  for (const solid of solidObjects) {
+    if (solid.object.visible === false) continue;
+    const door = doors.get(solid.id);
+    if (door?.opened) continue;
+
+    solid.object.updateMatrixWorld(true);
+    tempBox.setFromObject(solid.object);
+    if (bodyTop < tempBox.min.y || bodyBottom > tempBox.max.y) continue;
+
+    const insideX = nextPos.x >= tempBox.min.x - PLAYER_RADIUS && nextPos.x <= tempBox.max.x + PLAYER_RADIUS;
+    const insideZ = nextPos.z >= tempBox.min.z - PLAYER_RADIUS && nextPos.z <= tempBox.max.z + PLAYER_RADIUS;
+    if (insideX && insideZ) return true;
+  }
+
+  return false;
+}
+
+function blockedByHouseWall(from, nextPos) {
+  if (!wallMeshes.length) return false;
+
+  const direction = nextPos.clone().sub(from).setY(0);
+  const distance = direction.length();
+  if (distance < 0.0001) return false;
+  direction.normalize();
+
+  const rayHeights = [
+    nextPos.y - PLAYER_EYE_HEIGHT + 0.42,
+    nextPos.y - 0.38
+  ];
+
+  for (const y of rayHeights) {
+    wallRaycaster.set(new THREE.Vector3(from.x, y, from.z), direction);
+    wallRaycaster.near = 0.03;
+    wallRaycaster.far = distance + PLAYER_RADIUS;
+    const hits = wallRaycaster.intersectObjects(wallMeshes, false);
+    if (hits.some((hit) => isBlockingWallHit(hit, nextPos))) return true;
+  }
+
+  return false;
+}
+
+function isBlockingWallHit(hit, nextPos) {
+  const normal = hit.face?.normal?.clone();
+  if (!normal) return false;
+  normal.transformDirection(hit.object.matrixWorld);
+  if (normal.y >= WALKABLE_NORMAL_MIN) return false;
+
+  // The stair mesh is grouped with the house walls, so its risers must stay climbable.
+  if (isStairArea(hit.point) && isStairArea(nextPos)) return false;
+
+  return true;
+}
+
+function isStairArea(point) {
+  return isMainStairArea(point) || isBasementStairArea(point);
+}
+
+function isMainStairArea(point) {
+  return point.x >= 46.55 && point.x <= 48.75
+    && point.z >= 21.25 && point.z <= 24.85
+    && point.y >= 6.35 && point.y <= 11.45;
+}
+
+function isBasementStairArea(point) {
+  return point.x >= 52.15 && point.x <= 53.85
+    && point.z >= 19.1 && point.z <= 23.4
+    && point.y >= 3.85 && point.y <= 8.15;
 }
 
 function updateCamera() {
@@ -850,7 +1049,7 @@ function updateGranny(dt) {
   const playerFlatDistance = flatDistance(granny.pos, player.pos);
   if (playerFlatDistance < GRANNY_NOTICE_DISTANCE && Math.abs(granny.pos.y - player.pos.y) < 3.6) {
     granny.state = "chase";
-    granny.noiseTarget = player.pos.clone();
+    granny.noiseTarget = makeGrannyTarget(player.pos);
   } else if (granny.noiseTarget) {
     granny.state = "investigate";
   } else {
@@ -892,6 +1091,16 @@ function moveGrannyToward(target, speed, dt) {
   }
 }
 
+function makeGrannyTarget(position) {
+  return new THREE.Vector3(position.x, getGrannyOriginY(position.y), position.z);
+}
+
+function getGrannyOriginY(sourceY) {
+  if (sourceY >= 8.9) return GRANNY_ORIGIN_Y.top;
+  if (sourceY >= 5.7) return GRANNY_ORIGIN_Y.main;
+  return GRANNY_ORIGIN_Y.basement;
+}
+
 function updateSpiders(dt) {
   spiders.forEach((spider) => {
     spider.damageCooldown = Math.max(0, spider.damageCooldown - dt);
@@ -922,7 +1131,7 @@ function damagePlayer() {
 function emitNoise(position, intensity) {
   if (!running || intensity <= 0) return;
   if (flatDistance(position, granny.pos) < intensity || intensity >= 12) {
-    granny.noiseTarget = position.clone();
+    granny.noiseTarget = makeGrannyTarget(position);
   }
 }
 

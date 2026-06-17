@@ -15,6 +15,8 @@ const PLAYER_RADIUS = 0.42;
 const PLAYER_EYE_HEIGHT = 1.34;
 const PLAYER_STEP_HEIGHT = 0.72;
 const PLAYER_MAX_DROP = 1.15;
+const PLAYER_JUMP_SPEED = 4.8;
+const GRAVITY = 13.5;
 const GRANNY_RADIUS = 0.52;
 const GRANNY_FOOT_OFFSET = 0.9;
 const GRANNY_STEP_HEIGHT = 0.78;
@@ -22,6 +24,7 @@ const GRANNY_MAX_DROP = 1.35;
 const FLOOR_RAY_LIFT = 1.25;
 const FLOOR_RAY_DEPTH = 4.8;
 const WALKABLE_NORMAL_MIN = 0.42;
+const ITEM_VISUAL_SCALE = 0.62;
 const INTERACT_DISTANCE = 3.4;
 const GRANNY_CATCH_DISTANCE = 3.0;
 const GRANNY_NOTICE_DISTANCE = 8.5;
@@ -76,8 +79,8 @@ renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x050706);
-scene.fog = new THREE.FogExp2(0x050706, 0.035);
+scene.background = new THREE.Color(0x020303);
+scene.fog = new THREE.FogExp2(0x020303, 0.046);
 
 const camera = new THREE.PerspectiveCamera(74, window.innerWidth / window.innerHeight, 0.05, 120);
 camera.rotation.order = "YXZ";
@@ -116,6 +119,9 @@ const player = {
   held: null,
   lives: 10,
   caughtCooldown: 0,
+  verticalVelocity: 0,
+  grounded: false,
+  hiddenSpot: null,
   rescuedBoy: false,
   escaped: false
 };
@@ -125,7 +131,11 @@ const granny = {
   pos: GRANNY_START.clone(),
   targetIndex: 0,
   noiseTarget: null,
-  state: "patrol"
+  state: "patrol",
+  lastMoved: false,
+  walkTime: 0,
+  attackTimer: 0,
+  baseScale: new THREE.Vector3(1, 1, 1)
 };
 
 const patrolPoints = [
@@ -412,6 +422,33 @@ const modelDefs = [
   }))
 ];
 
+const hidingSpots = [
+  {
+    id: "bed-top",
+    label: "Debaixo da cama",
+    position: new THREE.Vector3(44.8, 11.25, 18.9),
+    hidePosition: new THREE.Vector3(44.8, 10.55, 18.9),
+    exitPosition: new THREE.Vector3(46.2, 11.39, 20.2),
+    yaw: Math.PI * 0.5
+  },
+  {
+    id: "wardrobe-main",
+    label: "Dentro do armario",
+    position: new THREE.Vector3(51.2, 8.05, 16.35),
+    hidePosition: new THREE.Vector3(51.2, 7.25, 16.35),
+    exitPosition: new THREE.Vector3(50.2, 8.0, 17.6),
+    yaw: -Math.PI * 0.15
+  },
+  {
+    id: "cabinet-basement",
+    label: "Atrás do movel",
+    position: new THREE.Vector3(49.0, 5.0, 21.0),
+    hidePosition: new THREE.Vector3(49.0, 4.45, 21.0),
+    exitPosition: new THREE.Vector3(50.1, 5.07, 22.1),
+    yaw: Math.PI * 0.85
+  }
+];
+
 init();
 
 function init() {
@@ -466,15 +503,15 @@ function makeMaterial(texturePath, options = {}) {
 }
 
 function buildLighting() {
-  scene.add(new THREE.HemisphereLight(0x8ba695, 0x110706, 0.62));
+  scene.add(new THREE.HemisphereLight(0x5f7268, 0x090403, 0.34));
 
-  const moon = new THREE.DirectionalLight(0x9ab2ff, 0.9);
+  const moon = new THREE.DirectionalLight(0x8fa5dd, 0.48);
   moon.position.set(44, 34, 16);
   moon.castShadow = true;
   moon.shadow.mapSize.set(2048, 2048);
   scene.add(moon);
 
-  const handLight = new THREE.SpotLight(0xffe1a6, 3.2, 26, Math.PI / 5.5, 0.45, 1.35);
+  const handLight = new THREE.SpotLight(0xffd18f, 2.05, 20, Math.PI / 6.2, 0.55, 1.45);
   handLight.position.set(0, 0, 0);
   handLight.target.position.set(0, 0, -1);
   camera.add(handLight);
@@ -482,10 +519,10 @@ function buildLighting() {
   scene.add(camera);
 
   [
-    [50.3, 11.6, 26.8, 0xe7bd73, 1.8],
-    [45.2, 10.9, 18.5, 0xd4f1ff, 1.2],
-    [54.7, 7.6, 22.5, 0xe7bd73, 1.4],
-    [50.4, 4.9, 28.5, 0xc8d6ff, 1.6]
+    [50.3, 11.6, 26.8, 0xe7bd73, 1.0],
+    [45.2, 10.9, 18.5, 0xd4f1ff, 0.72],
+    [54.7, 7.6, 22.5, 0xe7bd73, 0.84],
+    [50.4, 4.9, 28.5, 0xc8d6ff, 0.9]
   ].forEach(([x, y, z, color, power]) => {
     const light = new THREE.PointLight(color, power, 10, 1.8);
     light.position.set(x, y, z);
@@ -553,6 +590,7 @@ function registerEntity(def, object) {
 
   if (def.id === "house") registerHouseCollision(object);
   if (isSolidObject(def)) solidObjects.push({ id: def.id, kind: def.kind, object });
+  if (def.kind === "item") applyItemPresentation(object);
 
   if (def.kind === "item") {
     pickables.set(def.id, {
@@ -600,6 +638,7 @@ function registerEntity(def, object) {
 
 function prepareGrannyModel(object) {
   object.visible = true;
+  granny.baseScale.copy(object.scale);
   object.traverse((child) => {
     if (!child.isMesh) return;
     child.frustumCulled = false;
@@ -614,12 +653,27 @@ function prepareGrannyModel(object) {
   });
 }
 
+function applyItemPresentation(object) {
+  object.scale.multiplyScalar(ITEM_VISUAL_SCALE);
+  object.traverse((child) => {
+    if (!child.isMesh || !child.material?.isMaterial) return;
+    child.material = child.material.clone();
+    child.material.emissive = new THREE.Color(0x080604);
+    child.material.emissiveIntensity = 0.04;
+    child.material.needsUpdate = true;
+  });
+  object.updateMatrixWorld(true);
+}
+
 function registerHouseCollision(object) {
   object.traverse((child) => {
     if (!child.isMesh) return;
     if (/HouseFloor|HouseWalls/i.test(child.name)) walkableMeshes.push(child);
     if (/HouseWalls|ExitDoor|ElectricCabinet|Furniture|Microwave|Tunna|cup/i.test(child.name)) {
       wallMeshes.push(child);
+    }
+    if (/ExitDoor|ElectricCabinet|Microwave|Tunna|cup/i.test(child.name)) {
+      solidObjects.push({ id: `house:${child.name}`, kind: "house-solid", object: child });
     }
   });
 }
@@ -683,10 +737,11 @@ function bindEvents() {
   document.addEventListener("keydown", (event) => {
     const key = event.key.toLowerCase();
     keys.add(key);
-    if (["w", "a", "s", "d", "shift", "control", "e", "p", "g", "t"].includes(key)) {
+    if (["w", "a", "s", "d", "shift", "control", "e", "p", "g", "t", " "].includes(key)) {
       event.preventDefault();
     }
     if (!running) return;
+    if (key === " ") tryJump();
     if (key === "e" || key === "p") interact();
     if (key === "g" || key === "t") dropHeld();
   });
@@ -742,6 +797,11 @@ function loop() {
 
 function updatePlayer(dt) {
   player.caughtCooldown = Math.max(0, player.caughtCooldown - dt);
+  if (player.hiddenSpot) {
+    player.verticalVelocity = 0;
+    player.grounded = true;
+    return;
+  }
 
   const cameraYaw = new THREE.Euler(0, player.yaw, 0, "YXZ");
   const forward = new THREE.Vector3(0, 0, -1).applyEuler(cameraYaw).normalize();
@@ -763,9 +823,11 @@ function updatePlayer(dt) {
       if (keys.has("shift")) emitNoise(player.pos, 7);
       if (Math.random() < dt * 1.5) playAudio(audio.step, true);
     }
-  } else {
+  } else if (player.grounded || player.verticalVelocity <= 0) {
     settlePlayerOnGround(dt);
   }
+
+  applyPlayerVerticalMotion(dt);
 }
 
 function movePlayerAxis(deltaX, deltaZ, dt) {
@@ -775,16 +837,61 @@ function movePlayerAxis(deltaX, deltaZ, dt) {
   next.x = THREE.MathUtils.clamp(next.x + deltaX, MAP_BOUNDS.minX, MAP_BOUNDS.maxX);
   next.z = THREE.MathUtils.clamp(next.z + deltaZ, MAP_BOUNDS.minZ, MAP_BOUNDS.maxZ);
 
+  if (!player.grounded && player.verticalVelocity > 0) {
+    next.y = player.pos.y;
+    if (blockedByWorld(player.pos, next, PLAYER_BODY)) return false;
+    player.pos.copy(next);
+    return true;
+  }
+
   const grounded = resolveGroundedPosition(next, dt, true);
   if (!grounded || blockedByWorld(player.pos, grounded, PLAYER_BODY)) return false;
 
   player.pos.copy(grounded);
+  player.grounded = true;
+  player.verticalVelocity = Math.min(0, player.verticalVelocity);
   return true;
 }
 
 function settlePlayerOnGround(dt) {
   const grounded = resolveGroundedPosition(player.pos.clone(), dt, false);
-  if (grounded) player.pos.y = grounded.y;
+  if (grounded) {
+    player.pos.y = grounded.y;
+    player.grounded = true;
+    if (player.verticalVelocity < 0) player.verticalVelocity = 0;
+  } else {
+    player.grounded = false;
+  }
+}
+
+function tryJump() {
+  if (player.hiddenSpot || !player.grounded) return;
+  player.grounded = false;
+  player.verticalVelocity = PLAYER_JUMP_SPEED;
+  emitNoise(player.pos, 6);
+}
+
+function applyPlayerVerticalMotion(dt) {
+  if (player.grounded && player.verticalVelocity <= 0) return;
+
+  player.verticalVelocity -= GRAVITY * dt;
+  const next = player.pos.clone();
+  next.y += player.verticalVelocity * dt;
+
+  const groundY = findGroundHeightForBody(next, player.pos.y, PLAYER_BODY);
+  if (groundY !== null) {
+    const groundEyeY = groundY + PLAYER_EYE_HEIGHT;
+    if (player.verticalVelocity <= 0 && next.y <= groundEyeY + 0.04) {
+      next.y = groundEyeY;
+      player.verticalVelocity = 0;
+      player.grounded = true;
+      player.pos.copy(next);
+      return;
+    }
+  }
+
+  player.grounded = false;
+  player.pos.y = next.y;
 }
 
 function resolveGroundedPosition(position, dt, allowStep) {
@@ -967,6 +1074,12 @@ function updateCamera() {
 }
 
 function updateInteraction() {
+  if (player.hiddenSpot) {
+    activePrompt = { type: "hide-exit", ref: player.hiddenSpot, prompt: "Sair do esconderijo" };
+    promptText.textContent = activePrompt.prompt;
+    return;
+  }
+
   activePrompt = findInteractable();
   promptText.textContent = activePrompt ? activePrompt.prompt : "";
   if (eventTimer > 0) {
@@ -995,6 +1108,13 @@ function findInteractable() {
     }
   }
 
+  for (const spot of hidingSpots) {
+    const distance = interactionDistance(spot.position);
+    if (distance <= INTERACT_DISTANCE) {
+      candidates.push({ distance, type: "hiding-spot", ref: spot, prompt: spot.label });
+    }
+  }
+
   candidates.sort((a, b) => a.distance - b.distance);
   return candidates[0] || null;
 }
@@ -1010,6 +1130,11 @@ function interactionDistance(pos) {
 }
 
 function interact() {
+  if (player.hiddenSpot) {
+    exitHidingSpot();
+    return;
+  }
+
   const target = activePrompt || findInteractable();
   if (!target) return;
 
@@ -1025,7 +1150,10 @@ function interact() {
 
   if (target.type === "door") {
     openDoor(target.ref);
+    return;
   }
+
+  if (target.type === "hiding-spot") enterHidingSpot(target.ref);
 }
 
 function pickItem(item) {
@@ -1042,7 +1170,7 @@ function pickItem(item) {
 }
 
 function dropHeld() {
-  if (!player.held) return;
+  if (!player.held || player.hiddenSpot) return;
   const forward = new THREE.Vector3(0, 0, -1).applyEuler(camera.rotation).setY(0).normalize();
   const dropPos = player.pos.clone().addScaledVector(forward, 1.4);
   const groundY = findGroundHeightForBody(dropPos, player.pos.y, PLAYER_BODY);
@@ -1053,6 +1181,33 @@ function dropHeld() {
   emitNoise(dropPos, 12);
   showEvent("Algo caiu no chao.");
   updateHud();
+}
+
+function enterHidingSpot(spot) {
+  if (player.held) {
+    showEvent("Solte o item antes de se esconder.");
+    return;
+  }
+
+  player.hiddenSpot = spot;
+  player.pos.copy(spot.hidePosition);
+  player.yaw = spot.yaw;
+  player.pitch = 0;
+  player.verticalVelocity = 0;
+  player.grounded = true;
+  stopAudio(audio.chase);
+  showEvent("Voce se escondeu.");
+}
+
+function exitHidingSpot() {
+  const spot = player.hiddenSpot;
+  if (!spot) return;
+  player.hiddenSpot = null;
+  player.pos.copy(spot.exitPosition);
+  player.verticalVelocity = 0;
+  player.grounded = true;
+  showEvent("Voce saiu do esconderijo.");
+  emitNoise(player.pos, 4);
 }
 
 function openContainer(container) {
@@ -1114,8 +1269,16 @@ function revealItem(id) {
 function updateGranny(dt) {
   if (!granny.object || player.escaped) return;
 
+  if (granny.attackTimer > 0) {
+    granny.attackTimer = Math.max(0, granny.attackTimer - dt);
+    granny.object.position.copy(granny.pos);
+    applyGrannyAnimation(false, dt);
+    if (granny.attackTimer <= 0) finishGame(false);
+    return;
+  }
+
   const playerFlatDistance = flatDistance(granny.pos, player.pos);
-  if (playerFlatDistance < GRANNY_NOTICE_DISTANCE && isGrannyOnPlayerLevel()) {
+  if (!player.hiddenSpot && playerFlatDistance < GRANNY_NOTICE_DISTANCE && isGrannyOnPlayerLevel()) {
     granny.state = "chase";
     granny.noiseTarget = makeGrannyTarget(player.pos);
   } else if (granny.noiseTarget) {
@@ -1136,8 +1299,9 @@ function updateGranny(dt) {
     }
   }
 
-  if (flatDistance(granny.pos, player.pos) < GRANNY_CATCH_DISTANCE && isGrannyOnPlayerLevel()) {
-    finishGame(false);
+  if (!player.hiddenSpot && flatDistance(granny.pos, player.pos) < GRANNY_CATCH_DISTANCE && isGrannyOnPlayerLevel()) {
+    triggerGrannyAttack();
+    return;
   }
 
   presenceText.textContent = granny.state === "chase" ? "Perto" : granny.state === "investigate" ? "Ouvindo" : "Distante";
@@ -1162,10 +1326,44 @@ function moveGrannyToward(target, speed, dt) {
   if (distance > 0.05) {
     granny.object.rotation.y = Math.atan2(direction.x, direction.z);
   }
+  granny.lastMoved = moved;
+  applyGrannyAnimation(moved, dt);
 
   if (!moved && distance > 0.8 && granny.state === "patrol") {
     granny.targetIndex = (granny.targetIndex + 1) % patrolPoints.length;
   }
+}
+
+function applyGrannyAnimation(moved, dt) {
+  if (!granny.object) return;
+
+  if (granny.attackTimer > 0) {
+    const t = 1 - granny.attackTimer / 0.55;
+    granny.object.rotation.x = -Math.sin(t * Math.PI) * 0.32;
+    granny.object.rotation.z = Math.sin(t * Math.PI * 2) * 0.08;
+    granny.object.position.y = granny.pos.y + Math.sin(t * Math.PI) * 0.14;
+    return;
+  }
+
+  if (moved) {
+    granny.walkTime += dt * (granny.state === "chase" ? 9.5 : 6.4);
+    const stride = Math.sin(granny.walkTime);
+    granny.object.position.y = granny.pos.y + Math.abs(stride) * 0.055;
+    granny.object.rotation.z = stride * 0.055;
+    granny.object.rotation.x = Math.sin(granny.walkTime * 0.5) * 0.035;
+  } else {
+    granny.object.position.y = granny.pos.y;
+    granny.object.rotation.x *= 0.82;
+    granny.object.rotation.z *= 0.82;
+  }
+}
+
+function triggerGrannyAttack() {
+  if (granny.attackTimer > 0) return;
+  granny.attackTimer = 0.55;
+  stopAudio(audio.chase);
+  playAudio(audio.hit);
+  showEvent("Ela te acertou.");
 }
 
 function moveGrannyAxis(deltaX, deltaZ, dt) {

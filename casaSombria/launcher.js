@@ -2,6 +2,7 @@ const statusText = document.getElementById("statusText");
 const launchGame = document.getElementById("launchGame");
 const buildPanel = document.getElementById("buildPanel");
 const buildCommands = document.getElementById("buildCommands");
+let statusTimer = null;
 
 function setStatus(message, isReady = false) {
   statusText.textContent = message;
@@ -12,7 +13,7 @@ function renderBuildCommands(commands) {
   buildPanel.hidden = false;
   buildCommands.textContent = Array.isArray(commands) && commands.length
     ? commands.join("\n")
-    : "cmake -S casaSombria/casaSombria -B casaSombria/casaSombria/build\ncmake --build casaSombria/casaSombria/build --config Release";
+    : "cmake -S casaSombria/casaSombria -B casaSombria/casaSombria/build \"-DCMAKE_POLICY_VERSION_MINIMUM=3.5\"\ncmake --build casaSombria/casaSombria/build --config Release";
 }
 
 async function refreshStatus() {
@@ -23,6 +24,7 @@ async function refreshStatus() {
     if (data.available) {
       buildPanel.hidden = true;
       setStatus("Executavel encontrado. Pode abrir o jogo.", true);
+      if (statusTimer) clearInterval(statusTimer);
       return;
     }
 
@@ -33,6 +35,8 @@ async function refreshStatus() {
     renderBuildCommands();
   }
 }
+
+statusTimer = setInterval(refreshStatus, 5000);
 
 launchGame.addEventListener("click", async () => {
   launchGame.disabled = true;

@@ -459,7 +459,7 @@ app.get("/api/casa-sombria/status", (req, res) => {
     project: "casaSombria/casaSombria",
     executable: "casaSombria/casaSombria/bin/GAME_APPLICATION.exe",
     build: [
-      "cmake -S casaSombria/casaSombria -B casaSombria/casaSombria/build",
+      "cmake -S casaSombria/casaSombria -B casaSombria/casaSombria/build \"-DCMAKE_POLICY_VERSION_MINIMUM=3.5\"",
       "cmake --build casaSombria/casaSombria/build --config Release"
     ]
   });

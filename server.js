@@ -4974,7 +4974,10 @@ function serializeHorrorRoom(room, viewerSocketId) {
       yaw: Number(player.yaw || 0),
       pitch: Number(player.pitch || 0),
       crouching: Boolean(player.crouching),
+      hiding: Boolean(player.hiding),
       hasKey: Boolean(player.hasKey),
+      hasFuse: Boolean(player.hasFuse),
+      hasTool: Boolean(player.hasTool),
       alive: player.alive !== false,
       escaped: Boolean(player.escaped)
     }))
@@ -5071,7 +5074,7 @@ io.on("connection", (socket) => {
       hostUsername: socket.username,
       status: "playing",
       message: `${socket.username} entrou na casa.`,
-      state: { teamHasKey: false, teamEscaped: false, monster: null },
+      state: { teamHasKey: false, teamHasFuse: false, teamHasTool: false, teamEscaped: false, monster: null },
       players: [{
         socketId: socket.id,
         userId: socket.userId,
@@ -5082,7 +5085,10 @@ io.on("connection", (socket) => {
         yaw: 0,
         pitch: 0,
         crouching: false,
+        hiding: false,
         hasKey: false,
+        hasFuse: false,
+        hasTool: false,
         alive: true,
         escaped: false
       }]
@@ -5117,7 +5123,10 @@ io.on("connection", (socket) => {
         yaw: 0,
         pitch: 0,
         crouching: false,
+        hiding: false,
         hasKey: Boolean(room.state?.teamHasKey),
+        hasFuse: Boolean(room.state?.teamHasFuse),
+        hasTool: Boolean(room.state?.teamHasTool),
         alive: true,
         escaped: false
       });
@@ -5143,7 +5152,10 @@ io.on("connection", (socket) => {
     player.yaw = Number.isFinite(Number(state.yaw)) ? Number(state.yaw) : player.yaw;
     player.pitch = Number.isFinite(Number(state.pitch)) ? Number(state.pitch) : player.pitch;
     player.crouching = Boolean(state.crouching);
+    player.hiding = Boolean(state.hiding);
     player.hasKey = Boolean(state.hasKey);
+    player.hasFuse = Boolean(state.hasFuse);
+    player.hasTool = Boolean(state.hasTool);
     player.alive = state.alive !== false;
     player.escaped = Boolean(state.escaped);
 
@@ -5156,7 +5168,10 @@ io.on("connection", (socket) => {
       yaw: player.yaw,
       pitch: player.pitch,
       crouching: player.crouching,
+      hiding: player.hiding,
       hasKey: player.hasKey,
+      hasFuse: player.hasFuse,
+      hasTool: player.hasTool,
       alive: player.alive,
       escaped: player.escaped
     });
@@ -5167,6 +5182,8 @@ io.on("connection", (socket) => {
     if (!room || room.hostSocketId !== socket.id) return;
     room.state = {
       teamHasKey: Boolean(state.teamHasKey),
+      teamHasFuse: Boolean(state.teamHasFuse),
+      teamHasTool: Boolean(state.teamHasTool),
       teamEscaped: Boolean(state.teamEscaped),
       monster: state.monster && typeof state.monster === "object" ? {
         x: Number(state.monster.x) || 0,
@@ -5194,6 +5211,8 @@ io.on("connection", (socket) => {
     };
 
     if (type === "key") room.state.teamHasKey = true;
+    if (type === "escape-item" && payload.label === "fuse") room.state.teamHasFuse = true;
+    if (type === "escape-item" && payload.label === "tool") room.state.teamHasTool = true;
     if (type === "escape") room.state.teamEscaped = true;
 
     socket.to(room.roomId).emit("horror:event", payload);

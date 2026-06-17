@@ -41,6 +41,7 @@ const ITEM_DROP_NOISE_RADIUS = HOUSE_NOISE_RADIUS;
 const DOOR_NOISE_RADIUS = HOUSE_NOISE_RADIUS;
 const SPRINT_NOISE_RADIUS = 22;
 const HORROR_MAX_PLAYERS_CLIENT = 4;
+const MAX_NIGHTS = 5;
 const tmpVec3 = new THREE.Vector3();
 const tmpVecA = new THREE.Vector3();
 const tmpVecB = new THREE.Vector3();
@@ -61,6 +62,7 @@ const objectiveText = document.getElementById("objectiveText");
 const inventoryText = document.getElementById("inventoryText");
 const alertPanel = document.getElementById("alertPanel");
 const alertText = document.getElementById("alertText");
+const nightText = document.getElementById("nightText");
 const promptText = document.getElementById("promptText");
 const eventText = document.getElementById("eventText");
 const endEyebrow = document.getElementById("endEyebrow");
@@ -97,6 +99,8 @@ const keys = new Set();
 const colliders = [];
 const interactables = [];
 const noisyItems = [];
+const escapeItemMeshes = new Map();
+const hidingSpots = [];
 const noiseRipples = [];
 const patrolWaypoints = [];
 const remotePlayers = new Map();
@@ -106,10 +110,15 @@ const player = {
   yaw: -Math.PI / 2,
   pitch: 0,
   hasKey: false,
+  hasFuse: false,
+  hasTool: false,
   holding: null,
   alive: true,
   escaped: false,
   crouching: false,
+  hiding: false,
+  hidingSpot: null,
+  night: 1,
   stepTimer: 0
 };
 
@@ -139,6 +148,8 @@ let audioCtx = null;
 let eventTimer = 0;
 let lastPrompt = "";
 let teamHasKey = false;
+let teamHasFuse = false;
+let teamHasTool = false;
 let teamEscaped = false;
 
 const online = {
@@ -373,6 +384,11 @@ function handleRemoteEvent(event) {
     return;
   }
 
+  if (event.type === "escape-item") {
+    applyTeamItem(event.label, false);
+    return;
+  }
+
   if (event.type === "escape") {
     applyTeamEscape(false);
     return;
@@ -380,10 +396,7 @@ function handleRemoteEvent(event) {
 
   if (event.type === "caught") {
     if (event.targetSocketId === online.socket?.id) {
-      player.alive = false;
-      if (document.pointerLockElement) document.exitPointerLock();
-      playSting();
-      showEnd(false);
+      handleLocalCaught(false);
     } else if (event.targetSocketId) {
       const remote = remotePlayers.get(event.targetSocketId);
       if (remote) {
@@ -397,6 +410,8 @@ function handleRemoteEvent(event) {
 function applyHostState(state) {
   if (!state || !online.roomId) return;
   if (state.teamHasKey) applyTeamKey(false);
+  if (state.teamHasFuse) applyTeamItem("fuse", false);
+  if (state.teamHasTool) applyTeamItem("tool", false);
   if (state.teamEscaped) applyTeamEscape(false);
 
   if (online.isHost || !state.monster || !monster.root) return;
@@ -544,6 +559,9 @@ function buildInteractables() {
     action: () => pickupKey()
   });
 
+  createEscapeItem("fuse", "Fusivel", worldFromCell(13, 3), 0x76d3ff);
+  createEscapeItem("tool", "Ferramenta", worldFromCell(3, 13), 0xc9b08a);
+
   const exitPos = findMarker("E");
   const doorMat = new THREE.MeshStandardMaterial({
     color: 0x573425,
@@ -582,6 +600,13 @@ function buildInteractables() {
     createNoisyItem(pos, name, index);
   });
 
+  [
+    [3, 1, "Armario"],
+    [15, 1, "Debaixo da cama"],
+    [8, 9, "Armario estreito"],
+    [15, 7, "Baixo da mesa"]
+  ].forEach(([x, z, name], index) => createHidingSpot(worldFromCell(x, z), name, index));
+
   patrolWaypoints.push(
     worldFromCell(15, 11),
     worldFromCell(15, 9),
@@ -591,6 +616,60 @@ function buildInteractables() {
     worldFromCell(1, 13),
     worldFromCell(1, 1)
   );
+}
+
+function createEscapeItem(id, label, pos, color) {
+  const material = new THREE.MeshStandardMaterial({
+    color,
+    roughness: 0.38,
+    metalness: 0.3,
+    emissive: color,
+    emissiveIntensity: 0.14
+  });
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.24, 0.66), material);
+  mesh.position.set(pos.x, 0.62, pos.z);
+  mesh.rotation.y = id === "tool" ? 0.8 : -0.35;
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  scene.add(mesh);
+  escapeItemMeshes.set(id, mesh);
+
+  interactables.push({
+    id,
+    label,
+    pos: mesh.position,
+    radius: 1.5,
+    action: () => collectEscapeItem(id)
+  });
+}
+
+function createHidingSpot(pos, label, index) {
+  const material = new THREE.MeshStandardMaterial({
+    color: index % 2 ? 0x2f332c : 0x453627,
+    roughness: 0.86
+  });
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(1.2, 1.65, 0.72), material);
+  mesh.position.set(pos.x, 0.82, pos.z);
+  mesh.rotation.y = index % 2 ? Math.PI / 2 : 0;
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  scene.add(mesh);
+
+  const spot = {
+    id: `hide-${index}`,
+    label,
+    mesh,
+    pos: new THREE.Vector3(pos.x, 0, pos.z),
+    radius: 1.35
+  };
+  hidingSpots.push(spot);
+  interactables.push({
+    id: spot.id,
+    label,
+    pos: spot.pos,
+    radius: spot.radius,
+    action: () => toggleHiding(spot)
+  });
 }
 
 function buildMonster() {
@@ -773,7 +852,10 @@ function updateRemotePlayer(state) {
       yaw: 0,
       alive: true,
       escaped: false,
-      hasKey: false
+      hasKey: false,
+      hasFuse: false,
+      hasTool: false,
+      hiding: false
     };
     remotePlayers.set(state.socketId, remote);
   }
@@ -783,9 +865,12 @@ function updateRemotePlayer(state) {
   remote.alive = state.alive !== false;
   remote.escaped = Boolean(state.escaped);
   remote.hasKey = Boolean(state.hasKey);
+  remote.hasFuse = Boolean(state.hasFuse);
+  remote.hasTool = Boolean(state.hasTool);
+  remote.hiding = Boolean(state.hiding);
   remote.mesh.position.copy(remote.pos);
   remote.mesh.rotation.y = remote.yaw;
-  remote.mesh.visible = remote.alive && !remote.escaped;
+  remote.mesh.visible = remote.alive && !remote.escaped && !remote.hiding;
 }
 
 function removeRemotePlayer(socketId) {
@@ -822,6 +907,13 @@ function loop() {
 }
 
 function updatePlayer(dt) {
+  if (player.hiding && player.hidingSpot) {
+    player.crouching = true;
+    player.pos.lerp(player.hidingSpot.pos, Math.min(1, dt * 12));
+    updateCamera(dt);
+    return;
+  }
+
   player.crouching = keys.has("ControlLeft") || keys.has("ControlRight") || keys.has("KeyC");
   const sprinting = (keys.has("ShiftLeft") || keys.has("ShiftRight")) && !player.crouching;
   const speed = player.crouching ? CROUCH_SPEED : sprinting ? SPRINT_SPEED : PLAYER_SPEED;
@@ -863,16 +955,19 @@ function syncOnlineState(dt) {
   online.sendTimer -= dt;
   if (online.sendTimer <= 0) {
     online.sendTimer = 0.05;
-    online.socket.emit("horror:player", {
-      x: player.pos.x,
-      z: player.pos.z,
-      yaw: player.yaw,
-      pitch: player.pitch,
-      crouching: player.crouching,
-      hasKey: player.hasKey || teamHasKey,
-      alive: player.alive,
-      escaped: player.escaped
-    });
+      online.socket.emit("horror:player", {
+        x: player.pos.x,
+        z: player.pos.z,
+        yaw: player.yaw,
+        pitch: player.pitch,
+        crouching: player.crouching,
+        hiding: player.hiding,
+        hasKey: player.hasKey || teamHasKey,
+        hasFuse: player.hasFuse || teamHasFuse,
+        hasTool: player.hasTool || teamHasTool,
+        alive: player.alive,
+        escaped: player.escaped
+      });
   }
 
   if (online.isHost) {
@@ -881,6 +976,8 @@ function syncOnlineState(dt) {
       online.hostTimer = 0.08;
       online.socket.emit("horror:host-state", {
         teamHasKey,
+        teamHasFuse,
+        teamHasTool,
         teamEscaped,
         monster: {
           x: monster.pos.x,
@@ -938,6 +1035,11 @@ function isPositionBlocked(pos) {
 }
 
 function updateInteractions() {
+  if (player.hiding) {
+    setPrompt("Escondido. Pressione E para sair.");
+    return;
+  }
+
   let nearest = null;
   let nearestDistance = Infinity;
 
@@ -963,6 +1065,11 @@ function updateInteractions() {
 }
 
 function interact() {
+  if (player.hiding) {
+    toggleHiding(player.hidingSpot);
+    return;
+  }
+
   if (player.holding) {
     dropHeldItem(false);
     return;
@@ -982,25 +1089,74 @@ function interact() {
   if (nearest) nearest.action();
 }
 
+function toggleHiding(spot) {
+  if (!spot) return;
+  if (player.hiding) {
+    player.hiding = false;
+    player.hidingSpot = null;
+    showEvent("Voce saiu do esconderijo.");
+    emitNoise(player.pos, 7, "Movimento discreto");
+    return;
+  }
+
+  if (player.holding) dropHeldItem(false);
+  player.hiding = true;
+  player.hidingSpot = spot;
+  player.crouching = true;
+  showEvent(`Voce se escondeu: ${spot.label}.`);
+}
+
 function pickupKey() {
-  applyTeamKey(true);
-  playTone(520, 0.08, 0.05, "triangle");
+  collectEscapeItem("key");
+}
+
+function collectEscapeItem(id) {
+  applyTeamItem(id, true);
+  playTone(id === "key" ? 520 : id === "fuse" ? 390 : 310, 0.08, 0.05, "triangle");
 }
 
 function applyTeamKey(sendNetwork) {
-  if (teamHasKey) return;
-  teamHasKey = true;
-  player.hasKey = true;
-  const item = interactables.find((entry) => entry.id === "key");
+  applyTeamItem("key", sendNetwork);
+}
+
+function applyTeamItem(id, sendNetwork) {
+  if (id === "key" && teamHasKey) return;
+  if (id === "fuse" && teamHasFuse) return;
+  if (id === "tool" && teamHasTool) return;
+
+  if (id === "key") {
+    teamHasKey = true;
+    player.hasKey = true;
+  } else if (id === "fuse") {
+    teamHasFuse = true;
+    player.hasFuse = true;
+  } else if (id === "tool") {
+    teamHasTool = true;
+    player.hasTool = true;
+  }
+
+  const item = interactables.find((entry) => entry.id === id);
   if (item) item.disabled = true;
-  if (keyMesh) scene.remove(keyMesh);
-  showEvent("Chave encontrada.");
-  if (sendNetwork) emitHorrorEvent({ type: "key" });
+  if (id === "key" && keyMesh) scene.remove(keyMesh);
+  const mesh = escapeItemMeshes.get(id);
+  if (mesh) scene.remove(mesh);
+
+  const labels = { key: "Chave encontrada.", fuse: "Fusivel encontrado.", tool: "Ferramenta encontrada." };
+  showEvent(labels[id] || "Item encontrado.");
+
+  if (sendNetwork) {
+    emitHorrorEvent({ type: id === "key" ? "key" : "escape-item", label: id });
+  }
 }
 
 function tryEscape() {
-  if (!player.hasKey && !teamHasKey) {
-    showEvent("A fechadura esta intacta.");
+  const missing = [];
+  if (!teamHasKey && !player.hasKey) missing.push("chave");
+  if (!teamHasFuse && !player.hasFuse) missing.push("fusivel");
+  if (!teamHasTool && !player.hasTool) missing.push("ferramenta");
+
+  if (missing.length) {
+    showEvent(`Ainda falta: ${missing.join(", ")}.`);
     emitNoise(player.pos, DOOR_NOISE_RADIUS, "Macaneta");
     playDoorKnock();
     return;
@@ -1199,13 +1355,13 @@ function canMonsterSeePlayer() {
 
 function getMonsterTargets() {
   const targets = [];
-  if (player.alive && !player.escaped) {
+  if (player.alive && !player.escaped && !player.hiding) {
     targets.push({ id: "local", pos: player.pos, isLocal: true });
   }
 
   if (online.roomId && online.isHost) {
     for (const [socketId, remote] of remotePlayers) {
-      if (remote.alive && !remote.escaped) {
+      if (remote.alive && !remote.escaped && !remote.hiding) {
         targets.push({ id: socketId, pos: remote.pos, isLocal: false });
       }
     }
@@ -1241,10 +1397,7 @@ function checkMonsterCatchTargets() {
     if (flatDistance(monster.pos, target.pos) >= MONSTER_CATCH_DISTANCE) continue;
 
     if (target.isLocal) {
-      player.alive = false;
-      if (document.pointerLockElement) document.exitPointerLock();
-      playSting();
-      showEnd(false);
+      handleLocalCaught(true);
     } else if (online.isHost) {
       const remote = remotePlayers.get(target.id);
       if (remote) {
@@ -1254,6 +1407,48 @@ function checkMonsterCatchTargets() {
       emitHorrorEvent({ type: "caught", targetSocketId: target.id });
     }
     break;
+  }
+}
+
+function handleLocalCaught(sendNetwork) {
+  if (!player.alive || player.escaped || teamEscaped) return;
+  playSting();
+  player.night += 1;
+
+  if (player.night > MAX_NIGHTS) {
+    player.alive = false;
+    if (document.pointerLockElement) document.exitPointerLock();
+    showEnd(false);
+    if (sendNetwork) emitHorrorEvent({ type: "caught", targetSocketId: online.socket?.id || "local" });
+    return;
+  }
+
+  resetAfterCapture();
+  showEvent(`Voce acordou de novo. Noite ${player.night}/${MAX_NIGHTS}.`);
+}
+
+function resetAfterCapture() {
+  player.alive = true;
+  player.hiding = false;
+  player.hidingSpot = null;
+  player.holding = null;
+  player.crouching = false;
+  player.pos.copy(findMarker("S"));
+  player.yaw = -Math.PI / 2;
+  player.pitch = 0;
+  player.stepTimer = 0;
+  updateCamera(1);
+
+  if (!online.roomId || online.isHost) {
+    monster.pos.copy(findMarker("M"));
+    monster.forward.set(0, 0, -1);
+    monster.state = "patrol";
+    monster.path = [];
+    monster.pathIndex = 0;
+    monster.investigateTarget = null;
+    monster.lastSeenPos = null;
+    monster.repathTimer = 0;
+    if (monster.root) monster.root.position.copy(monster.pos);
   }
 }
 
@@ -1364,8 +1559,19 @@ function hasLineOfSight(from, to) {
 }
 
 function updateHud(dt = 0) {
-  objectiveText.textContent = teamEscaped ? "Livre" : (player.hasKey || teamHasKey) ? "Abra a porta" : "Encontre a chave";
-  inventoryText.textContent = (player.hasKey || teamHasKey) ? "Chave" : player.holding ? player.holding.label : "Vazio";
+  const hasKey = player.hasKey || teamHasKey;
+  const hasFuse = player.hasFuse || teamHasFuse;
+  const hasTool = player.hasTool || teamHasTool;
+  const missing = [];
+  if (!hasKey) missing.push("chave");
+  if (!hasFuse) missing.push("fusivel");
+  if (!hasTool) missing.push("ferramenta");
+
+  objectiveText.textContent = teamEscaped ? "Livre" : missing.length ? `Ache ${missing[0]}` : "Abra a porta";
+  inventoryText.textContent = player.holding
+    ? player.holding.label
+    : [hasKey && "Chave", hasFuse && "Fusivel", hasTool && "Ferramenta"].filter(Boolean).join(" + ") || "Vazio";
+  if (nightText) nightText.textContent = `${Math.min(player.night, MAX_NIGHTS)}/${MAX_NIGHTS}`;
 
   if (monster.state === "chase") {
     alertPanel.className = "hud-block alert-state is-alert";

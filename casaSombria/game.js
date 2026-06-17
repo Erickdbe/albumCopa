@@ -8,16 +8,16 @@ const GRANNY_ORIGIN_Y = {
   main: 5.76,
   top: 9.15
 };
-const GRANNY_START = new THREE.Vector3(44.7, GRANNY_ORIGIN_Y.top, 25.45);
-const PLAYER_SPEED = 5.2;
-const SPRINT_SPEED = 7.2;
-const PLAYER_RADIUS = 0.42;
+const GRANNY_START = new THREE.Vector3(49.5, GRANNY_ORIGIN_Y.main, 24.5);
+const PLAYER_SPEED = 5.0;
+const SPRINT_SPEED = 6.6;
+const PLAYER_RADIUS = 0.34;
 const PLAYER_EYE_HEIGHT = 1.34;
 const PLAYER_STEP_HEIGHT = 0.72;
 const PLAYER_MAX_DROP = 1.15;
 const PLAYER_JUMP_SPEED = 4.8;
 const GRAVITY = 13.5;
-const GRANNY_RADIUS = 0.52;
+const GRANNY_RADIUS = 0.32;
 const GRANNY_FOOT_OFFSET = 0.9;
 const GRANNY_STEP_HEIGHT = 0.78;
 const GRANNY_MAX_DROP = 1.35;
@@ -25,6 +25,7 @@ const FLOOR_RAY_LIFT = 1.25;
 const FLOOR_RAY_DEPTH = 4.8;
 const WALKABLE_NORMAL_MIN = 0.42;
 const ITEM_VISUAL_SCALE = 0.62;
+const MAX_COLLISION_STEP = 0.12;
 const INTERACT_DISTANCE = 3.4;
 const GRANNY_CATCH_DISTANCE = 3.0;
 const GRANNY_NOTICE_DISTANCE = 8.5;
@@ -80,7 +81,7 @@ renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x020303);
-scene.fog = new THREE.FogExp2(0x020303, 0.046);
+scene.fog = new THREE.FogExp2(0x020303, 0.062);
 
 const camera = new THREE.PerspectiveCamera(74, window.innerWidth / window.innerHeight, 0.05, 120);
 camera.rotation.order = "YXZ";
@@ -97,6 +98,7 @@ const doors = new Map();
 const spiders = [];
 const walkableMeshes = [];
 const wallMeshes = [];
+const solidRayMeshes = [];
 const solidObjects = [];
 const tempVec = new THREE.Vector3();
 const tempBox = new THREE.Box3();
@@ -139,28 +141,13 @@ const granny = {
 };
 
 const patrolPoints = [
-  [44.7, GRANNY_ORIGIN_Y.top, 25.45],
-  [46.85, GRANNY_ORIGIN_Y.top, 20.2],
-  [52.0, GRANNY_ORIGIN_Y.top, 19.1],
-  [47.0, 8.84, 21.75],
-  [47.5, 8.84, 21.75],
-  [47.5, 7.91, 22.5],
-  [47.5, 7.29, 23.25],
-  [47.5, 6.67, 23.75],
-  [47.5, 6.05, 24.5],
   [49.5, GRANNY_ORIGIN_Y.main, 24.5],
   [49.5, GRANNY_ORIGIN_Y.main, 20.2],
   [48.45, GRANNY_ORIGIN_Y.main, 20.2],
   [49.5, GRANNY_ORIGIN_Y.main, 20.2],
   [49.5, GRANNY_ORIGIN_Y.main, 24.5],
   [47.5, 6.05, 24.5],
-  [47.5, 6.67, 23.75],
-  [47.5, 7.29, 23.25],
-  [47.5, 7.91, 22.5],
-  [47.5, 8.84, 21.75],
-  [47.0, 8.84, 21.75],
-  [52.0, GRANNY_ORIGIN_Y.top, 19.1],
-  [46.85, GRANNY_ORIGIN_Y.top, 20.2]
+  [49.5, GRANNY_ORIGIN_Y.main, 24.5]
 ].map(([x, y, z]) => new THREE.Vector3(x, y, z));
 
 const audio = {
@@ -441,7 +428,7 @@ const hidingSpots = [
   },
   {
     id: "cabinet-basement",
-    label: "Atrás do movel",
+    label: "Atras do movel",
     position: new THREE.Vector3(49.0, 5.0, 21.0),
     hidePosition: new THREE.Vector3(49.0, 4.45, 21.0),
     exitPosition: new THREE.Vector3(50.1, 5.07, 22.1),
@@ -503,15 +490,15 @@ function makeMaterial(texturePath, options = {}) {
 }
 
 function buildLighting() {
-  scene.add(new THREE.HemisphereLight(0x5f7268, 0x090403, 0.34));
+  scene.add(new THREE.HemisphereLight(0x46554d, 0x050202, 0.2));
 
-  const moon = new THREE.DirectionalLight(0x8fa5dd, 0.48);
+  const moon = new THREE.DirectionalLight(0x7c8fbf, 0.26);
   moon.position.set(44, 34, 16);
   moon.castShadow = true;
   moon.shadow.mapSize.set(2048, 2048);
   scene.add(moon);
 
-  const handLight = new THREE.SpotLight(0xffd18f, 2.05, 20, Math.PI / 6.2, 0.55, 1.45);
+  const handLight = new THREE.SpotLight(0xffc27d, 1.35, 15, Math.PI / 7.2, 0.62, 1.6);
   handLight.position.set(0, 0, 0);
   handLight.target.position.set(0, 0, -1);
   camera.add(handLight);
@@ -519,10 +506,10 @@ function buildLighting() {
   scene.add(camera);
 
   [
-    [50.3, 11.6, 26.8, 0xe7bd73, 1.0],
-    [45.2, 10.9, 18.5, 0xd4f1ff, 0.72],
-    [54.7, 7.6, 22.5, 0xe7bd73, 0.84],
-    [50.4, 4.9, 28.5, 0xc8d6ff, 0.9]
+    [50.3, 11.6, 26.8, 0xe7bd73, 0.52],
+    [45.2, 10.9, 18.5, 0xd4f1ff, 0.38],
+    [54.7, 7.6, 22.5, 0xe7bd73, 0.44],
+    [50.4, 4.9, 28.5, 0xc8d6ff, 0.48]
   ].forEach(([x, y, z, color, power]) => {
     const light = new THREE.PointLight(color, power, 10, 1.8);
     light.position.set(x, y, z);
@@ -589,7 +576,10 @@ function registerEntity(def, object) {
   if (def.hidden) object.visible = false;
 
   if (def.id === "house") registerHouseCollision(object);
-  if (isSolidObject(def)) solidObjects.push({ id: def.id, kind: def.kind, object });
+  if (isSolidObject(def)) {
+    solidObjects.push({ id: def.id, kind: def.kind, object });
+    registerSolidObjectMeshes(object);
+  }
   if (def.kind === "item") applyItemPresentation(object);
 
   if (def.kind === "item") {
@@ -665,11 +655,20 @@ function applyItemPresentation(object) {
   object.updateMatrixWorld(true);
 }
 
+function registerSolidObjectMeshes(object) {
+  object.traverse((child) => {
+    if (child.isMesh) solidRayMeshes.push(child);
+  });
+}
+
 function registerHouseCollision(object) {
   object.traverse((child) => {
     if (!child.isMesh) return;
     if (/HouseFloor|HouseWalls/i.test(child.name)) walkableMeshes.push(child);
-    if (/HouseWalls|ExitDoor|ElectricCabinet|Furniture|Microwave|Tunna|cup/i.test(child.name)) {
+    if (!/HouseFloor|blood/i.test(child.name)) {
+      solidRayMeshes.push(child);
+    }
+    if (/HouseWalls|ExitDoor|ElectricCabinet|Furniture|Microwave|Tunna|cup|Bench|Klocka|Proppskop|Cellar/i.test(child.name)) {
       wallMeshes.push(child);
     }
     if (/ExitDoor|ElectricCabinet|Microwave|Tunna|cup/i.test(child.name)) {
@@ -833,6 +832,16 @@ function updatePlayer(dt) {
 function movePlayerAxis(deltaX, deltaZ, dt) {
   if (Math.abs(deltaX) + Math.abs(deltaZ) < 0.0001) return false;
 
+  const steps = Math.max(1, Math.ceil(Math.hypot(deltaX, deltaZ) / MAX_COLLISION_STEP));
+  let moved = false;
+  for (let i = 0; i < steps; i += 1) {
+    if (movePlayerAxisStep(deltaX / steps, deltaZ / steps, dt / steps)) moved = true;
+    else break;
+  }
+  return moved;
+}
+
+function movePlayerAxisStep(deltaX, deltaZ, dt) {
   const next = player.pos.clone();
   next.x = THREE.MathUtils.clamp(next.x + deltaX, MAP_BOUNDS.minX, MAP_BOUNDS.maxX);
   next.z = THREE.MathUtils.clamp(next.z + deltaZ, MAP_BOUNDS.minZ, MAP_BOUNDS.maxZ);
@@ -1010,24 +1019,57 @@ function blockedBySolidObject(nextPos, body = PLAYER_BODY) {
 }
 
 function blockedByHouseWall(from, nextPos, body = PLAYER_BODY) {
-  if (!wallMeshes.length) return false;
+  const meshes = solidRayMeshes.length ? solidRayMeshes : wallMeshes;
+  if (!meshes.length) return false;
 
   const direction = nextPos.clone().sub(from).setY(0);
   const distance = direction.length();
   if (distance < 0.0001) return false;
   direction.normalize();
+  const side = new THREE.Vector3(-direction.z, 0, direction.x);
 
   const rayHeights = [
-    nextPos.y + body.bottomOffset + 0.34,
-    nextPos.y + body.topOffset - 0.36
+    nextPos.y + body.bottomOffset + 0.26,
+    nextPos.y + (body.bottomOffset + body.topOffset) * 0.5,
+    nextPos.y + body.topOffset - 0.26
+  ];
+  const lateralOffsets = [
+    0,
+    body.radius * 0.72,
+    -body.radius * 0.72
   ];
 
   for (const y of rayHeights) {
-    wallRaycaster.set(new THREE.Vector3(from.x, y, from.z), direction);
-    wallRaycaster.near = 0.03;
-    wallRaycaster.far = distance + body.radius;
-    const hits = wallRaycaster.intersectObjects(wallMeshes, false);
-    if (hits.some((hit) => isBlockingWallHit(hit, nextPos))) return true;
+    for (const offset of lateralOffsets) {
+      const origin = new THREE.Vector3(from.x, y, from.z).addScaledVector(side, offset);
+      wallRaycaster.set(origin, direction);
+      wallRaycaster.near = 0.02;
+      wallRaycaster.far = distance + body.radius + 0.08;
+      const hits = wallRaycaster.intersectObjects(meshes, false);
+      if (hits.some((hit) => isBlockingWallHit(hit, nextPos))) return true;
+    }
+  }
+
+  const probeDirections = [
+    direction,
+    direction.clone().negate(),
+    side,
+    side.clone().negate(),
+    direction.clone().add(side).normalize(),
+    direction.clone().sub(side).normalize(),
+    direction.clone().negate().add(side).normalize(),
+    direction.clone().negate().sub(side).normalize()
+  ];
+
+  for (const y of rayHeights) {
+    const origin = new THREE.Vector3(nextPos.x, y, nextPos.z);
+    for (const probeDirection of probeDirections) {
+      wallRaycaster.set(origin, probeDirection);
+      wallRaycaster.near = 0.01;
+      wallRaycaster.far = body.radius + 0.06;
+      const hits = wallRaycaster.intersectObjects(meshes, false);
+      if (hits.some((hit) => isBlockingWallHit(hit, nextPos))) return true;
+    }
   }
 
   return false;
@@ -1369,6 +1411,16 @@ function triggerGrannyAttack() {
 function moveGrannyAxis(deltaX, deltaZ, dt) {
   if (Math.abs(deltaX) + Math.abs(deltaZ) < 0.0001) return false;
 
+  const steps = Math.max(1, Math.ceil(Math.hypot(deltaX, deltaZ) / MAX_COLLISION_STEP));
+  let moved = false;
+  for (let i = 0; i < steps; i += 1) {
+    if (moveGrannyAxisStep(deltaX / steps, deltaZ / steps, dt / steps)) moved = true;
+    else break;
+  }
+  return moved;
+}
+
+function moveGrannyAxisStep(deltaX, deltaZ, dt) {
   const next = granny.pos.clone();
   next.x = THREE.MathUtils.clamp(next.x + deltaX, MAP_BOUNDS.minX, MAP_BOUNDS.maxX);
   next.z = THREE.MathUtils.clamp(next.z + deltaZ, MAP_BOUNDS.minZ, MAP_BOUNDS.maxZ);

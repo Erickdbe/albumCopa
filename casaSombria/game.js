@@ -60,6 +60,8 @@ let loadedCount = 0;
 let totalToLoad = 0;
 let activePrompt = null;
 let eventTimer = 0;
+let pointerLockWasActive = false;
+let ignorePointerUnlockUntil = 0;
 
 const player = {
   pos: PLAYER_START.clone(),
@@ -560,12 +562,24 @@ function bindEvents() {
   });
 
   document.addEventListener("pointerlockchange", () => {
-    if (document.pointerLockElement !== canvas && running && !player.escaped) {
-      startOverlay.classList.add("is-visible");
-      startButton.disabled = loadedCount < totalToLoad;
-      loadText.textContent = "A partida esta pausada.";
-      running = false;
+    if (document.pointerLockElement === canvas) {
+      pointerLockWasActive = true;
+      return;
     }
+
+    if (!running || player.escaped) return;
+    if (!pointerLockWasActive || performance.now() < ignorePointerUnlockUntil) return;
+
+    startOverlay.classList.add("is-visible");
+    startButton.disabled = loadedCount < totalToLoad;
+    loadText.textContent = "A partida esta pausada.";
+    running = false;
+  });
+
+  canvas.addEventListener("click", () => {
+    if (!running || document.pointerLockElement === canvas) return;
+    ignorePointerUnlockUntil = performance.now() + 900;
+    requestGamePointerLock();
   });
 
   document.addEventListener("mousemove", (event) => {
@@ -594,9 +608,11 @@ function bindEvents() {
 function startGame() {
   if (loadedCount < totalToLoad) return;
   running = true;
+  pointerLockWasActive = false;
+  ignorePointerUnlockUntil = performance.now() + 1200;
   startOverlay.classList.remove("is-visible");
   endOverlay.classList.remove("is-visible");
-  canvas.requestPointerLock?.();
+  requestGamePointerLock();
   playAudio(audio.ambient, false);
 }
 
@@ -604,6 +620,16 @@ function startDemoMode() {
   if (running || loadedCount < totalToLoad) return;
   running = true;
   startOverlay.classList.remove("is-visible");
+}
+
+function requestGamePointerLock() {
+  if (document.pointerLockElement === canvas) return;
+  try {
+    const result = canvas.requestPointerLock?.();
+    if (result && typeof result.catch === "function") result.catch(() => {});
+  } catch {
+    // Pointer lock can be denied by the browser; the game keeps running.
+  }
 }
 
 function restartGame() {

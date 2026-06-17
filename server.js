@@ -13,6 +13,7 @@ const cors       = require("cors");
 const fs         = require("fs");
 const path       = require("path");
 const crypto     = require("crypto");
+const { spawn }  = require("child_process");
 
 function loadLocalEnv() {
   const envFile = path.join(__dirname, ".env");
@@ -75,6 +76,8 @@ const RARITY_SETTINGS = {
   legendary: { chance: 1.3, duplicateChance: 0.10 }
 };
 const RARITY_ORDER = ["common", "rare", "legendary"];
+const CASA_SOMBRIA_DIR = path.join(__dirname, "casaSombria", "casaSombria");
+const CASA_SOMBRIA_EXE = path.join(CASA_SOMBRIA_DIR, "bin", "GAME_APPLICATION.exe");
 const SERVER_STICKER_OVERRIDES = {
   55: { name: "Fabinho Cocorico", image: "assets/album-copa/figurinhas/fabinho%20cocorico.png" },
   56: { name: "Juiz", rarity: "rare", image: "assets/album-copa/figurinhas/Juiz.png" },
@@ -440,6 +443,53 @@ const chatHistory = [];
 app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname)));
+
+function isLocalRequest(req) {
+  const address = String(req.ip || req.socket?.remoteAddress || "");
+  return address === "127.0.0.1"
+    || address === "::1"
+    || address === "::ffff:127.0.0.1"
+    || address === "localhost";
+}
+
+app.get("/api/casa-sombria/status", (req, res) => {
+  res.json({
+    available: fs.existsSync(CASA_SOMBRIA_EXE),
+    localOnly: true,
+    project: "casaSombria/casaSombria",
+    executable: "casaSombria/casaSombria/bin/GAME_APPLICATION.exe",
+    build: [
+      "cmake -S casaSombria/casaSombria -B casaSombria/casaSombria/build",
+      "cmake --build casaSombria/casaSombria/build --config Release"
+    ]
+  });
+});
+
+app.post("/api/casa-sombria/launch", (req, res) => {
+  if (!isLocalRequest(req)) {
+    return res.status(403).json({ error: "O jogo nativo so pode ser aberto pelo servidor local." });
+  }
+
+  if (!fs.existsSync(CASA_SOMBRIA_EXE)) {
+    return res.status(404).json({
+      error: "Executavel nao encontrado. Compile o casaSombria primeiro.",
+      executable: "casaSombria/casaSombria/bin/GAME_APPLICATION.exe"
+    });
+  }
+
+  try {
+    const child = spawn(CASA_SOMBRIA_EXE, [], {
+      cwd: CASA_SOMBRIA_DIR,
+      detached: true,
+      stdio: "ignore",
+      windowsHide: false
+    });
+    child.unref();
+    return res.json({ ok: true });
+  } catch (error) {
+    return res.status(500).json({ error: error.message || "Nao foi possivel abrir o jogo." });
+  }
+});
 
 // Rota raiz → abre o álbum
 app.get("/", (req, res) => {

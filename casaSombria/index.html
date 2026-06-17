@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Casa Sombria</title>
+  <link rel="stylesheet" href="./launcher.css" />
+</head>
+<body>
+  <main class="launcher">
+    <section class="hero" aria-label="Casa Sombria">
+      <div class="hero-copy">
+        <p class="eyebrow">Album da Copa</p>
+        <h1>Casa Sombria</h1>
+        <p class="summary">O jogo 3D nativo agora esta conectado ao album.</p>
+      </div>
+
+      <div class="actions" aria-live="polite">
+        <div class="status" id="statusText">Verificando o jogo...</div>
+        <button class="primary" id="launchGame" type="button" disabled>Abrir jogo</button>
+        <a class="secondary" href="/Album/index.html">Voltar ao album</a>
+      </div>
+    </section>
+
+    <section class="build-panel" id="buildPanel" hidden>
+      <div>
+        <h2>Build necessario</h2>
+        <p>Quando o executavel existir em <code>casaSombria/casaSombria/bin/GAME_APPLICATION.exe</code>, o botao abre o jogo direto.</p>
+      </div>
+      <pre id="buildCommands"></pre>
+    </section>
+  </main>
+
+  <script src="./launcher.js"></script>
+</body>
+</html>

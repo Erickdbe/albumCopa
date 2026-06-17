@@ -3,6 +3,7 @@ import { OBJLoader } from "three/addons/loaders/OBJLoader.js";
 
 const ASSET_ROOT = "./Granny_Game-main/assets";
 const PLAYER_START = new THREE.Vector3(55, 8, 18);
+const GRANNY_START = new THREE.Vector3(45.7, 11.25, 14.45);
 const PLAYER_SPEED = 5.2;
 const SPRINT_SPEED = 7.2;
 const INTERACT_DISTANCE = 3.4;
@@ -76,8 +77,8 @@ const player = {
 
 const granny = {
   object: null,
-  pos: new THREE.Vector3(50, 5.7, 23),
-  targetIndex: 0,
+  pos: GRANNY_START.clone(),
+  targetIndex: 14,
   noiseTarget: null,
   state: "patrol"
 };
@@ -121,7 +122,7 @@ const modelDefs = [
     id: "granny",
     path: "models/test2.obj",
     texture: "textures/Torso1_diff (1).png",
-    position: [50, 5.7, 23],
+    position: [GRANNY_START.x, GRANNY_START.y, GRANNY_START.z],
     scale: [0.05, 0.05, 0.05],
     kind: "granny"
   },
@@ -652,8 +653,9 @@ function loop() {
 function updatePlayer(dt) {
   player.caughtCooldown = Math.max(0, player.caughtCooldown - dt);
 
-  const forward = new THREE.Vector3(Math.sin(player.yaw), 0, Math.cos(player.yaw) * -1).normalize();
-  const right = new THREE.Vector3(forward.z, 0, -forward.x).normalize();
+  const cameraYaw = new THREE.Euler(0, player.yaw, 0, "YXZ");
+  const forward = new THREE.Vector3(0, 0, -1).applyEuler(cameraYaw).normalize();
+  const right = new THREE.Vector3(1, 0, 0).applyEuler(cameraYaw).normalize();
   const move = new THREE.Vector3();
 
   if (keys.has("w")) move.add(forward);

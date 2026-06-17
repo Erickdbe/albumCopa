@@ -6471,6 +6471,55 @@
     };
     const keys = new Set();
     const justPressedKeys = new Set(); // tecla pressionada SÓ no primeiro frame
+    const KICK_BUFFER_MS = 140;
+    let kickBufferUntil = 0;
+    let kickFiredThisFrame = false;
+
+    function isKickEvent(event) {
+      return event?.code === "Space" || event?.key === " " || event?.key === "Space";
+    }
+
+    function markKickPressed() {
+      justPressedKeys.add(" ");
+      justPressedKeys.add("Space");
+      kickBufferUntil = Math.max(kickBufferUntil, performance.now() + KICK_BUFFER_MS);
+    }
+
+    function readKickPress() {
+      if (kickBufferUntil && performance.now() > kickBufferUntil) {
+        kickBufferUntil = 0;
+      }
+      return justPressedKeys.has(" ") || justPressedKeys.has("Space") || kickBufferUntil > 0;
+    }
+
+    function consumeKickPress() {
+      if (!readKickPress()) return false;
+      kickBufferUntil = 0;
+      justPressedKeys.delete(" ");
+      justPressedKeys.delete("Space");
+      kickFiredThisFrame = true;
+      return true;
+    }
+
+    function beginKickFrame() {
+      kickFiredThisFrame = false;
+    }
+
+    function resetKickInput() {
+      kickBufferUntil = 0;
+      kickFiredThisFrame = false;
+      justPressedKeys.clear();
+    }
+
+    function markJustPressedKey(event) {
+      if (isKickEvent(event)) {
+        markKickPressed();
+        return;
+      }
+      justPressedKeys.add(event.key);
+      justPressedKeys.add(event.key.toLowerCase());
+      justPressedKeys.add(event.code);
+    }
     const game = {
       running: false,
       overtime: false,
@@ -6644,6 +6693,7 @@
       }
 
       keys.clear();
+      resetKickInput();
       gameModal.classList.remove("is-open");
       gameModal.setAttribute("aria-hidden", "true");
       document.getElementById("tauntBar").style.display = "none";
@@ -6764,6 +6814,7 @@
       }
 
       keys.clear();
+      resetKickInput();
       unlockGameAudio();
       const teams    = getCollectibleStickers();
       const playerId = Number(teamSelect.value || teams[0].id);
@@ -6793,6 +6844,7 @@
     function endGame(result) {
       game.running = false;
       keys.clear();
+      resetKickInput();
       cancelAnimationFrame(game.animationId);
 
       // Offline = treino, sem créditos
@@ -7373,15 +7425,18 @@
       }
 
       // Chute: só no primeiro frame do pressionamento (evita "puxar" a bola)
-      const playerKick = justPressedKeys.has(" ") || justPressedKeys.has("Space");
+      const playerKick = !(game.player.kickCooldown > 0) && consumeKickPress();
       collideBallWithPlayer(game.player, playerKick);
       // Kick do oponente: host usa input do guest, guest usa kick do host (chegou via estado)
       const cpuIsKicking = (game.isOnlineGame && game.onlineRole === "host")
-        ? (typeof mp !== "undefined" && mp.guestInputs?.kick)
+        ? (typeof mp !== "undefined" && mp.guestKickQueued && !(game.cpu.kickCooldown > 0))
         : (game.isOnlineGame && game.onlineRole === "guest")
           ? (typeof mp !== "undefined" && mp.lastHostKick)
           : Math.abs(game.ball.x - game.cpu.x) < 75 && !(game.cpu.kickCooldown > 0);
       collideBallWithPlayer(game.cpu, cpuIsKicking);
+      if (cpuIsKicking && game.isOnlineGame && game.onlineRole === "host" && typeof mp !== "undefined") {
+        mp.guestKickQueued = false;
+      }
     }
 
     function gameLoop(now) {
@@ -7392,6 +7447,7 @@
       const dt = Math.min((now - game.lastTime) / 1000, 0.033);
       game.lastTime = now;
       game.remaining -= dt;
+      beginKickFrame();
 
       const playerControls = {
         left: keys.has("ArrowLeft") || keys.has("a"),
@@ -8000,8 +8056,7 @@
     function pressScreenKick() {
       unlockGameAudio();
       if (!screenKickFired) {
-        justPressedKeys.add(" ");
-        justPressedKeys.add("Space");
+        markKickPressed();
         screenKickFired = true;
       }
       keys.add(" ");
@@ -8115,15 +8170,13 @@
 
     document.addEventListener("keydown", (event) => {
       if (gameModal.classList.contains("is-open")) {
-        if (["ArrowLeft", "ArrowRight", "ArrowUp", " ", "Space"].includes(event.key) || ["Space", "ArrowLeft", "ArrowRight", "ArrowUp"].includes(event.code)) {
+        if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", " ", "Space"].includes(event.key) || ["Space", "ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.code)) {
           event.preventDefault();
         }
 
         // justPressedKeys: registra apenas o primeiro frame da tecla (sem repeat)
         if (!event.repeat) {
-          justPressedKeys.add(event.key);
-          justPressedKeys.add(event.key.toLowerCase());
-          justPressedKeys.add(event.code);
+          markJustPressedKey(event);
         }
 
         keys.add(event.key);
@@ -8159,6 +8212,12 @@
     });
 
     document.addEventListener("keyup", (event) => {
+      if (gameModal.classList.contains("is-open")) {
+        if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", " ", "Space"].includes(event.key) || ["Space", "ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.code)) {
+          event.preventDefault();
+        }
+      }
+
       keys.delete(event.key);
       keys.delete(event.key.toLowerCase());
       keys.delete(event.code);
@@ -8235,6 +8294,7 @@
       headLastInputAt: 0,
       headLastInput: null,
       guestInputs:      { left: false, right: false, jump: false, kick: false },
+      guestKickQueued:  false,
       lastHostKick:     false   // kick do host recebido via game:state (usado pelo guest)
     };
 
@@ -8521,7 +8581,8 @@
       // Inputs do guest (guest → host)
       mp.socket.on("game:input", (inputs) => {
         if (mp.role !== "host") return;
-        mp.guestInputs = inputs;
+        mp.guestInputs = { ...inputs, kick: false };
+        if (inputs?.kick) mp.guestKickQueued = true;
       });
 
       // Gol marcado (replicado para o guest)
@@ -9414,6 +9475,7 @@
 
     function startOnlineGame(role, opponentUsername, myBet, opponentBet) {
       keys.clear();
+      resetKickInput();
       unlockGameAudio();
 
       const teams    = getCollectibleStickers();
@@ -9438,6 +9500,8 @@
       game.running         = true;
       game.isOnlineGame    = true;
       game.onlineRole      = role;
+      mp.guestKickQueued   = false;
+      mp.lastHostKick      = false;
 
       playerTeamName.textContent = role === "host"
         ? game.playerSticker.country
@@ -9503,7 +9567,7 @@
     function serializeGameState() {
       const b = game.ball; const p1 = game.player; const p2 = game.cpu;
       // p1kick: host chutou nesse frame (usado pelo guest para física local da bola)
-      const p1kick = justPressedKeys.has(" ") || justPressedKeys.has("Space");
+      const p1kick = kickFiredThisFrame;
       return {
         bx: b.x, by: b.y, bvx: b.vx, bvy: b.vy,
         p1x: p1.x, p1y: p1.y, p1vx: p1.vx, p1vy: p1.vy, p1k: p1.kickTimer,
@@ -9519,8 +9583,11 @@
       game.isOnlineGame = false;
       game.onlineRole   = null;
       keys.clear();
+      resetKickInput();
       cancelAnimationFrame(game.animationId);
       mp.roomId = null;
+      mp.guestKickQueued = false;
+      mp.lastHostKick = false;
       document.getElementById("tauntBar").style.display = "none";
 
       if (disconnected) {
@@ -9604,6 +9671,7 @@
       const dt = Math.min((now - game.lastTime) / 1000, 0.033);
       game.lastTime = now;
       game.remaining -= dt;
+      beginKickFrame();
 
       if (mp.role === "host") {
         // Host: usa inputs locais para o player e inputs remotos para o "cpu"
@@ -9623,21 +9691,28 @@
 
         // Envia estado ao guest a 60fps com volatile (descarta se atrasado)
         if (now - _lastNetworkTime > 16 && mp.socket?.connected) {
-          mp.socket.volatile.emit("game:state", serializeGameState());
+          const statePayload = serializeGameState();
+          if (statePayload.p1kick) {
+            mp.socket.emit("game:state", statePayload);
+          } else {
+            mp.socket.volatile.emit("game:state", statePayload);
+          }
           _lastNetworkTime = now;
         }
 
         // Envia kick do host (apenas no primeiro frame do pressionamento)
-        const kicking = justPressedKeys.has(" ") || justPressedKeys.has("Space");
+        const kicking = kickFiredThisFrame;
         if (mp.socket?.connected) {
-          mp.socket.volatile.emit("game:input", {
-            left: false, right: false, jump: false, kick: kicking
-          });
+          const inputPayload = { left: false, right: false, jump: false, kick: kicking };
+          if (kicking) {
+            mp.socket.emit("game:input", inputPayload);
+          } else {
+            mp.socket.volatile.emit("game:input", inputPayload);
+          }
         }
 
       } else {
         // Guest: física completa local → sem esperar resposta do host para sentir o jogo
-        const kick = justPressedKeys.has(" ") || justPressedKeys.has("Space");
         const guestControls = {
           left:  keys.has("ArrowLeft")  || keys.has("a"),
           right: keys.has("ArrowRight") || keys.has("d"),
@@ -9660,7 +9735,13 @@
 
         // Envia inputs ao host a 60fps
         if (mp.socket?.connected && now - _lastNetworkTime > 16) {
-          mp.socket.volatile.emit("game:input", { ...guestControls, kick });
+          const kick = kickFiredThisFrame;
+          const inputPayload = { ...guestControls, kick };
+          if (kick) {
+            mp.socket.emit("game:input", inputPayload);
+          } else {
+            mp.socket.volatile.emit("game:input", inputPayload);
+          }
           _lastNetworkTime = now;
         }
       }
@@ -10486,7 +10567,7 @@
 
       if (firstRender) {
         keys.clear();
-        justPressedKeys.clear();
+        resetKickInput();
       }
 
       gameModal.classList.add("is-open");
@@ -10541,7 +10622,7 @@
       mp.headLastInputAt = 0;
       mp.headLastInput = null;
       keys.clear();
-      justPressedKeys.clear();
+      resetKickInput();
       document.getElementById("headSoccerInviteToast").classList.add("hidden");
       gameModal.classList.remove("is-open");
       gameModal.setAttribute("aria-hidden", "true");
@@ -10561,7 +10642,7 @@
     }
 
     function currentHeadInput() {
-      const kick = justPressedKeys.has(" ") || justPressedKeys.has("Space");
+      const kick = consumeKickPress();
       return {
         left: keys.has("ArrowLeft") || keys.has("a"),
         right: keys.has("ArrowRight") || keys.has("d"),
@@ -10585,13 +10666,14 @@
         || previous.kick !== input.kick;
 
       if (changed || now - mp.headLastInputAt > 90) {
-        mp.socket.volatile.emit("head:input", { roomId: mp.headRoomId, inputs: input });
+        const payload = { roomId: mp.headRoomId, inputs: input };
+        if (input.kick) {
+          mp.socket.emit("head:input", payload);
+        } else {
+          mp.socket.volatile.emit("head:input", payload);
+        }
         mp.headLastInput = { ...input };
         mp.headLastInputAt = now;
-      }
-
-      if (input.kick) {
-        justPressedKeys.clear();
       }
     }
 

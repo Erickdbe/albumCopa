@@ -1723,6 +1723,7 @@ function makeHeadSoccerPlayer(socket, index, bet) {
     inputs: { left: false, right: false, up: false, down: false, jump: false, kick: false },
     kickTimer: 0,
     kickCooldown: 0,
+    kickQueued: false,
     joinedAt: Date.now()
   };
 }
@@ -1764,6 +1765,7 @@ function resetHeadSoccerPositions(room) {
     player.faceY = 0;
     player.kickTimer = 0;
     player.kickCooldown = 0;
+    player.kickQueued = false;
   });
 
   red.forEach((player, index) => {
@@ -1776,6 +1778,7 @@ function resetHeadSoccerPositions(room) {
     player.faceY = 0;
     player.kickTimer = 0;
     player.kickCooldown = 0;
+    player.kickQueued = false;
   });
 
   room.ball = {
@@ -1863,6 +1866,7 @@ function startHeadSoccerRound(room, requestedBet = room.bet) {
     });
     player.bet = tableBet;
     player.inputs = { left: false, right: false, up: false, down: false, jump: false, kick: false };
+    player.kickQueued = false;
   });
 
   room.bet = tableBet;
@@ -1973,7 +1977,7 @@ function collideHeadSoccerBallWithPlayer(room, player) {
     ball.vy = ny * 380 + player.vy * 0.48;
   }
 
-  if (player.inputs?.kick && player.kickCooldown <= 0) {
+  if (player.kickQueued && player.kickCooldown <= 0) {
     let dirX = Number(player.faceX || player.side || 1);
     let dirY = Number(player.faceY || 0);
     const dirLength = Math.hypot(dirX, dirY) || 1;
@@ -1997,6 +2001,7 @@ function collideHeadSoccerBallWithPlayer(room, player) {
 
     player.kickTimer = 0.24;
     player.kickCooldown = 0.28;
+    player.kickQueued = false;
 
     if (inFront && footDist < ball.radius + player.radius + 50) {
       ball.x = footX + dirX * (ball.radius + 10);
@@ -5395,12 +5400,22 @@ io.on("connection", (socket) => {
   // ── Jogo em tempo real ─────────────────────────────────────────────────
   socket.on("game:state", (state) => {
     const p = onlinePlayers.get(socket.id);
-    if (p?.roomId) socket.volatile.to(p.roomId).emit("game:state", state);
+    if (!p?.roomId) return;
+    if (state?.p1kick) {
+      socket.to(p.roomId).emit("game:state", state);
+    } else {
+      socket.volatile.to(p.roomId).emit("game:state", state);
+    }
   });
 
   socket.on("game:input", (inputs) => {
     const p = onlinePlayers.get(socket.id);
-    if (p?.roomId) socket.volatile.to(p.roomId).emit("game:input", inputs);
+    if (!p?.roomId) return;
+    if (inputs?.kick) {
+      socket.to(p.roomId).emit("game:input", inputs);
+    } else {
+      socket.volatile.to(p.roomId).emit("game:input", inputs);
+    }
   });
 
   socket.on("game:goal", ({ scorer, scores, roomId }) => {
@@ -5556,14 +5571,16 @@ io.on("connection", (socket) => {
     if (!room || room.status !== "playing") return;
     const player = room.players.find(item => item.socketId === socket.id);
     if (!player) return;
+    const kickPressed = Boolean(inputs?.kick);
     player.inputs = {
       left: Boolean(inputs?.left),
       right: Boolean(inputs?.right),
       up: Boolean(inputs?.up || inputs?.jump),
       down: Boolean(inputs?.down),
       jump: Boolean(inputs?.jump),
-      kick: Boolean(inputs?.kick)
+      kick: false
     };
+    if (kickPressed) player.kickQueued = true;
   });
 
   socket.on("head:leave", ({ roomId }) => {

@@ -47,6 +47,14 @@
         <h1>Casa Sombria</h1>
         <p class="overlay-copy">A porta principal esta trancada. A criatura ronda a casa e reage ao menor barulho.</p>
         <button id="startButton" class="primary-button" type="button">Entrar</button>
+        <div class="online-actions">
+          <button id="createOnlineButton" class="secondary-button" type="button">Criar sala online</button>
+          <div class="join-row">
+            <input id="roomCodeInput" type="text" maxlength="5" placeholder="CODIGO" autocomplete="off">
+            <button id="joinOnlineButton" class="secondary-button" type="button">Entrar online</button>
+          </div>
+          <p id="onlineStatus" class="online-status"></p>
+        </div>
         <a class="ghost-link" href="/Album/index.html">Voltar ao album</a>
       </div>
     </section>
@@ -62,8 +70,14 @@
         </div>
       </div>
     </section>
+
+    <section id="onlineHud" class="online-hud" aria-label="Sala online">
+      <strong id="roomCodeLabel"></strong>
+      <span id="onlinePlayersLabel"></span>
+    </section>
   </main>
 
+  <script src="/socket.io/socket.io.js"></script>
   <script type="module" src="./game.js"></script>
 </body>
 </html>

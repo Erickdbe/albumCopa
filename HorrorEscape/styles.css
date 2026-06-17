@@ -238,6 +238,86 @@ h2 {
   filter: brightness(1.08);
 }
 
+.secondary-button {
+  min-height: 42px;
+  border: 1px solid rgba(244, 236, 217, 0.22);
+  background: rgba(244, 236, 217, 0.08);
+  color: var(--paper);
+  cursor: pointer;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.secondary-button:hover {
+  background: rgba(244, 236, 217, 0.14);
+}
+
+.online-actions {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.join-row {
+  display: grid;
+  grid-template-columns: minmax(92px, 120px) 1fr;
+  gap: 8px;
+}
+
+.join-row input {
+  min-width: 0;
+  height: 42px;
+  border: 1px solid rgba(244, 236, 217, 0.22);
+  background: rgba(0, 0, 0, 0.32);
+  color: var(--paper);
+  font: inherit;
+  font-weight: 950;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.join-row input::placeholder {
+  color: rgba(244, 236, 217, 0.38);
+}
+
+.online-status {
+  min-height: 18px;
+  margin: 0;
+  color: rgba(244, 236, 217, 0.68);
+  font-size: 0.82rem;
+  font-weight: 850;
+}
+
+.online-hud {
+  position: fixed;
+  top: clamp(96px, 12vw, 112px);
+  right: clamp(12px, 3vw, 32px);
+  z-index: 6;
+  min-width: min(280px, calc(100vw - 24px));
+  display: none;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--paper);
+  pointer-events: none;
+}
+
+.online-hud.is-visible {
+  display: grid;
+}
+
+.online-hud strong {
+  font-size: 0.84rem;
+  font-weight: 950;
+}
+
+.online-hud span {
+  color: rgba(244, 236, 217, 0.72);
+  font-size: 0.76rem;
+  font-weight: 850;
+}
+
 .ghost-link {
   display: inline-flex;
   margin-top: 14px;
@@ -266,5 +346,15 @@ h2 {
 
   .hud-bottom {
     bottom: 18px;
+  }
+
+  .join-row {
+    grid-template-columns: 1fr;
+  }
+
+  .online-hud {
+    top: auto;
+    right: 12px;
+    bottom: 112px;
   }
 }

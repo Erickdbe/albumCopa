@@ -36,6 +36,11 @@ const RAW_MAP = [
 
 const MAP_H = RAW_MAP.length;
 const MAP_W = RAW_MAP[0].length;
+const HOUSE_NOISE_RADIUS = Math.hypot(MAP_W * CELL, MAP_H * CELL);
+const ITEM_DROP_NOISE_RADIUS = HOUSE_NOISE_RADIUS;
+const DOOR_NOISE_RADIUS = HOUSE_NOISE_RADIUS;
+const SPRINT_NOISE_RADIUS = 22;
+const HORROR_MAX_PLAYERS_CLIENT = 4;
 const tmpVec3 = new THREE.Vector3();
 const tmpVecA = new THREE.Vector3();
 const tmpVecB = new THREE.Vector3();
@@ -45,6 +50,13 @@ const startOverlay = document.getElementById("startOverlay");
 const endOverlay = document.getElementById("endOverlay");
 const startButton = document.getElementById("startButton");
 const restartButton = document.getElementById("restartButton");
+const createOnlineButton = document.getElementById("createOnlineButton");
+const joinOnlineButton = document.getElementById("joinOnlineButton");
+const roomCodeInput = document.getElementById("roomCodeInput");
+const onlineStatus = document.getElementById("onlineStatus");
+const onlineHud = document.getElementById("onlineHud");
+const roomCodeLabel = document.getElementById("roomCodeLabel");
+const onlinePlayersLabel = document.getElementById("onlinePlayersLabel");
 const objectiveText = document.getElementById("objectiveText");
 const inventoryText = document.getElementById("inventoryText");
 const alertPanel = document.getElementById("alertPanel");
@@ -87,6 +99,7 @@ const interactables = [];
 const noisyItems = [];
 const noiseRipples = [];
 const patrolWaypoints = [];
+const remotePlayers = new Map();
 
 const player = {
   pos: findMarker("S"),
@@ -125,6 +138,18 @@ let pointerLocked = false;
 let audioCtx = null;
 let eventTimer = 0;
 let lastPrompt = "";
+let teamHasKey = false;
+let teamEscaped = false;
+
+const online = {
+  socket: null,
+  connected: false,
+  pendingAction: null,
+  roomId: null,
+  isHost: false,
+  sendTimer: 0,
+  hostTimer: 0
+};
 
 window.__casaSombriaMonsterLoaded = false;
 
@@ -144,6 +169,17 @@ function init() {
 function bindEvents() {
   startButton.addEventListener("click", () => startGame());
   restartButton.addEventListener("click", () => restartGame());
+  createOnlineButton?.addEventListener("click", () => createOnlineRoom());
+  joinOnlineButton?.addEventListener("click", () => joinOnlineRoom());
+  roomCodeInput?.addEventListener("input", () => {
+    roomCodeInput.value = roomCodeInput.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 5);
+  });
+  roomCodeInput?.addEventListener("keydown", (event) => {
+    if (event.code === "Enter") joinOnlineRoom();
+  });
+  window.addEventListener("beforeunload", () => {
+    if (online.socket?.connected && online.roomId) online.socket.emit("horror:leave");
+  });
 
   canvas.addEventListener("click", () => {
     if (!gameStarted || !player.alive || player.escaped) return;
@@ -199,6 +235,179 @@ function startGame() {
 
 function restartGame() {
   window.location.reload();
+}
+
+function createOnlineRoom() {
+  withOnlineSocket(() => {
+    setOnlineStatus("Criando sala...");
+    online.socket.emit("horror:create");
+  });
+}
+
+function joinOnlineRoom() {
+  const roomId = roomCodeInput.value.trim().toUpperCase();
+  if (roomId.length < 4) {
+    setOnlineStatus("Digite o codigo da sala.");
+    return;
+  }
+
+  withOnlineSocket(() => {
+    setOnlineStatus("Entrando na sala...");
+    online.socket.emit("horror:join", { roomId });
+  });
+}
+
+function withOnlineSocket(action) {
+  const token = localStorage.getItem("mp_token");
+  if (!token) {
+    setOnlineStatus("Faca login no album para jogar online.");
+    return;
+  }
+
+  if (online.socket?.connected) {
+    action();
+    return;
+  }
+
+  online.pendingAction = action;
+  setOnlineStatus("Conectando...");
+
+  if (online.socket) {
+    online.socket.connect();
+    return;
+  }
+
+  if (typeof window.io !== "function") {
+    setOnlineStatus("Socket.io nao carregou.");
+    return;
+  }
+
+  online.socket = window.io(window.location.origin, {
+    auth: { token },
+    autoConnect: true
+  });
+
+  online.socket.on("connect", () => {
+    online.connected = true;
+    const pending = online.pendingAction;
+    online.pendingAction = null;
+    if (pending) pending();
+  });
+
+  online.socket.on("connect_error", () => {
+    online.connected = false;
+    setOnlineStatus("Nao foi possivel conectar. Entre no album e faca login.");
+  });
+
+  online.socket.on("disconnect", () => {
+    online.connected = false;
+  });
+
+  online.socket.on("horror:error", (message) => setOnlineStatus(message || "Erro na sala."));
+  online.socket.on("horror:joined", (room) => handleOnlineJoined(room));
+  online.socket.on("horror:update", (room) => applyOnlineRoom(room));
+  online.socket.on("horror:player", (state) => updateRemotePlayer(state));
+  online.socket.on("horror:host-state", (state) => applyHostState(state));
+  online.socket.on("horror:event", (event) => handleRemoteEvent(event));
+  online.socket.on("horror:host", () => {
+    online.isHost = true;
+    showEvent("Voce agora esta guiando a criatura da sala.");
+  });
+}
+
+function setOnlineStatus(message) {
+  if (onlineStatus) onlineStatus.textContent = message || "";
+}
+
+function handleOnlineJoined(room) {
+  applyOnlineRoom(room);
+  setOnlineStatus(`Sala ${room.roomId}. Compartilhe esse codigo.`);
+  if (!gameStarted) startGame();
+}
+
+function applyOnlineRoom(room) {
+  if (!room?.roomId) return;
+  online.roomId = room.roomId;
+  online.isHost = room.hostSocketId === online.socket?.id;
+
+  if (roomCodeLabel) roomCodeLabel.textContent = `Sala ${room.roomId}`;
+  if (onlineHud) onlineHud.classList.add("is-visible");
+  if (onlinePlayersLabel) {
+    onlinePlayersLabel.textContent = `${room.players.length}/${HORROR_MAX_PLAYERS_CLIENT} jogadores`;
+  }
+
+  const liveIds = new Set();
+  room.players.forEach((state) => {
+    if (state.isMe) return;
+    liveIds.add(state.socketId);
+    updateRemotePlayer(state);
+  });
+
+  for (const [socketId, remote] of remotePlayers) {
+    if (!liveIds.has(socketId)) removeRemotePlayer(socketId);
+  }
+
+  applyHostState(room.state || {});
+}
+
+function emitHorrorEvent(event) {
+  if (!online.roomId || !online.socket?.connected) return;
+  online.socket.emit("horror:event", event);
+}
+
+function handleRemoteEvent(event) {
+  if (!event || event.fromSocketId === online.socket?.id) return;
+
+  if (event.type === "noise" && Number.isFinite(Number(event.x)) && Number.isFinite(Number(event.z))) {
+    emitNoise(
+      new THREE.Vector3(Number(event.x), 0, Number(event.z)),
+      Number(event.intensity || SPRINT_NOISE_RADIUS),
+      event.label || "Barulho",
+      { network: false }
+    );
+    return;
+  }
+
+  if (event.type === "key") {
+    applyTeamKey(false);
+    return;
+  }
+
+  if (event.type === "escape") {
+    applyTeamEscape(false);
+    return;
+  }
+
+  if (event.type === "caught") {
+    if (event.targetSocketId === online.socket?.id) {
+      player.alive = false;
+      if (document.pointerLockElement) document.exitPointerLock();
+      playSting();
+      showEnd(false);
+    } else if (event.targetSocketId) {
+      const remote = remotePlayers.get(event.targetSocketId);
+      if (remote) {
+        remote.alive = false;
+        remote.mesh.visible = false;
+      }
+    }
+  }
+}
+
+function applyHostState(state) {
+  if (!state || !online.roomId) return;
+  if (state.teamHasKey) applyTeamKey(false);
+  if (state.teamEscaped) applyTeamEscape(false);
+
+  if (online.isHost || !state.monster || !monster.root) return;
+
+  monster.pos.set(Number(state.monster.x || 0), 0, Number(state.monster.z || 0));
+  monster.forward.set(Number(state.monster.fx || 0), 0, Number(state.monster.fz || -1)).normalize();
+  monster.state = String(state.monster.state || "patrol");
+  monster.root.position.copy(monster.pos);
+  tmpVecB.copy(monster.pos).add(monster.forward);
+  monster.root.lookAt(tmpVecB.x, monster.root.position.y, tmpVecB.z);
+  setMonsterAction(monster.state === "chase" ? "run" : "walk");
 }
 
 function ensureAudio() {
@@ -504,6 +713,88 @@ function createFallbackMonster() {
   return group;
 }
 
+function createRemotePlayerMesh(state) {
+  const group = new THREE.Group();
+  const body = new THREE.Mesh(
+    new THREE.CapsuleGeometry(0.28, 1.0, 6, 12),
+    new THREE.MeshStandardMaterial({
+      color: 0x9fc7b2,
+      roughness: 0.68,
+      emissive: 0x10281d,
+      emissiveIntensity: 0.28
+    })
+  );
+  body.position.y = 0.85;
+  body.castShadow = true;
+  group.add(body);
+
+  const head = new THREE.Mesh(
+    new THREE.SphereGeometry(0.2, 16, 10),
+    new THREE.MeshStandardMaterial({ color: 0xe5d4bb, roughness: 0.72 })
+  );
+  head.position.y = 1.55;
+  head.castShadow = true;
+  group.add(head);
+
+  const name = createNameSprite(state.username || "Jogador");
+  name.position.y = 2.05;
+  group.add(name);
+
+  scene.add(group);
+  return group;
+}
+
+function createNameSprite(name) {
+  const labelCanvas = document.createElement("canvas");
+  labelCanvas.width = 256;
+  labelCanvas.height = 64;
+  const ctx = labelCanvas.getContext("2d");
+  ctx.fillStyle = "rgba(0,0,0,0.58)";
+  ctx.fillRect(0, 0, 256, 64);
+  ctx.fillStyle = "#f4ecd9";
+  ctx.font = "900 24px Segoe UI, Arial";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(String(name).slice(0, 18), 128, 32);
+  const texture = new THREE.CanvasTexture(labelCanvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true, depthWrite: false }));
+  sprite.scale.set(1.45, 0.36, 1);
+  return sprite;
+}
+
+function updateRemotePlayer(state) {
+  if (!state?.socketId || state.socketId === online.socket?.id) return;
+  let remote = remotePlayers.get(state.socketId);
+  if (!remote) {
+    remote = {
+      mesh: createRemotePlayerMesh(state),
+      pos: new THREE.Vector3(),
+      yaw: 0,
+      alive: true,
+      escaped: false,
+      hasKey: false
+    };
+    remotePlayers.set(state.socketId, remote);
+  }
+
+  remote.pos.set(Number(state.x || 0), 0, Number(state.z || 0));
+  remote.yaw = Number(state.yaw || 0);
+  remote.alive = state.alive !== false;
+  remote.escaped = Boolean(state.escaped);
+  remote.hasKey = Boolean(state.hasKey);
+  remote.mesh.position.copy(remote.pos);
+  remote.mesh.rotation.y = remote.yaw;
+  remote.mesh.visible = remote.alive && !remote.escaped;
+}
+
+function removeRemotePlayer(socketId) {
+  const remote = remotePlayers.get(socketId);
+  if (!remote) return;
+  scene.remove(remote.mesh);
+  remotePlayers.delete(socketId);
+}
+
 function loop() {
   requestAnimationFrame(loop);
   const dt = Math.min(clock.getDelta(), 0.05);
@@ -511,9 +802,12 @@ function loop() {
   if (gameStarted && player.alive && !player.escaped) {
     updatePlayer(dt);
     updateInteractions(dt);
-    updateMonster(dt);
+    if (!online.roomId || online.isHost) {
+      updateMonster(dt);
+    }
     updateItems(dt);
     updateNoiseRipples(dt);
+    syncOnlineState(dt);
     updateHud(dt);
   }
 
@@ -553,7 +847,7 @@ function updatePlayer(dt) {
     player.stepTimer -= dt;
     if (player.stepTimer <= 0) {
       player.stepTimer = sprinting ? 0.32 : player.crouching ? 0.75 : 0.52;
-      if (sprinting) emitNoise(player.pos, 7.5, "Passos apressados");
+      if (sprinting) emitNoise(player.pos, SPRINT_NOISE_RADIUS, "Passos apressados");
       playFootstep(player.crouching ? 0.04 : sprinting ? 0.13 : 0.075);
     }
   } else {
@@ -561,6 +855,43 @@ function updatePlayer(dt) {
   }
 
   updateCamera(dt);
+}
+
+function syncOnlineState(dt) {
+  if (!online.roomId || !online.socket?.connected) return;
+
+  online.sendTimer -= dt;
+  if (online.sendTimer <= 0) {
+    online.sendTimer = 0.05;
+    online.socket.emit("horror:player", {
+      x: player.pos.x,
+      z: player.pos.z,
+      yaw: player.yaw,
+      pitch: player.pitch,
+      crouching: player.crouching,
+      hasKey: player.hasKey || teamHasKey,
+      alive: player.alive,
+      escaped: player.escaped
+    });
+  }
+
+  if (online.isHost) {
+    online.hostTimer -= dt;
+    if (online.hostTimer <= 0) {
+      online.hostTimer = 0.08;
+      online.socket.emit("horror:host-state", {
+        teamHasKey,
+        teamEscaped,
+        monster: {
+          x: monster.pos.x,
+          z: monster.pos.z,
+          fx: monster.forward.x,
+          fz: monster.forward.z,
+          state: monster.state
+        }
+      });
+    }
+  }
 }
 
 function tryMove(delta) {
@@ -652,27 +983,41 @@ function interact() {
 }
 
 function pickupKey() {
+  applyTeamKey(true);
+  playTone(520, 0.08, 0.05, "triangle");
+}
+
+function applyTeamKey(sendNetwork) {
+  if (teamHasKey) return;
+  teamHasKey = true;
   player.hasKey = true;
   const item = interactables.find((entry) => entry.id === "key");
   if (item) item.disabled = true;
   if (keyMesh) scene.remove(keyMesh);
   showEvent("Chave encontrada.");
-  playTone(520, 0.08, 0.05, "triangle");
+  if (sendNetwork) emitHorrorEvent({ type: "key" });
 }
 
 function tryEscape() {
-  if (!player.hasKey) {
+  if (!player.hasKey && !teamHasKey) {
     showEvent("A fechadura esta intacta.");
-    emitNoise(player.pos, 5.5, "Macaneta");
+    emitNoise(player.pos, DOOR_NOISE_RADIUS, "Macaneta");
     playDoorKnock();
     return;
   }
 
+  applyTeamEscape(true);
+}
+
+function applyTeamEscape(sendNetwork) {
+  if (teamEscaped) return;
+  teamEscaped = true;
   player.escaped = true;
   if (document.pointerLockElement) document.exitPointerLock();
-  exitDoor.rotation.y = -0.92;
+  if (exitDoor) exitDoor.rotation.y = -0.92;
   objectiveText.textContent = "Livre";
   showEnd(true);
+  if (sendNetwork) emitHorrorEvent({ type: "escape" });
 }
 
 function createNoisyItem(pos, label, index) {
@@ -743,20 +1088,22 @@ function updateItems(dt) {
       item.mesh.position.y = 0.32;
       item.falling = false;
       item.velocity.set(0, 0, 0);
-      emitNoise(item.mesh.position, 24, item.label);
+      emitNoise(item.mesh.position, ITEM_DROP_NOISE_RADIUS, item.label);
       playThud();
     }
   }
 }
 
 function updateMonster(dt) {
-  const canSee = canMonsterSeePlayer();
+  const seenTarget = findVisibleMonsterTarget();
+  const canSee = Boolean(seenTarget);
   monster.repathTimer -= dt;
 
   if (canSee) {
     if (monster.state !== "chase") showEvent("Ele viu voce.");
     monster.state = "chase";
-    monster.lastSeenPos = player.pos.clone();
+    monster.lastSeenPos = seenTarget.pos.clone();
+    monster.chaseTargetId = seenTarget.id;
     monster.waitTimer = 0;
     alertPanel.className = "hud-block alert-state is-alert";
     alertText.textContent = "Perto";
@@ -766,7 +1113,8 @@ function updateMonster(dt) {
     setMonsterAction("run");
     if (monster.repathTimer <= 0) {
       monster.repathTimer = 0.28;
-      monster.path = makePath(monster.pos, player.pos);
+      const chaseTarget = seenTarget?.pos || getMonsterTargetPosition(monster.chaseTargetId) || monster.lastSeenPos || player.pos;
+      monster.path = makePath(monster.pos, chaseTarget);
       monster.pathIndex = 0;
     }
     followMonsterPath(MONSTER_CHASE_SPEED, dt);
@@ -812,12 +1160,7 @@ function updateMonster(dt) {
     }
   }
 
-  if (flatDistance(monster.pos, player.pos) < MONSTER_CATCH_DISTANCE) {
-    player.alive = false;
-    if (document.pointerLockElement) document.exitPointerLock();
-    playSting();
-    showEnd(false);
-  }
+  checkMonsterCatchTargets();
 }
 
 function followMonsterPath(speed, dt) {
@@ -851,21 +1194,74 @@ function setMonsterAction(name) {
 }
 
 function canMonsterSeePlayer() {
-  if (!monster.root) return false;
-  const distance = flatDistance(monster.pos, player.pos);
-  if (distance < 2.2) return hasLineOfSight(monster.pos, player.pos);
+  return Boolean(findVisibleMonsterTarget());
+}
+
+function getMonsterTargets() {
+  const targets = [];
+  if (player.alive && !player.escaped) {
+    targets.push({ id: "local", pos: player.pos, isLocal: true });
+  }
+
+  if (online.roomId && online.isHost) {
+    for (const [socketId, remote] of remotePlayers) {
+      if (remote.alive && !remote.escaped) {
+        targets.push({ id: socketId, pos: remote.pos, isLocal: false });
+      }
+    }
+  }
+
+  return targets.sort((a, b) => flatDistance(monster.pos, a.pos) - flatDistance(monster.pos, b.pos));
+}
+
+function getMonsterTargetPosition(targetId) {
+  if (targetId === "local") return player.pos;
+  return remotePlayers.get(targetId)?.pos || null;
+}
+
+function findVisibleMonsterTarget() {
+  if (!monster.root) return null;
+  return getMonsterTargets().find((target) => canMonsterSeeTarget(target.pos)) || null;
+}
+
+function canMonsterSeeTarget(targetPos) {
+  const distance = flatDistance(monster.pos, targetPos);
+  if (distance < 2.2) return hasLineOfSight(monster.pos, targetPos);
   if (distance > MONSTER_VIEW_DISTANCE) return false;
 
-  tmpVecA.subVectors(player.pos, monster.pos);
+  tmpVecA.subVectors(targetPos, monster.pos);
   tmpVecA.y = 0;
   tmpVecA.normalize();
   if (tmpVecA.dot(monster.forward) < MONSTER_VIEW_COS) return false;
-  return hasLineOfSight(monster.pos, player.pos);
+  return hasLineOfSight(monster.pos, targetPos);
 }
 
-function emitNoise(pos, intensity, label) {
+function checkMonsterCatchTargets() {
+  for (const target of getMonsterTargets()) {
+    if (flatDistance(monster.pos, target.pos) >= MONSTER_CATCH_DISTANCE) continue;
+
+    if (target.isLocal) {
+      player.alive = false;
+      if (document.pointerLockElement) document.exitPointerLock();
+      playSting();
+      showEnd(false);
+    } else if (online.isHost) {
+      const remote = remotePlayers.get(target.id);
+      if (remote) {
+        remote.alive = false;
+        remote.mesh.visible = false;
+      }
+      emitHorrorEvent({ type: "caught", targetSocketId: target.id });
+    }
+    break;
+  }
+}
+
+function emitNoise(pos, intensity, label, options = {}) {
   if (!gameStarted || !player.alive || player.escaped) return;
 
+  const soundTarget = findNearestWalkablePoint(pos);
+  const visualIntensity = Math.min(intensity, 34);
   const ring = new THREE.Mesh(
     new THREE.RingGeometry(0.32, 0.36, 48),
     new THREE.MeshBasicMaterial({
@@ -876,19 +1272,29 @@ function emitNoise(pos, intensity, label) {
       depthWrite: false
     })
   );
-  ring.position.set(pos.x, 0.045, pos.z);
+  ring.position.set(soundTarget.x, 0.045, soundTarget.z);
   ring.rotation.x = -Math.PI / 2;
   scene.add(ring);
-  noiseRipples.push({ mesh: ring, age: 0, maxAge: 1.15, intensity });
+  noiseRipples.push({ mesh: ring, age: 0, maxAge: 1.15, intensity: visualIntensity });
 
-  const heard = flatDistance(monster.pos, pos) <= intensity;
-  if (heard && monster.state !== "chase") {
+  const heard = flatDistance(monster.pos, soundTarget) <= intensity;
+  if (heard && (!online.roomId || online.isHost) && monster.state !== "chase") {
     monster.state = "investigate";
-    monster.investigateTarget = pos.clone();
+    monster.investigateTarget = soundTarget.clone();
     monster.waitTimer = 2.2;
     monster.path = [];
     monster.repathTimer = 0;
     showEvent(`Ele ouviu: ${label}.`);
+  }
+
+  if (options.network !== false) {
+    emitHorrorEvent({
+      type: "noise",
+      x: soundTarget.x,
+      z: soundTarget.z,
+      intensity,
+      label
+    });
   }
 }
 
@@ -958,8 +1364,8 @@ function hasLineOfSight(from, to) {
 }
 
 function updateHud(dt = 0) {
-  objectiveText.textContent = player.hasKey ? "Abra a porta" : "Encontre a chave";
-  inventoryText.textContent = player.hasKey ? "Chave" : player.holding ? player.holding.label : "Vazio";
+  objectiveText.textContent = teamEscaped ? "Livre" : (player.hasKey || teamHasKey) ? "Abra a porta" : "Encontre a chave";
+  inventoryText.textContent = (player.hasKey || teamHasKey) ? "Chave" : player.holding ? player.holding.label : "Vazio";
 
   if (monster.state === "chase") {
     alertPanel.className = "hud-block alert-state is-alert";
@@ -1130,6 +1536,40 @@ function cellFromWorld(pos) {
     x: Math.floor(pos.x / CELL + MAP_W / 2),
     z: Math.floor(pos.z / CELL + MAP_H / 2)
   };
+}
+
+function findNearestWalkablePoint(pos) {
+  const cell = cellFromWorld(pos);
+  if (isWalkable(cell.x, cell.z)) {
+    return new THREE.Vector3(pos.x, 0, pos.z);
+  }
+
+  let best = null;
+  let bestDistance = Infinity;
+  const maxRadius = Math.max(MAP_W, MAP_H);
+
+  for (let radius = 1; radius <= maxRadius; radius += 1) {
+    for (let dz = -radius; dz <= radius; dz += 1) {
+      for (let dx = -radius; dx <= radius; dx += 1) {
+        if (Math.abs(dx) !== radius && Math.abs(dz) !== radius) continue;
+
+        const x = cell.x + dx;
+        const z = cell.z + dz;
+        if (!isWalkable(x, z)) continue;
+
+        const candidate = worldFromCell(x, z);
+        const distance = flatDistance(pos, candidate);
+        if (distance < bestDistance) {
+          best = candidate;
+          bestDistance = distance;
+        }
+      }
+    }
+
+    if (best) return best;
+  }
+
+  return findMarker("M");
 }
 
 function findMarker(marker) {

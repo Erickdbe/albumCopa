@@ -904,6 +904,8 @@ const crashRooms         = new Map();   // roomId -> crash do aviao
 const artilleryRooms     = new Map();   // roomId -> artilharia por turnos
 const relicRooms         = new Map();   // roomId -> caca as reliquias em arena
 const pirateRooms        = new Map();   // roomId -> Pirate Bomb em plataforma
+const horrorRooms        = new Map();   // roomId -> Casa Sombria cooperativo
+const HORROR_MAX_PLAYERS = 4;
 
 function ensureSpectators(room) {
   if (!room.spectators) room.spectators = new Set();
@@ -4941,6 +4943,91 @@ function removePiratePlayer(room, socketId, reason = "") {
   broadcastOnlineList();
 }
 
+function makeHorrorRoomCode() {
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    let code = "";
+    for (let i = 0; i < 5; i += 1) {
+      code += alphabet[Math.floor(Math.random() * alphabet.length)];
+    }
+    if (!horrorRooms.has(code)) return code;
+  }
+  return `H${Date.now().toString(36).slice(-5).toUpperCase()}`;
+}
+
+function serializeHorrorRoom(room, viewerSocketId) {
+  return {
+    roomId: room.roomId,
+    hostSocketId: room.hostSocketId,
+    hostUsername: room.hostUsername,
+    status: room.status,
+    message: room.message || "",
+    state: room.state || {},
+    players: room.players.map(player => ({
+      socketId: player.socketId,
+      username: player.username,
+      avatar: player.avatar || "",
+      isHost: player.socketId === room.hostSocketId,
+      isMe: player.socketId === viewerSocketId,
+      x: Number(player.x || 0),
+      z: Number(player.z || 0),
+      yaw: Number(player.yaw || 0),
+      pitch: Number(player.pitch || 0),
+      crouching: Boolean(player.crouching),
+      hasKey: Boolean(player.hasKey),
+      alive: player.alive !== false,
+      escaped: Boolean(player.escaped)
+    }))
+  };
+}
+
+function emitHorrorUpdate(room) {
+  if (!room) return;
+  room.players.forEach(player => {
+    io.to(player.socketId).emit("horror:update", serializeHorrorRoom(room, player.socketId));
+  });
+}
+
+function findHorrorRoomBySocket(socketId) {
+  for (const room of horrorRooms.values()) {
+    if (room.players.some(player => player.socketId === socketId)) return room;
+  }
+  return null;
+}
+
+function removeHorrorPlayer(room, socketId, reason = "") {
+  if (!room) return;
+  const player = room.players.find(item => item.socketId === socketId);
+  if (!player) return;
+
+  room.players = room.players.filter(item => item.socketId !== socketId);
+  const liveSocket = io.sockets.sockets.get(socketId);
+  if (liveSocket) liveSocket.leave(room.roomId);
+
+  const online = onlinePlayers.get(socketId);
+  if (online && online.roomId === room.roomId) {
+    online.inGame = false;
+    online.roomId = null;
+    online.game = null;
+  }
+
+  if (!room.players.length) {
+    horrorRooms.delete(room.roomId);
+    broadcastOnlineList();
+    return;
+  }
+
+  if (room.hostSocketId === socketId) {
+    room.hostSocketId = room.players[0].socketId;
+    room.hostUsername = room.players[0].username;
+    io.to(room.hostSocketId).emit("horror:host");
+  }
+
+  room.message = reason || `${player.username} saiu da casa.`;
+  emitHorrorUpdate(room);
+  broadcastOnlineList();
+}
+
 io.on("connection", (socket) => {
   console.log(`[+] ${socket.username} conectado`);
   const connectedUser = normalizeUserProgress(db.findUser("id", socket.userId));
@@ -4973,6 +5060,150 @@ io.on("connection", (socket) => {
   });
 
   // ── Desafio ────────────────────────────────────────────────────────────
+  socket.on("horror:create", () => {
+    const current = onlinePlayers.get(socket.id);
+    if (current?.inGame) return socket.emit("horror:error", "Voce ja esta em uma partida.");
+
+    const roomId = makeHorrorRoomCode();
+    const room = {
+      roomId,
+      hostSocketId: socket.id,
+      hostUsername: socket.username,
+      status: "playing",
+      message: `${socket.username} entrou na casa.`,
+      state: { teamHasKey: false, teamEscaped: false, monster: null },
+      players: [{
+        socketId: socket.id,
+        userId: socket.userId,
+        username: socket.username,
+        avatar: socket.avatar || "",
+        x: 0,
+        z: 0,
+        yaw: 0,
+        pitch: 0,
+        crouching: false,
+        hasKey: false,
+        alive: true,
+        escaped: false
+      }]
+    };
+
+    horrorRooms.set(roomId, room);
+    socket.join(roomId);
+    if (current) { current.inGame = true; current.roomId = roomId; current.game = "horror"; }
+
+    socket.emit("horror:joined", serializeHorrorRoom(room, socket.id));
+    emitHorrorUpdate(room);
+    broadcastOnlineList();
+  });
+
+  socket.on("horror:join", ({ roomId }) => {
+    const code = String(roomId || "").trim().toUpperCase();
+    const room = horrorRooms.get(code);
+    if (!room || room.status !== "playing") return socket.emit("horror:error", "Sala indisponivel.");
+    if (room.players.length >= HORROR_MAX_PLAYERS) return socket.emit("horror:error", "Sala cheia.");
+
+    const current = onlinePlayers.get(socket.id);
+    if (current?.inGame) return socket.emit("horror:error", "Voce ja esta em uma partida.");
+
+    if (!room.players.some(player => player.socketId === socket.id)) {
+      room.players.push({
+        socketId: socket.id,
+        userId: socket.userId,
+        username: socket.username,
+        avatar: socket.avatar || "",
+        x: 0,
+        z: 0,
+        yaw: 0,
+        pitch: 0,
+        crouching: false,
+        hasKey: Boolean(room.state?.teamHasKey),
+        alive: true,
+        escaped: false
+      });
+    }
+
+    socket.join(code);
+    if (current) { current.inGame = true; current.roomId = code; current.game = "horror"; }
+    room.message = `${socket.username} entrou na casa.`;
+
+    socket.emit("horror:joined", serializeHorrorRoom(room, socket.id));
+    emitHorrorUpdate(room);
+    broadcastOnlineList();
+  });
+
+  socket.on("horror:player", (state = {}) => {
+    const room = findHorrorRoomBySocket(socket.id);
+    if (!room) return;
+    const player = room.players.find(item => item.socketId === socket.id);
+    if (!player) return;
+
+    player.x = Number.isFinite(Number(state.x)) ? Number(state.x) : player.x;
+    player.z = Number.isFinite(Number(state.z)) ? Number(state.z) : player.z;
+    player.yaw = Number.isFinite(Number(state.yaw)) ? Number(state.yaw) : player.yaw;
+    player.pitch = Number.isFinite(Number(state.pitch)) ? Number(state.pitch) : player.pitch;
+    player.crouching = Boolean(state.crouching);
+    player.hasKey = Boolean(state.hasKey);
+    player.alive = state.alive !== false;
+    player.escaped = Boolean(state.escaped);
+
+    socket.to(room.roomId).volatile.emit("horror:player", {
+      socketId: socket.id,
+      username: socket.username,
+      avatar: socket.avatar || "",
+      x: player.x,
+      z: player.z,
+      yaw: player.yaw,
+      pitch: player.pitch,
+      crouching: player.crouching,
+      hasKey: player.hasKey,
+      alive: player.alive,
+      escaped: player.escaped
+    });
+  });
+
+  socket.on("horror:host-state", (state = {}) => {
+    const room = findHorrorRoomBySocket(socket.id);
+    if (!room || room.hostSocketId !== socket.id) return;
+    room.state = {
+      teamHasKey: Boolean(state.teamHasKey),
+      teamEscaped: Boolean(state.teamEscaped),
+      monster: state.monster && typeof state.monster === "object" ? {
+        x: Number(state.monster.x) || 0,
+        z: Number(state.monster.z) || 0,
+        fx: Number(state.monster.fx) || 0,
+        fz: Number(state.monster.fz) || -1,
+        state: String(state.monster.state || "patrol")
+      } : null
+    };
+    socket.to(room.roomId).volatile.emit("horror:host-state", room.state);
+  });
+
+  socket.on("horror:event", (event = {}) => {
+    const room = findHorrorRoomBySocket(socket.id);
+    if (!room) return;
+    const type = String(event.type || "").slice(0, 32);
+    const payload = {
+      type,
+      fromSocketId: socket.id,
+      x: Number.isFinite(Number(event.x)) ? Number(event.x) : null,
+      z: Number.isFinite(Number(event.z)) ? Number(event.z) : null,
+      intensity: Number.isFinite(Number(event.intensity)) ? Number(event.intensity) : null,
+      label: String(event.label || "").slice(0, 80),
+      targetSocketId: event.targetSocketId ? String(event.targetSocketId) : null
+    };
+
+    if (type === "key") room.state.teamHasKey = true;
+    if (type === "escape") room.state.teamEscaped = true;
+
+    socket.to(room.roomId).emit("horror:event", payload);
+  });
+
+  socket.on("horror:leave", () => {
+    const room = findHorrorRoomBySocket(socket.id);
+    if (room) removeHorrorPlayer(room, socket.id, `${socket.username} saiu da casa.`);
+  });
+
   socket.on("challenge:send", ({ toSocketId, myBet }) => {
     const opponent = onlinePlayers.get(toSocketId);
     if (!opponent || opponent.inGame)
@@ -6623,6 +6854,11 @@ io.on("connection", (socket) => {
       } else {
         removePiratePlayer(pirateRoom, socket.id, `${socket.username} desconectou do Pirate Bomb.`);
       }
+    }
+
+    const horrorRoom = findHorrorRoomBySocket(socket.id);
+    if (horrorRoom) {
+      removeHorrorPlayer(horrorRoom, socket.id, `${socket.username} desconectou da Casa Sombria.`);
     }
 
     const blackjackRoom = findBlackjackRoomBySocket(socket.id);

@@ -929,6 +929,63 @@
       font-weight: 900;
     }
 
+    .loan-side-button {
+      position: relative;
+      width: 100%;
+      min-height: 72px;
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 10px;
+      margin-top: 8px;
+      padding: 12px;
+      overflow: hidden;
+      border: 0;
+      border-radius: var(--radius);
+      color: #fff9e8;
+      background:
+        radial-gradient(circle at 78% 24%, rgba(255,249,232,.9) 0 11px, transparent 12px),
+        linear-gradient(135deg, #3d4f3f, #0d6a47 54%, #d8ad3f);
+      box-shadow: 0 14px 28px rgba(23, 84, 62, 0.24);
+      cursor: pointer;
+      font-weight: 950;
+      text-align: left;
+    }
+
+    .loan-side-button::after {
+      content: "$";
+      position: absolute;
+      right: 18px;
+      bottom: 13px;
+      width: 44px;
+      height: 44px;
+      display: grid;
+      place-items: center;
+      border-radius: 50%;
+      color: #3d3316;
+      background: #f4cf57;
+      box-shadow: -15px -8px 0 -6px rgba(255,249,232,.88), 0 9px 18px rgba(0,0,0,.22);
+      font-size: 1.35rem;
+      font-weight: 1000;
+    }
+
+    .loan-side-button span,
+    .loan-side-button small {
+      position: relative;
+      z-index: 2;
+    }
+
+    .loan-side-button span {
+      font-size: 1.02rem;
+      text-transform: uppercase;
+    }
+
+    .loan-side-button small {
+      color: rgba(255, 249, 232, 0.82);
+      font-size: 0.72rem;
+      font-weight: 900;
+    }
+
     .horror-side-button {
       position: relative;
       width: 100%;
@@ -3108,6 +3165,188 @@
       font-size: .75rem;
     }
 
+    .loan-card {
+      width: min(760px, 96vw);
+      max-height: calc(100vh - 36px);
+      overflow: auto;
+    }
+
+    .loan-warning {
+      margin: 0;
+      padding: 10px 12px;
+      border: 1px solid rgba(168, 41, 63, .22);
+      border-radius: 7px;
+      color: #7b1f2c;
+      background: rgba(255, 235, 230, .76);
+      font-size: .82rem;
+      font-weight: 850;
+      line-height: 1.35;
+    }
+
+    .loan-summary {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+      margin: 10px 0;
+    }
+
+    .loan-chip {
+      min-width: 0;
+      padding: 10px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: rgba(255, 249, 232, .82);
+    }
+
+    .loan-chip strong,
+    .loan-chip span {
+      display: block;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .loan-chip strong {
+      color: var(--grass);
+      font-size: 1.02rem;
+    }
+
+    .loan-chip span {
+      color: var(--muted);
+      font-size: .73rem;
+      font-weight: 850;
+    }
+
+    .loan-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+
+    .loan-box {
+      display: grid;
+      gap: 8px;
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: rgba(255, 249, 232, .72);
+    }
+
+    .loan-box h4 {
+      margin: 0;
+      color: var(--grass);
+      font-size: .95rem;
+    }
+
+    .loan-box label {
+      color: var(--muted);
+      font-size: .75rem;
+      font-weight: 900;
+    }
+
+    .loan-box input,
+    .loan-box select {
+      width: 100%;
+      min-height: 38px;
+      padding: 8px 10px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      font-size: .88rem;
+    }
+
+    .loan-list {
+      display: grid;
+      gap: 8px;
+      margin-top: 8px;
+    }
+
+    .loan-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 10px;
+      align-items: center;
+      padding: 10px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: rgba(255, 249, 232, .82);
+    }
+
+    .loan-row strong,
+    .loan-row small {
+      display: block;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .loan-row small {
+      color: var(--muted);
+      font-size: .75rem;
+      font-weight: 800;
+    }
+
+    .loan-pay-btn {
+      width: auto;
+      min-height: 34px;
+      padding: 7px 12px;
+      font-size: .78rem;
+      background: #0d6a47;
+    }
+
+    .loan-pay-btn:disabled {
+      opacity: .5;
+      cursor: not-allowed;
+    }
+
+    .richest-list {
+      display: grid;
+      gap: 7px;
+    }
+
+    .richest-row {
+      display: grid;
+      grid-template-columns: 42px minmax(0, 1fr) auto;
+      gap: 8px;
+      align-items: center;
+      padding: 8px 10px;
+      border: 1px solid rgba(32, 102, 73, .16);
+      border-radius: 7px;
+      background: rgba(255, 255, 255, .52);
+    }
+
+    .richest-rank {
+      color: #8b6a17;
+      font-weight: 950;
+      text-align: center;
+    }
+
+    .richest-player {
+      display: flex;
+      min-width: 0;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .richest-player strong,
+    .richest-row small {
+      display: block;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .richest-row small {
+      color: var(--muted);
+      font-size: .75rem;
+      font-weight: 850;
+    }
+
+    .loan-open-btn { background: linear-gradient(135deg, #0d6a47, #d8ad3f); }
+
     @media (max-width: 620px) {
       .lobby-header-actions {
         width: 100%;
@@ -3124,6 +3363,11 @@
       .lobby-bet-row {
         grid-template-columns: 1fr;
         align-items: stretch;
+      }
+      .loan-summary,
+      .loan-grid,
+      .loan-row {
+        grid-template-columns: 1fr;
       }
       .lobby-game-actions {
         grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -5430,6 +5674,10 @@
             <span>Mesa 21</span>
             <small>Cartas online</small>
           </button>
+          <button class="loan-side-button" id="openLoanPanel" type="button">
+            <span>Empréstimo</span>
+            <small>Casa ou player</small>
+          </button>
           <button class="market-button" id="openMarket" type="button">
             <span>Loja de repetidas</span>
             <small>1 venda por dia</small>
@@ -5539,6 +5787,7 @@
         <button class="mp-btn relic-open-btn" type="button" onclick="createRelicRoom()">Relic Rush</button>
         <button class="mp-btn pirate-open-btn" type="button" onclick="createPirateRoom()">Pirate Bomb</button>
         <button class="mp-btn cardwars-open-btn" type="button" onclick="window.location.href='/cardwars/'">Card Wars</button>
+        <button class="mp-btn loan-open-btn" type="button" onclick="openLoanPanel()">Empréstimo</button>
         <button class="mp-btn blackjack-open-btn" type="button" onclick="createBlackjackRoom()">Mesa 21</button>
         <button class="mp-btn horse-open-btn" type="button" onclick="createHorseRoom()">🏇 Corrida</button>
       </div>
@@ -5610,6 +5859,75 @@
           <div class="market-list" id="marketListings"></div>
         </section>
       </div>
+    </div>
+  </div>
+
+  <div class="mp-overlay hidden" id="loanOverlay">
+    <div class="mp-card loan-card">
+      <div class="lobby-header">
+        <h3>Empréstimos</h3>
+        <button class="mp-btn" style="width:auto;padding:7px 18px;font-size:.82rem" id="closeLoanPanel" type="button">Fechar</button>
+      </div>
+
+      <p class="loan-warning">
+        Juros fixos de 50% sobre creditos de aposta. Quem pegar 100 paga 150. Dividas ativas vencem hoje; se virar o dia sem pagar, a conta devedora e removida.
+      </p>
+
+      <div class="loan-summary">
+        <div class="loan-chip">
+          <strong id="loanMyCredits">0</strong>
+          <span>creditos de aposta disponiveis</span>
+        </div>
+        <div class="loan-chip">
+          <strong id="loanDebtTotal">0</strong>
+          <span>você deve</span>
+        </div>
+        <div class="loan-chip">
+          <strong id="loanReceivableTotal">0</strong>
+          <span>tem a receber</span>
+        </div>
+      </div>
+
+      <section class="loan-box">
+        <h4>Ranking dos mais ricos</h4>
+        <div class="richest-list" id="richestList"></div>
+      </section>
+
+      <div class="loan-grid">
+        <section class="loan-box">
+          <h4>Pedir à casa</h4>
+          <label for="houseLoanAmount">Valor</label>
+          <input id="houseLoanAmount" type="number" min="1" value="100">
+          <button class="mp-btn" id="requestHouseLoan" type="button">Pedir agora</button>
+        </section>
+
+        <section class="loan-box">
+          <h4>Pedir a um player</h4>
+          <label for="loanPlayerSelect">Player online</label>
+          <select id="loanPlayerSelect"></select>
+          <label for="playerLoanAmount">Valor pedido</label>
+          <input id="playerLoanAmount" type="number" min="1" value="100">
+          <button class="mp-btn" id="requestPlayerLoan" type="button">Enviar pedido</button>
+        </section>
+      </div>
+
+      <section class="loan-box">
+        <h4>Contratos</h4>
+        <div class="loan-list" id="loanList"></div>
+      </section>
+    </div>
+  </div>
+
+  <div class="challenge-toast hidden" id="loanRequestToast">
+    <h4>Pedido de empréstimo</h4>
+    <p id="loanRequestMsg"></p>
+    <div class="bet-row" style="margin-bottom:10px">
+      <label>Valor aprovado:</label>
+      <input id="loanApproveAmount" type="number" min="1" value="100" />
+    </div>
+    <div class="challenge-toast-btns">
+      <button class="btn-accept" onclick="acceptLoanRequest()">Emprestar</button>
+      <button class="btn-reject" onclick="rejectLoanRequest()">Recusar</button>
     </div>
   </div>
 
@@ -6402,6 +6720,8 @@
       marketListings: [],
       marketToday: "",
       marketCanListToday: true,
+      loans: [],
+      richestPlayers: [],
       onlinePlayers: [],
       chatMessages: []
     };
@@ -6442,6 +6762,14 @@
     const openRelicGame = document.getElementById("openRelicGame");
     const openPirateGame = document.getElementById("openPirateGame");
     const openBlackjackGame = document.getElementById("openBlackjackGame");
+    const openLoanButton = document.getElementById("openLoanPanel");
+    const loanOverlay = document.getElementById("loanOverlay");
+    const closeLoanPanel = document.getElementById("closeLoanPanel");
+    const requestHouseLoan = document.getElementById("requestHouseLoan");
+    const requestPlayerLoan = document.getElementById("requestPlayerLoan");
+    const loanPlayerSelect = document.getElementById("loanPlayerSelect");
+    const loanList = document.getElementById("loanList");
+    const richestList = document.getElementById("richestList");
     const openMarket = document.getElementById("openMarket");
     const marketOverlay = document.getElementById("marketOverlay");
     const closeMarket = document.getElementById("closeMarket");
@@ -8145,11 +8473,20 @@
     openRelicGame.addEventListener("click", openRelicFromSidebar);
     openPirateGame.addEventListener("click", openPirateFromSidebar);
     openBlackjackGame.addEventListener("click", openBlackjackFromSidebar);
+    openLoanButton.addEventListener("click", openLoanPanel);
+    closeLoanPanel.addEventListener("click", closeLoanPanelView);
+    requestHouseLoan.addEventListener("click", requestLoanFromHouse);
+    requestPlayerLoan.addEventListener("click", requestLoanFromPlayer);
     openMarket.addEventListener("click", openMarketplace);
     closeMarket.addEventListener("click", closeMarketplace);
     marketListButton.addEventListener("click", announceDuplicate);
     openLobbyFromBoard.addEventListener("click", openLobby);
     globalChatForm.addEventListener("submit", sendGlobalChat);
+    loanOverlay.addEventListener("click", (event) => {
+      if (event.target === loanOverlay) {
+        closeLoanPanelView();
+      }
+    });
     marketOverlay.addEventListener("click", (event) => {
       if (event.target === marketOverlay) {
         closeMarketplace();
@@ -8305,6 +8642,8 @@
       opponentUsername: null,
       pendingChallengeId: null,  // desafio aguardando resposta
       receivedChallengeId: null, // desafio recebido
+      pendingLoanRequestId: null,
+      receivedLoanRequestId: null,
       blackjackInviteRoomId: null,
       blackjackRoomId: null,
       blackjackTable: null,
@@ -8434,6 +8773,7 @@
       state.betCredits = user.bet_credits ?? state.betCredits;
       state.exchangeWins = user.exchange_wins ?? user.bj_wins ?? state.exchangeWins;
       state.duplicates = user.duplicates && typeof user.duplicates === "object" ? user.duplicates : state.duplicates;
+      state.loans = Array.isArray(user.loans) ? user.loans : state.loans;
       state.marketCanListToday = !user.last_sale_day || user.last_sale_day !== state.marketToday;
       // Restaura figurinhas coletadas
       stickers.forEach((sticker) => {
@@ -8457,6 +8797,9 @@
       renderSpread && renderSpread();
       if (marketOverlay && !marketOverlay.classList.contains("hidden")) {
         renderMarketplace();
+      }
+      if (loanOverlay && !loanOverlay.classList.contains("hidden")) {
+        renderLoanPanel();
       }
     }
 
@@ -8574,6 +8917,11 @@
         renderOnlineList(list);
       });
 
+      mp.socket.on("ranking:update", ({ ranking }) => {
+        state.richestPlayers = Array.isArray(ranking) ? ranking : state.richestPlayers;
+        renderRichestRanking();
+      });
+
       mp.socket.on("chat:history", (messages) => {
         state.chatMessages = Array.isArray(messages) ? messages.slice(-80) : [];
         renderChat();
@@ -8581,6 +8929,63 @@
 
       mp.socket.on("chat:message", (message) => {
         appendChatMessage(message);
+      });
+
+      mp.socket.on("loan:update", ({ user, loans, message }) => {
+        if (user) {
+          applyServerData(user);
+        } else if (Array.isArray(loans)) {
+          state.loans = loans;
+        }
+        renderLoanPanel();
+        updateLobbyHeader();
+        renderBetPanel();
+        refreshRichestRanking().catch(() => renderRichestRanking());
+        if (message) showToast(message);
+      });
+
+      mp.socket.on("loan:received", ({ requestId, fromUsername, requestedAmount }) => {
+        mp.receivedLoanRequestId = requestId;
+        document.getElementById("loanRequestMsg").textContent =
+          `${fromUsername} pediu ${requestedAmount} creditos de aposta emprestados. Voce pode aprovar esse valor ou negociar outro.`;
+        document.getElementById("loanApproveAmount").value = requestedAmount;
+        document.getElementById("loanRequestToast").classList.remove("hidden");
+      });
+
+      mp.socket.on("loan:sent", ({ requestId, toUsername, requestedAmount }) => {
+        mp.pendingLoanRequestId = requestId;
+        showToast(`Pedido de ${requestedAmount} creditos de aposta enviado para ${toUsername}.`);
+      });
+
+      mp.socket.on("loan:approved", ({ fromUsername, amount, totalDue, user }) => {
+        mp.pendingLoanRequestId = null;
+        if (user) applyServerData(user);
+        refreshRichestRanking().catch(() => renderRichestRanking());
+        showToast(`${fromUsername} emprestou ${amount} creditos de aposta. Voce deve pagar ${totalDue}.`);
+      });
+
+      mp.socket.on("loan:accepted", ({ toUsername, amount, totalDue, user }) => {
+        mp.receivedLoanRequestId = null;
+        document.getElementById("loanRequestToast").classList.add("hidden");
+        if (user) applyServerData(user);
+        refreshRichestRanking().catch(() => renderRichestRanking());
+        showToast(`Voce emprestou ${amount} creditos de aposta para ${toUsername}. Ele devera ${totalDue}.`);
+      });
+
+      mp.socket.on("loan:rejected", ({ username }) => {
+        mp.pendingLoanRequestId = null;
+        showToast(`${username} recusou o empréstimo.`);
+      });
+
+      mp.socket.on("loan:cancelled", ({ username }) => {
+        document.getElementById("loanRequestToast").classList.add("hidden");
+        mp.receivedLoanRequestId = null;
+        mp.pendingLoanRequestId = null;
+        showToast(`${username} cancelou o pedido de empréstimo.`);
+      });
+
+      mp.socket.on("loan:error", (msg) => {
+        showToast(msg || "Não foi possível negociar o empréstimo.");
       });
 
       // Desafio recebido
@@ -9361,6 +9766,227 @@
     }
 
     // ── Desafios ──────────────────────────────────────────────────────────
+    function activeLoans() {
+      return (state.loans || []).filter(loan => loan.status === "active");
+    }
+
+    function loanAmount(value) {
+      return Math.max(0, Math.ceil(Number(value || 0) || 0));
+    }
+
+    function openLoanPanel() {
+      if (!mp.isOnline || !mp.token) {
+        showToast("Faça login para pedir dinheiro emprestado.");
+        document.getElementById("authOverlay").classList.remove("hidden");
+        return;
+      }
+      loanOverlay.classList.remove("hidden");
+      renderLoanPanel();
+      refreshLoans().catch(() => renderLoanPanel());
+      refreshRichestRanking().catch(() => renderRichestRanking());
+    }
+
+    function closeLoanPanelView() {
+      loanOverlay.classList.add("hidden");
+    }
+
+    async function refreshLoans() {
+      const res = await fetch(`${SERVER_URL}/api/loans`, {
+        headers: { "Authorization": `Bearer ${mp.token}` }
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Erro ao carregar empréstimos.");
+      if (data.user) applyServerData(data.user);
+      state.loans = Array.isArray(data.loans) ? data.loans : [];
+      renderLoanPanel();
+    }
+
+    async function refreshRichestRanking() {
+      const res = await fetch(`${SERVER_URL}/api/ranking/richest?limit=10`, {
+        headers: { "Authorization": `Bearer ${mp.token}` }
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Erro ao carregar ranking.");
+      state.richestPlayers = Array.isArray(data.ranking) ? data.ranking : [];
+      renderRichestRanking();
+    }
+
+    function renderRichestRanking() {
+      if (!richestList) return;
+      const ranking = Array.isArray(state.richestPlayers) ? state.richestPlayers : [];
+      if (!ranking.length) {
+        richestList.innerHTML = `
+          <div class="richest-row">
+            <span class="richest-rank">--</span>
+            <div class="richest-player"><strong>Ninguem no ranking ainda.</strong></div>
+            <small>0 apostas</small>
+          </div>
+        `;
+        return;
+      }
+
+      richestList.innerHTML = ranking.map((player) => `
+        <div class="richest-row">
+          <span class="richest-rank">#${Number(player.rank || 0) || ""}</span>
+          <div class="richest-player">
+            ${renderAvatar(player.avatar, player.username)}
+            <strong>${renderPlayerName(player.username)}</strong>
+          </div>
+          <small>${Math.max(0, Number(player.bet_credits || 0) || 0)} apostas</small>
+        </div>
+      `).join("");
+    }
+
+    function renderLoanPanel() {
+      if (!loanOverlay) return;
+      renderRichestRanking();
+      const loans = Array.isArray(state.loans) ? state.loans : [];
+      const active = loans.filter(loan => loan.status === "active");
+      const debtTotal = active
+        .filter(loan => loan.direction === "borrowed")
+        .reduce((sum, loan) => sum + loanAmount(loan.remaining_due), 0);
+      const receivableTotal = active
+        .filter(loan => loan.direction === "lent")
+        .reduce((sum, loan) => sum + loanAmount(loan.remaining_due), 0);
+
+      document.getElementById("loanMyCredits").textContent = state.betCredits;
+      document.getElementById("loanDebtTotal").textContent = debtTotal;
+      document.getElementById("loanReceivableTotal").textContent = receivableTotal;
+
+      const self = mp.socket?.id;
+      const players = (state.onlinePlayers || []).filter(player => player.socketId !== self);
+      loanPlayerSelect.innerHTML = players.length
+        ? players.map(player => `<option value="${escHtml(player.socketId)}">${escHtml(player.username)}${player.inGame ? " (em jogo)" : ""}</option>`).join("")
+        : `<option value="">Nenhum player online</option>`;
+      requestPlayerLoan.disabled = !players.length;
+
+      if (!loans.length) {
+        loanList.innerHTML = `<div class="loan-row"><div><strong>Nenhum contrato ainda.</strong><small>Peça à casa ou negocie com um player online.</small></div></div>`;
+        return;
+      }
+
+      loanList.innerHTML = loans
+        .slice()
+        .sort((a, b) => Number(b.id) - Number(a.id))
+        .map((loan) => {
+          const borrowed = loan.direction === "borrowed";
+          const activeLoan = loan.status === "active";
+          const amount = loanAmount(loan.remaining_due || loan.total_due);
+          const otherName = borrowed ? loan.lender_name : loan.borrower_name;
+          const role = borrowed ? "Você deve para" : "Você emprestou para";
+          const statusText = activeLoan ? `vence hoje (${loan.due_day || "hoje"})` : loan.status;
+          const canPay = borrowed && activeLoan && state.betCredits >= amount;
+          return `
+            <div class="loan-row">
+              <div>
+                <strong>${escHtml(role)} ${escHtml(otherName || "Casa")} · ${amount} creditos de aposta</strong>
+                <small>Principal ${loanAmount(loan.principal)} · juros 50% · ${escHtml(statusText)}</small>
+              </div>
+              ${borrowed && activeLoan ? `<button class="mp-btn loan-pay-btn" type="button" data-loan-id="${loan.id}" ${canPay ? "" : "disabled"}>${canPay ? "Pagar" : "Sem saldo"}</button>` : ""}
+            </div>
+          `;
+        }).join("");
+
+      loanList.querySelectorAll("[data-loan-id]").forEach((button) => {
+        button.addEventListener("click", () => payLoan(Number(button.dataset.loanId)));
+      });
+    }
+
+    async function requestLoanFromHouse() {
+      const amount = Math.floor(Number(document.getElementById("houseLoanAmount").value) || 0);
+      if (amount < 1) {
+        showToast("Informe um valor válido.");
+        return;
+      }
+      requestHouseLoan.disabled = true;
+      try {
+        const res = await fetch(`${SERVER_URL}/api/loans/house`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${mp.token}`
+          },
+          body: JSON.stringify({ amount })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Erro ao pedir empréstimo.");
+        if (data.user) applyServerData(data.user);
+        await refreshLoans();
+        await refreshRichestRanking().catch(() => {});
+        renderBetPanel();
+        updateLobbyHeader();
+        showToast(`A casa emprestou ${amount} creditos de aposta. Voce deve ${Math.ceil(amount * 1.5)}.`);
+      } catch (err) {
+        showToast(err.message);
+      } finally {
+        requestHouseLoan.disabled = false;
+      }
+    }
+
+    function requestLoanFromPlayer() {
+      if (!mp.socket?.connected) {
+        showToast("Entre online para pedir a um player.");
+        return;
+      }
+      const toSocketId = loanPlayerSelect.value;
+      const amount = Math.floor(Number(document.getElementById("playerLoanAmount").value) || 0);
+      if (!toSocketId) {
+        showToast("Escolha um player online.");
+        return;
+      }
+      if (amount < 1) {
+        showToast("Informe um valor válido.");
+        return;
+      }
+      mp.socket.emit("loan:request", { toSocketId, amount });
+    }
+
+    async function payLoan(loanId) {
+      try {
+        const res = await fetch(`${SERVER_URL}/api/loans/pay`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${mp.token}`
+          },
+          body: JSON.stringify({ loanId })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Erro ao pagar empréstimo.");
+        if (data.user) applyServerData(data.user);
+        await refreshLoans();
+        await refreshRichestRanking().catch(() => {});
+        renderBetPanel();
+        updateLobbyHeader();
+        showToast("Emprestimo pago com creditos de aposta.");
+      } catch (err) {
+        showToast(err.message);
+      }
+    }
+
+    function acceptLoanRequest() {
+      if (!mp.receivedLoanRequestId || !mp.socket?.connected) return;
+      const amount = Math.floor(Number(document.getElementById("loanApproveAmount").value) || 0);
+      if (amount < 1) {
+        showToast("Informe um valor válido.");
+        return;
+      }
+      if (amount > state.betCredits) {
+        showToast("Voce nao tem creditos de aposta suficientes para emprestar esse valor.");
+        return;
+      }
+      mp.socket.emit("loan:accept", { requestId: mp.receivedLoanRequestId, amount });
+      document.getElementById("loanRequestToast").classList.add("hidden");
+      mp.receivedLoanRequestId = null;
+    }
+
+    function rejectLoanRequest() {
+      if (!mp.receivedLoanRequestId || !mp.socket?.connected) return;
+      mp.socket.emit("loan:reject", { requestId: mp.receivedLoanRequestId });
+      document.getElementById("loanRequestToast").classList.add("hidden");
+      mp.receivedLoanRequestId = null;
+    }
+
     let lastChallengedSocketId = null;
 
     function sendChallenge(toSocketId, toUsername) {

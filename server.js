@@ -69,6 +69,9 @@ const MARKET_PRICES = {
   rare: 20,
   legendary: 30
 };
+const LOAN_INTEREST_RATE = 1.5;
+const MIN_LOAN_AMOUNT = 1;
+const MAX_LOAN_AMOUNT = 999999;
 const RARITY_SETTINGS = {
   common: { chance: 74.7, duplicateChance: 0.46 },
   rare: { chance: 24, duplicateChance: 0.22 },
@@ -208,7 +211,7 @@ function backupDbIfNeeded() {
 function loadDb() {
   ensureDbDir();
   if (!fs.existsSync(DB_FILE)) {
-    saveDb({ users: [], matches: [], market_listings: [], nextUserId: 1, nextMatchId: 1, nextMarketId: 1 });
+    saveDb({ users: [], matches: [], market_listings: [], loans: [], nextUserId: 1, nextMatchId: 1, nextMarketId: 1, nextLoanId: 1 });
   }
   const data = JSON.parse(fs.readFileSync(DB_FILE, "utf8"));
   backupDbIfNeeded();
@@ -226,6 +229,16 @@ function loadDb() {
     data.market_listings = [];
     changed = true;
   }
+  if (!Array.isArray(data.loans)) {
+    data.loans = [];
+    changed = true;
+  }
+  data.loans.forEach((loan) => {
+    if (loan && !loan.currency) {
+      loan.currency = "bet_credits";
+      changed = true;
+    }
+  });
   if (!Number.isFinite(Number(data.nextUserId))) {
     data.nextUserId = 1;
     changed = true;
@@ -238,9 +251,54 @@ function loadDb() {
     data.nextMarketId = 1;
     changed = true;
   }
+  if (!Number.isFinite(Number(data.nextLoanId))) {
+    data.nextLoanId = 1;
+    changed = true;
+  }
+  if (deleteOverdueBorrowerAccounts(data)) {
+    changed = true;
+  }
 
   if (changed) saveDb(data);
   return data;
+}
+
+function deleteOverdueBorrowerAccounts(data) {
+  if (!data || !Array.isArray(data.loans) || !Array.isArray(data.users)) return false;
+
+  const today = todayKey();
+  const now = new Date().toISOString();
+  const overdueLoans = data.loans.filter(loan =>
+    loan?.status === "active"
+    && loan.due_day
+    && String(loan.due_day) < today
+  );
+  const borrowerIds = new Set(overdueLoans
+    .map(loan => Number(loan.borrower_id))
+    .filter(Number.isFinite));
+
+  if (!borrowerIds.size) return false;
+
+  data.loans.forEach(loan => {
+    const borrowerId = Number(loan.borrower_id);
+    const lenderId = Number(loan.lender_id);
+    if (loan.status === "active" && borrowerIds.has(borrowerId)) {
+      loan.status = "defaulted";
+      loan.defaulted_at = now;
+      loan.default_reason = "Conta deletada por divida vencida.";
+    } else if (loan.status === "requested" && (borrowerIds.has(borrowerId) || borrowerIds.has(lenderId))) {
+      loan.status = "cancelled";
+      loan.cancelled_at = now;
+      loan.cancel_reason = "Conta envolvida em divida vencida.";
+    }
+  });
+
+  data.users = data.users.filter(user => !borrowerIds.has(Number(user.id)));
+  if (Array.isArray(data.market_listings)) {
+    data.market_listings = data.market_listings.filter(listing => !borrowerIds.has(Number(listing.seller_id)));
+  }
+
+  return true;
 }
 
 function saveDb(db) {
@@ -251,6 +309,49 @@ function saveDb(db) {
 }
 
 // Helpers de consulta (síncronos, thread-safe pelo event loop do Node)
+function parseLoanAmount(value) {
+  const amount = Math.floor(Number(value));
+  if (!Number.isFinite(amount) || amount < MIN_LOAN_AMOUNT) {
+    const error = new Error(`Valor minimo de emprestimo: ${MIN_LOAN_AMOUNT} credito de aposta.`);
+    error.statusCode = 400;
+    throw error;
+  }
+  if (amount > MAX_LOAN_AMOUNT) {
+    const error = new Error(`Valor maximo de emprestimo: ${MAX_LOAN_AMOUNT} creditos de aposta.`);
+    error.statusCode = 400;
+    throw error;
+  }
+  return amount;
+}
+
+function calculateLoanTotal(principal) {
+  return Math.ceil(Number(principal || 0) * LOAN_INTEREST_RATE);
+}
+
+function serializeLoanForUser(loan, userId) {
+  const borrowerId = Number(loan.borrower_id);
+  const lenderId = loan.lender_id === null || loan.lender_id === undefined ? null : Number(loan.lender_id);
+  return {
+    id: loan.id,
+    borrower_id: borrowerId,
+    borrower_name: loan.borrower_name || "",
+    lender_id: lenderId,
+    lender_name: loan.lender_name || "Casa",
+    principal: Math.max(0, Number(loan.principal || 0) || 0),
+    currency: loan.currency || "bet_credits",
+    total_due: Math.max(0, Number(loan.total_due || 0) || 0),
+    remaining_due: Math.max(0, Number(loan.remaining_due || 0) || 0),
+    interest_rate: Number(loan.interest_rate || LOAN_INTEREST_RATE),
+    status: loan.status || "active",
+    due_day: loan.due_day || "",
+    created_at: loan.created_at || "",
+    paid_at: loan.paid_at || "",
+    defaulted_at: loan.defaulted_at || "",
+    direction: borrowerId === Number(userId) ? "borrowed" : "lent",
+    is_house: !lenderId
+  };
+}
+
 const db = {
   findUser(field, value) {
     return loadDb().users.find(u => u[field] === value) || null;
@@ -285,6 +386,116 @@ const db = {
     Object.assign(data.users[idx], fields);
     saveDb(data);
     return data.users[idx];
+  },
+  getLoansForUser(userId) {
+    const data = loadDb();
+    return data.loans
+      .filter(loan => Number(loan.borrower_id) === Number(userId) || Number(loan.lender_id) === Number(userId))
+      .map(loan => serializeLoanForUser(loan, userId));
+  },
+  getRichestBetCreditUsers(limit = 10) {
+    const safeLimit = Math.max(1, Math.min(50, Math.floor(Number(limit) || 10)));
+    return loadDb().users
+      .map(user => ({
+        id: user.id,
+        username: user.username,
+        avatar: user.avatar || "",
+        bet_credits: Math.max(0, Math.floor(Number(user.bet_credits || 0) || 0))
+      }))
+      .sort((a, b) => b.bet_credits - a.bet_credits || String(a.username || "").localeCompare(String(b.username || "")))
+      .slice(0, safeLimit)
+      .map((user, index) => ({ ...user, rank: index + 1 }));
+  },
+  createLoan({ borrowerId, lenderId = null, principal, lenderName = "Casa" }) {
+    const data = loadDb();
+    const borrower = data.users.find(user => Number(user.id) === Number(borrowerId));
+    if (!borrower) {
+      const error = new Error("Usuario que pediu emprestimo nao encontrado.");
+      error.statusCode = 404;
+      throw error;
+    }
+
+    const amount = parseLoanAmount(principal);
+    const totalDue = calculateLoanTotal(amount);
+    let lender = null;
+    if (lenderId) {
+      lender = data.users.find(user => Number(user.id) === Number(lenderId));
+      if (!lender) {
+        const error = new Error("Credor nao encontrado.");
+        error.statusCode = 404;
+        throw error;
+      }
+      if (Number(lender.bet_credits || 0) < amount) {
+        const error = new Error("Creditos de aposta insuficientes para emprestar.");
+        error.statusCode = 400;
+        throw error;
+      }
+      lender.bet_credits = Number(lender.bet_credits || 0) - amount;
+      lenderName = lender.username;
+    }
+
+    borrower.bet_credits = Number(borrower.bet_credits || 0) + amount;
+
+    const loan = {
+      id: data.nextLoanId++,
+      borrower_id: borrower.id,
+      borrower_name: borrower.username,
+      lender_id: lender ? lender.id : null,
+      lender_name: lender ? lender.username : lenderName,
+      principal: amount,
+      currency: "bet_credits",
+      interest_rate: LOAN_INTEREST_RATE,
+      total_due: totalDue,
+      remaining_due: totalDue,
+      status: "active",
+      due_day: todayKey(),
+      created_at: new Date().toISOString()
+    };
+
+    data.loans.push(loan);
+    saveDb(data);
+    return { loan, borrower, lender };
+  },
+  payLoan(borrowerId, loanId) {
+    const data = loadDb();
+    const loan = data.loans.find(item => Number(item.id) === Number(loanId));
+    if (!loan || Number(loan.borrower_id) !== Number(borrowerId)) {
+      const error = new Error("Emprestimo nao encontrado.");
+      error.statusCode = 404;
+      throw error;
+    }
+    if (loan.status !== "active") {
+      const error = new Error("Esse emprestimo nao esta ativo.");
+      error.statusCode = 400;
+      throw error;
+    }
+
+    const borrower = data.users.find(user => Number(user.id) === Number(borrowerId));
+    if (!borrower) {
+      const error = new Error("Usuario devedor nao encontrado.");
+      error.statusCode = 404;
+      throw error;
+    }
+
+    const payment = Math.max(0, Math.ceil(Number(loan.remaining_due || loan.total_due || 0)));
+    if (Number(borrower.bet_credits || 0) < payment) {
+      const error = new Error(`Creditos de aposta insuficientes. Faltam ${payment - Number(borrower.bet_credits || 0)}.`);
+      error.statusCode = 400;
+      throw error;
+    }
+
+    borrower.bet_credits = Number(borrower.bet_credits || 0) - payment;
+    let lender = null;
+    if (loan.lender_id) {
+      lender = data.users.find(user => Number(user.id) === Number(loan.lender_id));
+      if (lender) lender.bet_credits = Number(lender.bet_credits || 0) + payment;
+    }
+
+    loan.remaining_due = 0;
+    loan.status = "paid";
+    loan.paid_at = new Date().toISOString();
+    saveDb(data);
+    return { loan, borrower, lender, payment };
   },
   createMatch(player1_id, player2_id, player1_bet, player2_bet) {
     const data  = loadDb();
@@ -457,6 +668,7 @@ function safeUser(user) {
   if (!user) return null;
   user = normalizeUserProgress(user);
   const { password_hash, ...safe } = user;
+  safe.loans = db.getLoansForUser(user.id);
   return safe;
 }
 
@@ -486,6 +698,23 @@ function emitSystemChat(text, kind = "system", extra = {}) {
     text: cleanText,
     ...extra
   });
+}
+
+function emitLoanRefresh(userIds, message = "") {
+  const targetIds = new Set((Array.isArray(userIds) ? userIds : [userIds]).map(Number).filter(Number.isFinite));
+  if (!targetIds.size || typeof onlinePlayers === "undefined") return;
+
+  for (const [, player] of onlinePlayers) {
+    if (!targetIds.has(Number(player.userId))) continue;
+    const fresh = db.findUser("id", player.userId);
+    if (!fresh) continue;
+    io.to(player.socketId).emit("loan:update", {
+      user: safeUser(fresh),
+      loans: db.getLoansForUser(player.userId),
+      message
+    });
+  }
+  io.emit("ranking:update", { ranking: db.getRichestBetCreditUsers(10) });
 }
 
 // ─── REST: Registro ────────────────────────────────────────────────────────
@@ -569,6 +798,62 @@ app.post("/api/save", authMiddleware, (req, res) => {
   } catch (err) {
     console.error("[save] erro:", err);
     res.status(500).json({ error: err.message });
+  }
+});
+
+app.get("/api/loans", authMiddleware, (req, res) => {
+  try {
+    const user = normalizeUserProgress(db.findUser("id", req.userId));
+    if (!user) return res.status(404).json({ error: "Usuario nao encontrado" });
+    res.json({ loans: db.getLoansForUser(req.userId), user: safeUser(user) });
+  } catch (err) {
+    console.error("[loans:list] erro:", err);
+    res.status(err.statusCode || 500).json({ error: err.message });
+  }
+});
+
+app.get("/api/ranking/richest", authMiddleware, (req, res) => {
+  try {
+    res.json({ ranking: db.getRichestBetCreditUsers(req.query?.limit || 10) });
+  } catch (err) {
+    console.error("[ranking:richest] erro:", err);
+    res.status(err.statusCode || 500).json({ error: err.message });
+  }
+});
+
+app.post("/api/loans/house", authMiddleware, (req, res) => {
+  try {
+    const result = db.createLoan({
+      borrowerId: req.userId,
+      principal: req.body?.amount,
+      lenderName: "Casa"
+    });
+    emitLoanRefresh([req.userId], `Emprestimo da casa aprovado: ${result.loan.principal} creditos de aposta.`);
+    res.json({
+      ok: true,
+      loan: serializeLoanForUser(result.loan, req.userId),
+      user: safeUser(result.borrower)
+    });
+  } catch (err) {
+    console.error("[loans:house] erro:", err);
+    res.status(err.statusCode || 500).json({ error: err.message });
+  }
+});
+
+app.post("/api/loans/pay", authMiddleware, (req, res) => {
+  try {
+    const result = db.payLoan(req.userId, req.body?.loanId);
+    const ids = [req.userId];
+    if (result.lender?.id) ids.push(result.lender.id);
+    emitLoanRefresh(ids, `Emprestimo #${result.loan.id} pago: ${result.payment} creditos de aposta.`);
+    res.json({
+      ok: true,
+      loan: serializeLoanForUser(result.loan, req.userId),
+      user: safeUser(result.borrower)
+    });
+  } catch (err) {
+    console.error("[loans:pay] erro:", err);
+    res.status(err.statusCode || 500).json({ error: err.message });
   }
 });
 
@@ -895,6 +1180,7 @@ app.use((err, req, res, next) => {
 // ─── Socket.io ─────────────────────────────────────────────────────────────
 const onlinePlayers      = new Map();   // socketId → info
 const pendingChallenges  = new Map();   // challengeId → detalhes
+const pendingLoanRequests = new Map();  // requestId -> pedido de emprestimo
 const activeRooms        = new Map();   // roomId → detalhes da sala
 const blackjackRooms     = new Map();   // roomId -> mesa de 21
 const buttonSoccerRooms  = new Map();   // roomId -> futebol de botao
@@ -5068,6 +5354,92 @@ io.on("connection", (socket) => {
   });
 
   // ── Desafio ────────────────────────────────────────────────────────────
+  socket.on("loan:request", ({ toSocketId, amount }) => {
+    try {
+      const requestedAmount = parseLoanAmount(amount);
+      const lender = onlinePlayers.get(toSocketId);
+      if (!lender) return socket.emit("loan:error", "Jogador indisponivel para emprestar.");
+      if (Number(lender.userId) === Number(socket.userId)) {
+        return socket.emit("loan:error", "Voce nao pode pedir emprestado para si mesmo.");
+      }
+
+      const borrower = db.findUser("id", socket.userId);
+      if (!borrower) return socket.emit("loan:error", "Usuario nao encontrado.");
+
+      const requestId = `loan-${socket.id}-${Date.now()}`;
+      pendingLoanRequests.set(requestId, {
+        requestId,
+        fromSocketId: socket.id,
+        fromUserId: socket.userId,
+        fromUsername: socket.username,
+        toSocketId,
+        toUserId: lender.userId,
+        toUsername: lender.username,
+        amount: requestedAmount,
+        createdAt: Date.now()
+      });
+
+      io.to(toSocketId).emit("loan:received", {
+        requestId,
+        fromSocketId: socket.id,
+        fromUsername: socket.username,
+        requestedAmount
+      });
+      socket.emit("loan:sent", { requestId, toUsername: lender.username, requestedAmount });
+    } catch (err) {
+      socket.emit("loan:error", err.message);
+    }
+  });
+
+  socket.on("loan:accept", ({ requestId, amount }) => {
+    const request = pendingLoanRequests.get(requestId);
+    if (!request || request.toSocketId !== socket.id) {
+      return socket.emit("loan:error", "Pedido de emprestimo expirado.");
+    }
+
+    try {
+      const approvedAmount = parseLoanAmount(amount || request.amount);
+      const result = db.createLoan({
+        borrowerId: request.fromUserId,
+        lenderId: socket.userId,
+        principal: approvedAmount
+      });
+      pendingLoanRequests.delete(requestId);
+
+      emitLoanRefresh([request.fromUserId, socket.userId], `${socket.username} emprestou ${approvedAmount} creditos de aposta para ${request.fromUsername}.`);
+      io.to(request.fromSocketId).emit("loan:approved", {
+        requestId,
+        fromUsername: socket.username,
+        amount: approvedAmount,
+        totalDue: result.loan.total_due,
+        user: safeUser(result.borrower)
+      });
+      socket.emit("loan:accepted", {
+        requestId,
+        toUsername: request.fromUsername,
+        amount: approvedAmount,
+        totalDue: result.loan.total_due,
+        user: safeUser(result.lender)
+      });
+    } catch (err) {
+      socket.emit("loan:error", err.message);
+    }
+  });
+
+  socket.on("loan:reject", ({ requestId }) => {
+    const request = pendingLoanRequests.get(requestId);
+    if (!request || request.toSocketId !== socket.id) return;
+    pendingLoanRequests.delete(requestId);
+    io.to(request.fromSocketId).emit("loan:rejected", { requestId, username: socket.username });
+  });
+
+  socket.on("loan:cancel", ({ requestId }) => {
+    const request = pendingLoanRequests.get(requestId);
+    if (!request || request.fromSocketId !== socket.id) return;
+    pendingLoanRequests.delete(requestId);
+    io.to(request.toSocketId).emit("loan:cancelled", { requestId, username: socket.username });
+  });
+
   socket.on("horror:create", () => {
     const current = onlinePlayers.get(socket.id);
     if (current?.inGame) return socket.emit("horror:error", "Voce ja esta em uma partida.");
@@ -6918,6 +7290,14 @@ io.on("connection", (socket) => {
       }
     }
 
+    for (const [id, request] of pendingLoanRequests) {
+      if (request.fromSocketId === socket.id || request.toSocketId === socket.id) {
+        const notifySid = request.fromSocketId === socket.id ? request.toSocketId : request.fromSocketId;
+        io.to(notifySid).emit("loan:cancelled", { requestId: id, username: socket.username });
+        pendingLoanRequests.delete(id);
+      }
+    }
+
     onlinePlayers.delete(socket.id);
     broadcastOnlineList();
   });
@@ -7014,6 +7394,7 @@ function broadcastOnlineList() {
   const list = [];
   for (const [, p] of onlinePlayers) {
     const user = db.findUser("id", p.userId);
+    if (!user) continue;
     p.avatar = user?.avatar || p.avatar || "";
     const gameRoom = getSpectatableRoom(p.game, p.roomId);
     list.push({

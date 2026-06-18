@@ -872,6 +872,63 @@
       font-weight: 900;
     }
 
+    .cardwars-side-button {
+      position: relative;
+      width: 100%;
+      min-height: 72px;
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 10px;
+      margin-top: 8px;
+      padding: 12px;
+      overflow: hidden;
+      border: 0;
+      border-radius: var(--radius);
+      color: #fff9e8;
+      background:
+        linear-gradient(135deg, rgba(49, 95, 148, .96), rgba(75, 143, 93, .92) 54%, rgba(229, 183, 59, .95));
+      box-shadow: 0 14px 28px rgba(36, 68, 76, 0.24);
+      cursor: pointer;
+      font-weight: 950;
+      text-align: left;
+    }
+
+    .cardwars-side-button::after {
+      content: "";
+      position: absolute;
+      right: 16px;
+      bottom: 13px;
+      width: 42px;
+      height: 56px;
+      border-radius: 6px;
+      background:
+        linear-gradient(180deg, #fff9e8 0 18%, #315f94 19% 52%, #e5b73b 53% 100%);
+      box-shadow:
+        -14px -5px 0 -3px rgba(255, 249, 232, .92),
+        -20px -1px 0 -5px rgba(182, 75, 84, .88),
+        0 9px 18px rgba(0, 0, 0, .22);
+      transform: rotate(8deg);
+      opacity: .96;
+    }
+
+    .cardwars-side-button span,
+    .cardwars-side-button small {
+      position: relative;
+      z-index: 2;
+    }
+
+    .cardwars-side-button span {
+      font-size: 1.02rem;
+      text-transform: uppercase;
+    }
+
+    .cardwars-side-button small {
+      color: rgba(255, 249, 232, 0.82);
+      font-size: 0.72rem;
+      font-weight: 900;
+    }
+
     .horror-side-button {
       position: relative;
       width: 100%;
@@ -3804,6 +3861,7 @@
     }
 
     .pirate-open-btn { background: linear-gradient(135deg, #7b2f2f, #151a27); }
+    .cardwars-open-btn { background: linear-gradient(135deg, #315f94, #4b8f5d 56%, #d8a420); }
 
     .pirate-overlay {
       position: fixed;
@@ -5360,6 +5418,10 @@
             <span>Pirate Bomb</span>
             <small>Bombas no conves</small>
           </button>
+          <button class="cardwars-side-button" type="button" onclick="window.location.href='/cardwars/'">
+            <span>Card Wars</span>
+            <small>Solo com cartas</small>
+          </button>
           <button class="horror-side-button" type="button" onclick="window.location.href='/casaSombria/'">
             <span>Casa Sombria</span>
             <small>Jogo nativo</small>
@@ -5476,6 +5538,7 @@
         <button class="mp-btn artillery-open-btn" type="button" onclick="createArtilleryRoom()">Canhao</button>
         <button class="mp-btn relic-open-btn" type="button" onclick="createRelicRoom()">Relic Rush</button>
         <button class="mp-btn pirate-open-btn" type="button" onclick="createPirateRoom()">Pirate Bomb</button>
+        <button class="mp-btn cardwars-open-btn" type="button" onclick="window.location.href='/cardwars/'">Card Wars</button>
         <button class="mp-btn blackjack-open-btn" type="button" onclick="createBlackjackRoom()">Mesa 21</button>
         <button class="mp-btn horse-open-btn" type="button" onclick="createHorseRoom()">🏇 Corrida</button>
       </div>

@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Card Wars Solo</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true">CW</span>
+        <div>
+          <h1>Card Wars Solo</h1>
+          <p>Album Copa Arcade</p>
+        </div>
+      </div>
+      <div class="top-actions">
+        <select id="deckFaction" aria-label="Faccao do deck">
+          <option value="Mixed">Deck misto</option>
+          <option value="Corn">Corn</option>
+          <option value="Cotton">Cotton</option>
+          <option value="Plains">Plains</option>
+          <option value="Sand">Sand</option>
+          <option value="Swamp">Swamp</option>
+        </select>
+        <button id="newGameBtn" type="button">Nova partida</button>
+        <button id="soundBtn" type="button" aria-pressed="false">Som</button>
+        <a class="back-link" href="/">Voltar ao Album</a>
+      </div>
+    </header>
+
+    <main class="game-shell">
+      <section class="battle-table" aria-label="Mesa de Card Wars">
+        <div class="score-row opponent">
+          <div>
+            <span class="side-label">CPU</span>
+            <strong id="cpuHero">45 HP</strong>
+          </div>
+          <div class="resource-strip">
+            <span id="cpuActions">0 acoes</span>
+            <span id="cpuDeck">0 deck</span>
+            <span id="cpuDiscard">0 descarte</span>
+          </div>
+        </div>
+
+        <section class="lane-row enemy-row" id="enemyLanes" aria-label="Lanes da CPU"></section>
+        <div class="center-rail">
+          <span id="turnBadge">Carregando</span>
+          <span id="statusLine">Lendo blueprints do projeto Unity...</span>
+        </div>
+        <section class="lane-row player-row" id="playerLanes" aria-label="Suas lanes"></section>
+
+        <div class="score-row player">
+          <div>
+            <span class="side-label">Voce</span>
+            <strong id="playerHero">45 HP</strong>
+          </div>
+          <div class="resource-strip">
+            <span id="playerActions">0 acoes</span>
+            <span id="playerDeck">0 deck</span>
+            <span id="playerDiscard">0 descarte</span>
+          </div>
+        </div>
+
+        <section class="hand-zone" aria-label="Mao">
+          <div class="hand-head">
+            <h2>Mao</h2>
+            <div class="command-row">
+              <button id="playCardBtn" type="button" disabled>Jogar</button>
+              <button id="floopBtn" type="button" disabled>Floop</button>
+              <button id="battleBtn" type="button" disabled>Atacar e passar</button>
+            </div>
+          </div>
+          <div class="hand" id="hand"></div>
+        </section>
+      </section>
+
+      <aside class="side-panel" aria-label="Catalogo e log">
+        <section class="panel-section">
+          <h2>Acervo carregado</h2>
+          <div class="asset-stats" id="assetStats">
+            <span>0 criaturas</span>
+            <span>0 predios</span>
+            <span>0 spells</span>
+          </div>
+          <div class="catalog-tools">
+            <input id="cardSearch" type="search" placeholder="Buscar carta" autocomplete="off">
+            <select id="catalogFilter" aria-label="Filtro do catalogo">
+              <option value="all">Tudo</option>
+              <option value="creature">Criaturas</option>
+              <option value="building">Predios</option>
+              <option value="spell">Spells</option>
+            </select>
+          </div>
+          <div class="catalog" id="catalog"></div>
+        </section>
+
+        <section class="panel-section">
+          <h2>Registro</h2>
+          <ol class="event-log" id="eventLog"></ol>
+        </section>
+      </aside>
+    </main>
+  </div>
+
+  <template id="missingArtTemplate">
+    <div class="missing-art">CW</div>
+  </template>
+
+  <script src="./game.js"></script>
+</body>
+</html>

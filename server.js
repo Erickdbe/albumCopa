@@ -59,6 +59,7 @@ const DB_BACKUP_DIR = process.env.DB_BACKUP_DIR
   ? resolveConfiguredPath(process.env.DB_BACKUP_DIR)
   : path.join(path.dirname(DB_FILE), "backups");
 const MAX_DB_BACKUPS = Math.max(1, Number(process.env.MAX_DB_BACKUPS || 20));
+const INITIAL_ALBUM_CREDITS = 80;
 const DAILY_ALBUM_CREDITS = 30;
 const INITIAL_BET_CREDITS = 550;
 const PACK_COST = 15;
@@ -363,7 +364,7 @@ const db = {
       username,
       password_hash,
       avatar:           "",
-      credits:          DAILY_ALBUM_CREDITS,
+      credits:          INITIAL_ALBUM_CREDITS,
       bet_credits:      INITIAL_BET_CREDITS,
       exchange_wins:    0,
       bj_wins:          0,
@@ -371,6 +372,7 @@ const db = {
       duplicates:       {},
       pending_stickers: [],
       last_sale_day:    "",
+      initial_album_credits_granted: INITIAL_ALBUM_CREDITS,
       initial_bet_credits_granted: INITIAL_BET_CREDITS,
       last_album_credit_day: todayKey(),
       created_at:       new Date().toISOString()
@@ -626,6 +628,20 @@ function refreshDailyAlbumCredits(user) {
   return user;
 }
 
+function normalizeInitialAlbumCredits(user) {
+  if (!user) return null;
+
+  if (user.initial_album_credits_granted === INITIAL_ALBUM_CREDITS) {
+    return user;
+  }
+
+  const currentCredits = Number.isFinite(Number(user.credits)) ? Number(user.credits) : 0;
+  return db.updateUser(user.id, {
+    credits: Math.max(currentCredits, INITIAL_ALBUM_CREDITS),
+    initial_album_credits_granted: INITIAL_ALBUM_CREDITS
+  });
+}
+
 function normalizeInitialBetCredits(user) {
   if (!user) return null;
 
@@ -758,7 +774,7 @@ app.post("/api/login", async (req, res) => {
     const ok = await bcrypt.compare(password, user.password_hash);
     if (!ok) return res.status(401).json({ error: "Usuário ou senha inválidos" });
 
-    user = normalizeUserProgress(normalizeInitialBetCredits(refreshDailyAlbumCredits(user)));
+    user = normalizeUserProgress(normalizeInitialBetCredits(normalizeInitialAlbumCredits(refreshDailyAlbumCredits(user))));
     console.log(`[login] ${user.username}`);
     res.json({ token: signToken(user), user: safeUser(user) });
   } catch (err) {
@@ -781,7 +797,7 @@ app.get("/api/me", authMiddleware, (req, res) => {
   try {
     let user = db.findUser("id", req.userId);
     if (!user) return res.status(404).json({ error: "Usuário não encontrado" });
-    user = normalizeUserProgress(normalizeInitialBetCredits(refreshDailyAlbumCredits(user)));
+    user = normalizeUserProgress(normalizeInitialBetCredits(normalizeInitialAlbumCredits(refreshDailyAlbumCredits(user))));
     res.json(safeUser(user));
   } catch (err) {
     console.error("[me] erro:", err);

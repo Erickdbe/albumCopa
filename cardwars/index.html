@@ -7,16 +7,13 @@
   <link rel="stylesheet" href="./styles.css">
 </head>
 <body>
-  <div class="app-shell">
-    <header class="topbar">
-      <div class="brand">
-        <span class="brand-mark" aria-hidden="true">CW</span>
-        <div>
-          <h1>Card Wars Solo</h1>
-          <p>Album Copa Arcade</p>
-        </div>
-      </div>
-      <div class="top-actions">
+  <main class="battle-stage" aria-label="Card Wars">
+    <section class="arena" aria-label="Campo de batalha">
+      <div class="room-layer"></div>
+      <div class="table-layer"></div>
+      <div class="grass-board"></div>
+
+      <header class="match-menu">
         <select id="deckFaction" aria-label="Faccao do deck">
           <option value="Mixed">Deck misto</option>
           <option value="Corn">Corn</option>
@@ -25,61 +22,67 @@
           <option value="Sand">Sand</option>
           <option value="Swamp">Swamp</option>
         </select>
-        <button id="newGameBtn" type="button">Nova partida</button>
+        <button id="newGameBtn" type="button">Nova</button>
         <button id="soundBtn" type="button" aria-pressed="false">Som</button>
-        <a class="back-link" href="/">Voltar ao Album</a>
-      </div>
-    </header>
+        <a class="back-link" href="/">Album</a>
+      </header>
 
-    <main class="game-shell">
-      <section class="battle-table" aria-label="Mesa de Card Wars">
-        <div class="score-row opponent">
-          <div>
-            <span class="side-label">CPU</span>
-            <strong id="cpuHero">45 HP</strong>
-          </div>
-          <div class="resource-strip">
-            <span id="cpuActions">0 acoes</span>
-            <span id="cpuDeck">0 deck</span>
-            <span id="cpuDiscard">0 descarte</span>
-          </div>
+      <section class="hero-hud enemy-hud" aria-label="CPU">
+        <div class="magic-orb"><strong id="cpuActions">0</strong></div>
+        <div class="portrait-frame king">
+          <img src="/CardWars-main/CardWars-main/Assets/Texture2D/Jake_Face.png" alt="">
         </div>
-
-        <section class="lane-row enemy-row" id="enemyLanes" aria-label="Lanes da CPU"></section>
-        <div class="center-rail">
-          <span id="turnBadge">Carregando</span>
-          <span id="statusLine">Lendo blueprints do projeto Unity...</span>
+        <div class="deck-fan" aria-hidden="true">
+          <img src="/CardWars-main/CardWars-main/Assets/Texture2D/Card_Back.png" alt="">
+          <img src="/CardWars-main/CardWars-main/Assets/Texture2D/Card_Back.png" alt="">
+          <img src="/CardWars-main/CardWars-main/Assets/Texture2D/Card_Back.png" alt="">
         </div>
-        <section class="lane-row player-row" id="playerLanes" aria-label="Suas lanes"></section>
-
-        <div class="score-row player">
-          <div>
-            <span class="side-label">Voce</span>
-            <strong id="playerHero">45 HP</strong>
-          </div>
-          <div class="resource-strip">
-            <span id="playerActions">0 acoes</span>
-            <span id="playerDeck">0 deck</span>
-            <span id="playerDiscard">0 descarte</span>
-          </div>
+        <div class="hero-bars">
+          <strong id="cpuHero">45 HP</strong>
+          <small><span id="cpuDeck">0 deck</span> | <span id="cpuDiscard">0 descarte</span></small>
         </div>
-
-        <section class="hand-zone" aria-label="Mao">
-          <div class="hand-head">
-            <h2>Mao</h2>
-            <div class="command-row">
-              <button id="playCardBtn" type="button" disabled>Jogar</button>
-              <button id="floopBtn" type="button" disabled>Floop</button>
-              <button id="battleBtn" type="button" disabled>Atacar e passar</button>
-            </div>
-          </div>
-          <div class="hand" id="hand"></div>
-        </section>
       </section>
 
-      <aside class="side-panel" aria-label="Catalogo e log">
-        <section class="panel-section">
-          <h2>Acervo carregado</h2>
+      <section class="field-lanes enemy-row" id="enemyLanes" aria-label="Lanes da CPU"></section>
+      <section class="field-lanes player-row" id="playerLanes" aria-label="Suas lanes"></section>
+
+      <section class="hero-hud player-hud" aria-label="Voce">
+        <div class="magic-orb"><strong id="playerActions">0</strong></div>
+        <div class="portrait-frame">
+          <img src="/CardWars-main/CardWars-main/Assets/Texture2D/Jake_Face.png" alt="">
+        </div>
+        <div class="deck-fan" aria-hidden="true">
+          <img src="/CardWars-main/CardWars-main/Assets/Texture2D/Card_Back.png" alt="">
+          <img src="/CardWars-main/CardWars-main/Assets/Texture2D/Card_Back.png" alt="">
+          <img src="/CardWars-main/CardWars-main/Assets/Texture2D/Card_Back.png" alt="">
+        </div>
+        <div class="hero-bars">
+          <strong id="playerHero">45 HP</strong>
+          <small><span id="playerDeck">0 deck</span> | <span id="playerDiscard">0 descarte</span></small>
+        </div>
+      </section>
+
+      <div class="speech-bubble" aria-live="polite">
+        <strong id="turnBadge">Carregando</strong>
+        <span id="statusLine">Lendo recursos do projeto Unity...</span>
+      </div>
+
+      <div class="hand-dock" aria-label="Mao">
+        <div class="hand" id="hand"></div>
+      </div>
+
+      <nav class="command-wheel" aria-label="Acoes">
+        <button id="playCardBtn" type="button" disabled>Jogar</button>
+        <button id="floopBtn" type="button" disabled>Floop</button>
+        <button id="battleBtn" type="button" disabled>GO</button>
+      </nav>
+
+      <aside class="right-rail" aria-label="Deck e registro">
+        <div class="rail-slots" aria-hidden="true">
+          <span></span><span></span><span></span><span></span><span></span>
+        </div>
+        <details>
+          <summary>Cartas</summary>
           <div class="asset-stats" id="assetStats">
             <span>0 criaturas</span>
             <span>0 predios</span>
@@ -95,15 +98,14 @@
             </select>
           </div>
           <div class="catalog" id="catalog"></div>
-        </section>
-
-        <section class="panel-section">
-          <h2>Registro</h2>
+        </details>
+        <details open>
+          <summary>Registro</summary>
           <ol class="event-log" id="eventLog"></ol>
-        </section>
+        </details>
       </aside>
-    </main>
-  </div>
+    </section>
+  </main>
 
   <template id="missingArtTemplate">
     <div class="missing-art">CW</div>

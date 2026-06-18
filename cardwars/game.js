@@ -4,6 +4,7 @@ const ASSET_BASE = "/CardWars-main/CardWars-main/Assets";
 const BLUEPRINT_BASE = `${ASSET_BASE}/StreamingAssets/Blueprints`;
 const CARDART_BASE = `${ASSET_BASE}/Resources/textures/cardart`;
 const AUDIO_BASE = `${ASSET_BASE}/AudioClip`;
+const TOKEN_BASE = `${ASSET_BASE}/Texture2D`;
 
 const FACTIONS = ["Corn", "Cotton", "Plains", "Sand", "Swamp"];
 const FACTION_NAMES = {
@@ -192,7 +193,8 @@ function normalizeCard(row, type) {
     val2: Number(row.val2 || 0) || 0,
     audioName: String(row.AudioName || ""),
     desc: makeReadableDescription(row, type),
-    art: getCardArtPath(row, type, faction)
+    art: getCardArtPath(row, type, faction),
+    sprite: getBoardSpritePath(row, type)
   };
 }
 
@@ -255,6 +257,17 @@ function getCardArtPath(row, type, faction) {
   if (type === "building") return `${CARDART_BASE}/buildings/${file}`;
   if (type === "spell") return `${CARDART_BASE}/spells/${file}`;
   return `${CARDART_BASE}/creatures/${String(faction || "Universal").toLowerCase()}/${file}`;
+}
+
+function getBoardSpritePath(row, type) {
+  const raw = String(row.SpriteName || row.ID || "");
+  const cleaned = raw
+    .replace(/^Creature_/, "")
+    .replace(/^Building_/, "")
+    .replace(/^Spell_/, "")
+    .replace(/^GL_/, "");
+  const file = type === "spell" ? raw : cleaned;
+  return `${TOKEN_BASE}/${encodeURIComponent(file)}.png`;
 }
 
 function startNewGame() {
@@ -825,8 +838,8 @@ function renderHud() {
 
   els.playerHero.textContent = `${state.player.hp} HP`;
   els.cpuHero.textContent = `${state.cpu.hp} HP`;
-  els.playerActions.textContent = `${state.player.actions} acoes`;
-  els.cpuActions.textContent = `${state.cpu.actions} acoes`;
+  els.playerActions.textContent = state.player.actions;
+  els.cpuActions.textContent = state.cpu.actions;
   els.playerDeck.textContent = `${state.player.deck.length} deck`;
   els.cpuDeck.textContent = `${state.cpu.deck.length} deck`;
   els.playerDiscard.textContent = `${state.player.discard.length} descarte`;
@@ -862,12 +875,8 @@ function renderLane(lane, index, side) {
         <span>${escapeHtml(FACTION_NAMES[lane.landscape] || lane.landscape)}</span>
         <span>Lane ${index + 1}</span>
       </div>
-      <div class="lane-slot">
-        ${lane.creature ? renderBoardCard(lane.creature, lane) : `<div class="empty-slot">Vazia</div>`}
-      </div>
-      <div class="building-slot">
-        ${lane.building ? renderBuilding(lane.building) : `<div class="empty-slot">Predio</div>`}
-      </div>
+      ${lane.creature ? renderBoardCard(lane.creature, lane) : `<div class="empty-slot">Vazia</div>`}
+      ${lane.building ? renderBuilding(lane.building) : ""}
     </article>
   `;
 }
@@ -876,14 +885,14 @@ function renderBoardCard(instance, lane) {
   const card = instance.card;
   const flooped = instance.flooped ? " is-flooped" : "";
   return `
-    <div class="play-card creature${flooped}">
-      <div class="card-art">${renderImage(card.art, card.name)}</div>
-      <div class="card-title" title="${escapeHtml(card.name)}">${escapeHtml(card.name)}</div>
-      <div class="card-meta">
-        <span>${escapeHtml(FACTION_NAMES[card.faction] || card.faction)}</span>
-        <span class="stat-pills">
-          <span class="pill atk">${getEffectiveAttack(lane)}</span>
-          <span class="pill def">${getEffectiveDefense(lane)}</span>
+    <div class="board-creature${flooped}" title="${escapeHtml(card.name)}">
+      <span class="board-title">${escapeHtml(card.name)}</span>
+      <div class="board-sprite">
+        ${renderSpriteImage(card.sprite, card.art, card.name)}
+        <span class="board-stats">
+          <span class="stat-disc atk">${getEffectiveAttack(lane)}</span>
+          <span class="stat-disc hp">${getEffectiveDefense(lane)}</span>
+          <span class="stat-disc def">${instance.maxDef}</span>
         </span>
       </div>
     </div>
@@ -893,9 +902,8 @@ function renderBoardCard(instance, lane) {
 function renderBuilding(instance) {
   const card = instance.card;
   return `
-    <div class="mini-building">
-      ${renderImage(card.art, card.name)}
-      <span title="${escapeHtml(card.name)}">${escapeHtml(card.name)}</span>
+    <div class="board-building" title="${escapeHtml(card.name)}">
+      ${renderSpriteImage(card.sprite, card.art, card.name)}
     </div>
   `;
 }
@@ -906,10 +914,12 @@ function renderHand() {
     return;
   }
 
-  els.hand.innerHTML = state.player.hand.map((card) => {
+  const total = state.player.hand.length;
+  els.hand.innerHTML = state.player.hand.map((card, index) => {
     const selected = state.selectedCardUid === card.uid ? " is-selected" : "";
+    const fan = total > 1 ? (index - (total - 1) / 2) * 6 : 0;
     return `
-      <button class="hand-card ${card.type}${selected}" type="button" data-uid="${card.uid}">
+      <button class="hand-card ${card.type}${selected}" type="button" data-uid="${card.uid}" data-cost="${card.cost}" style="--fan:${fan}deg">
         <div class="card-art">${renderImage(card.art, card.name)}</div>
         <div class="card-title" title="${escapeHtml(card.name)}">${escapeHtml(card.name)}</div>
         <div class="card-meta">
@@ -968,6 +978,10 @@ function renderLog() {
 
 function renderImage(src, alt) {
   return `<img src="${escapeHtml(src)}" alt="${escapeHtml(alt)}" loading="lazy" onerror="this.replaceWith(document.getElementById('missingArtTemplate').content.firstElementChild.cloneNode(true))">`;
+}
+
+function renderSpriteImage(src, fallback, alt) {
+  return `<img src="${escapeHtml(src)}" alt="${escapeHtml(alt)}" loading="lazy" onerror="this.onerror=null;this.src='${escapeHtml(fallback)}'">`;
 }
 
 function canPlayerAct() {

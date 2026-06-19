@@ -428,11 +428,24 @@ public class Session : IDisposable
 
 	public void CheckGameFromNetwork()
 	{
+#if UNITY_WEBGL && !UNITY_EDITOR
+		SessionManager.GetInstance().LocalRemoteSaveGameConflict = false;
+		SessionManager.GetInstance().FinishedCheckSaveConflict();
+		return;
+#endif
 		game.CheckFromNetwork("loadGameCheck", this);
 	}
 
 	public void LoadGameFromNetwork()
 	{
+#if UNITY_WEBGL && !UNITY_EDITOR
+		SessionManager.loginCompletedWithoutError = true;
+		if (game != null)
+		{
+			game.AccessDone = true;
+		}
+		return;
+#endif
 		game.LoadFromNetwork("loadGame", this);
 	}
 
@@ -443,26 +456,63 @@ public class Session : IDisposable
 
 	public void GetMessagesList()
 	{
+#if UNITY_WEBGL && !UNITY_EDITOR
+		messageListLoaded = true;
+		if (game != null)
+		{
+			game.MyMessagesList = new List<string>();
+			game.AccessDone = true;
+		}
+		return;
+#endif
 		game.GetMessagesList("getMessagesList", this);
 	}
 
 	public void GetMessage(string id)
 	{
+#if UNITY_WEBGL && !UNITY_EDITOR
+		messageListLoaded = true;
+		if (game != null)
+		{
+			game.AccessDone = true;
+		}
+		return;
+#endif
 		game.GetMessage("getMessage", id, this);
 	}
 
 	public void GetUserInfo()
 	{
+#if UNITY_WEBGL && !UNITY_EDITOR
+		if (game != null)
+		{
+			game.MyUserInfo = "{\"error\":\"offline\"}";
+			game.AccessDone = true;
+		}
+		return;
+#endif
 		game.GetUserInfo("getUserInfo", this);
 	}
 
 	public void GetServerVersion()
 	{
+#if UNITY_WEBGL && !UNITY_EDITOR
+		if (game != null)
+		{
+			game.MyServerVersion = new Version(Application.version);
+			game.AccessDone = true;
+		}
+		return;
+#endif
 		game.GetServerVersion("getServerVersion", this);
 	}
 
 	public void TestConnectivity()
 	{
+#if UNITY_WEBGL && !UNITY_EDITOR
+		GetServerVersion();
+		return;
+#endif
 		game.GetServerVersion("testConnectivity", this);
 	}
 
@@ -706,6 +756,11 @@ public class Session : IDisposable
 
 	public void ValidateLastPatch()
 	{
+#if UNITY_WEBGL && !UNITY_EDITOR
+		TFUtils.DebugLog("Skipping patch validation on WebGL", "session");
+		_validationThread = null;
+		return;
+#endif
 		lock (_validationLock)
 		{
 			if (_validationThread != null)
@@ -766,6 +821,10 @@ public class Session : IDisposable
 	public void StartPatch()
 	{
 		TFUtils.DebugLog("Starting to Patch content");
+#if UNITY_WEBGL && !UNITY_EDITOR
+		_finishedPatching = true;
+		return;
+#endif
 		_finishedPatching = false;
 		UpdatePatching();
 	}

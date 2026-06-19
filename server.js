@@ -729,7 +729,15 @@ app.get("/cardwars/Build/cardwars-unity.data.unityweb", (req, res, next) => {
 app.use("/cardwars", express.static(path.join(__dirname, "cardwars-unity"), {
   setHeaders(res, filePath) {
     if (!filePath.endsWith(".unityweb")) return;
-    if (filePath.endsWith(".asm.code.unityweb") || filePath.endsWith(".asm.framework.unityweb")) {
+    if (filePath.endsWith(".wasm.code.unityweb")) {
+      res.setHeader("Content-Type", "application/wasm");
+      return;
+    }
+    if (
+      filePath.endsWith(".wasm.framework.unityweb") ||
+      filePath.endsWith(".asm.code.unityweb") ||
+      filePath.endsWith(".asm.framework.unityweb")
+    ) {
       res.setHeader("Content-Type", "application/javascript");
       return;
     }

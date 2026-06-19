@@ -15,3 +15,13 @@ Thumbs.db
 
 # Generated locally; Railway receives the compressed multipart stream instead.
 cardwars-unity/Build/cardwars-unity.data.unityweb
+
+# Local Unity build tooling/cache
+Unity2017Local/
+UnitySetup64-2017.4.40f1.exe
+UnitySetup-WebGL-Support-for-Editor-2017.4.40f1.exe
+webglsupport-extracted/
+cardwars-unity-new/
+CardWars-main/CardWars-main/Library/
+CardWars-main/CardWars-main/Temp/
+CardWars-main/CardWars-main/UnityPackageManager/

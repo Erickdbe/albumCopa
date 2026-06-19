@@ -229,6 +229,12 @@ public class Game
 			TFUtils.DebugLog("Null gameData, not saving to server", "saveload");
 			return;
 		}
+#if UNITY_WEBGL && !UNITY_EDITOR
+		TFUtils.DebugLog("WebGL local save complete; skipping remote save", "saveload");
+		_finishedSave = true;
+		_finishedAccess = true;
+		return;
+#endif
 		if (SessionManager.GetInstance().LocalRemoteSaveGameConflict)
 		{
 			TFUtils.DebugLog("LocalRemoteSaveGameConflict, not saving to server until resolved", "saveload");

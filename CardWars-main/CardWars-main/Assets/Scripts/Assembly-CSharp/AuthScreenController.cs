@@ -313,6 +313,15 @@ public class AuthScreenController : MonoBehaviour
 		{
 			busyIconController = SLOTGame.GetInstance();
 		}
+#if UNITY_WEBGL && !UNITY_EDITOR
+		PlayerPrefs.SetInt("PlayerAge", 100);
+		PlayerPrefs.DeleteKey("RetrySocialLogin");
+		PlayerPrefs.DeleteKey("SocialLogin");
+		PlayerPrefs.DeleteKey("user");
+		PlayerPrefs.DeleteKey("pass");
+		StartGameLoginFlow();
+		return;
+#endif
 		if (!PlayerPrefs.HasKey("PlayerAge") && SocialManager.Instance.IsAgeGateRequired())
 		{
 			if (AgeGateShowTween != null)

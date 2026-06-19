@@ -490,7 +490,11 @@ public class PlayerInfoScript : MonoBehaviour
 			g_playerInfoScript = this;
 		}
 		UnityEngine.Object.DontDestroyOnLoad(base.transform.gameObject);
+#if UNITY_WEBGL && !UNITY_EDITOR
+		Application.targetFrameRate = 60;
+#else
 		Application.targetFrameRate = 300;
+#endif
 	}
 
 	private void Start()

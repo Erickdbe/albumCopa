@@ -73,6 +73,13 @@ public class Player
 
 	public static void LoadFromNetwork(string key, Session session, bool doFacebookAuth, string fbAccessToken)
 	{
+#if UNITY_WEBGL && !UNITY_EDITOR
+		Dictionary<string, object> dictionary = new Dictionary<string, object>();
+		dictionary["success"] = false;
+		dictionary["error"] = "Network error";
+		session.AsyncResponder(key)(dictionary, System.Net.HttpStatusCode.ServiceUnavailable);
+		return;
+#endif
 		session.Auth.AuthUser(session, session.AsyncResponder(key), doFacebookAuth, fbAccessToken);
 	}
 

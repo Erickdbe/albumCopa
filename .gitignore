@@ -12,3 +12,6 @@ yarn-error.log*
 
 .DS_Store
 Thumbs.db
+
+# Generated locally; Railway receives the compressed multipart stream instead.
+cardwars-unity/Build/cardwars-unity.data.unityweb

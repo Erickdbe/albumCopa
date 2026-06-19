@@ -666,6 +666,66 @@ const chatHistory = [];
 
 app.use(cors());
 app.use(express.json());
+app.get("/cardwars/Build/cardwars-unity.data.unityweb", (req, res, next) => {
+  const partsDirectory = path.join(
+    __dirname,
+    "cardwars-unity",
+    "Build",
+    "cardwars-unity.data.parts"
+  );
+
+  let parts;
+  try {
+    parts = fs.readdirSync(partsDirectory)
+      .filter((name) => /^cardwars-unity\.data\.unityweb\.gz\.part\d+$/.test(name))
+      .sort()
+      .map((name) => path.join(partsDirectory, name));
+  } catch (error) {
+    return next(error);
+  }
+
+  if (parts.length === 0) {
+    return res.status(404).end();
+  }
+
+  let contentLength;
+  try {
+    contentLength = parts.reduce((total, filePath) => total + fs.statSync(filePath).size, 0);
+  } catch (error) {
+    return next(error);
+  }
+
+  res.setHeader("Content-Type", "application/octet-stream");
+  res.setHeader("Content-Encoding", "gzip");
+  res.setHeader("Content-Length", contentLength);
+  res.setHeader("Cache-Control", "public, max-age=3600");
+
+  if (req.method === "HEAD") {
+    return res.end();
+  }
+
+  let index = 0;
+  let currentStream = null;
+
+  const streamNextPart = () => {
+    if (index >= parts.length) {
+      res.end();
+      return;
+    }
+
+    currentStream = fs.createReadStream(parts[index]);
+    index += 1;
+    currentStream.on("error", (error) => res.destroy(error));
+    currentStream.on("end", streamNextPart);
+    currentStream.pipe(res, { end: false });
+  };
+
+  res.on("close", () => {
+    if (!res.writableEnded && currentStream) currentStream.destroy();
+  });
+
+  streamNextPart();
+});
 app.use("/cardwars", express.static(path.join(__dirname, "cardwars-unity"), {
   setHeaders(res, filePath) {
     if (!filePath.endsWith(".unityweb")) return;

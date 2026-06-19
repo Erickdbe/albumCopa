@@ -1,1 +1,1 @@
-cardwars-unity/Build/*.unityweb filter=lfs diff=lfs merge=lfs -text
+cardwars-unity/Build/*.unityweb -filter -diff -merge -text

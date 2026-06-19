@@ -666,6 +666,16 @@ const chatHistory = [];
 
 app.use(cors());
 app.use(express.json());
+app.use("/cardwars", express.static(path.join(__dirname, "cardwars-unity"), {
+  setHeaders(res, filePath) {
+    if (!filePath.endsWith(".unityweb")) return;
+    if (filePath.endsWith(".asm.code.unityweb") || filePath.endsWith(".asm.framework.unityweb")) {
+      res.setHeader("Content-Type", "application/javascript");
+      return;
+    }
+    res.setHeader("Content-Type", "application/octet-stream");
+  }
+}));
 app.use(express.static(path.join(__dirname)));
 
 // Rota raiz → abre o álbum

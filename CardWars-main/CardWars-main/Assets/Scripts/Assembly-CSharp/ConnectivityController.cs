@@ -41,6 +41,9 @@ public class ConnectivityController : MonoBehaviour
 
 	public bool CheckInternet()
 	{
+#if UNITY_WEBGL
+		isValid = true;
+#else
 		switch (Network.TestConnection())
 		{
 		case ConnectionTesterStatus.PublicIPIsConnectable:
@@ -55,6 +58,7 @@ public class ConnectivityController : MonoBehaviour
 		if (!isValid)
 		{
 		}
+#endif
 		return isValid;
 	}
 

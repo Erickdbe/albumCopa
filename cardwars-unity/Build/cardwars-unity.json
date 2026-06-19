@@ -1,0 +1,13 @@
+{
+"companyName": "shishkabob",
+"productName": "Card Wars",
+"dataUrl": "cardwars-unity.data.unityweb",
+"asmCodeUrl": "cardwars-unity.asm.code.unityweb",
+"asmMemoryUrl": "cardwars-unity.asm.memory.unityweb",
+"asmFrameworkUrl": "cardwars-unity.asm.framework.unityweb",
+"TOTAL_MEMORY": 536870912,
+"graphicsAPI": ["WebGL 2.0", "WebGL 1.0"],
+"webglContextAttributes": {"preserveDrawingBuffer": false},
+"splashScreenStyle": "Dark",
+"backgroundColor": "#000000"
+}

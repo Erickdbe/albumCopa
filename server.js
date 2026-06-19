@@ -1284,8 +1284,10 @@ const crashRooms         = new Map();   // roomId -> crash do aviao
 const artilleryRooms     = new Map();   // roomId -> artilharia por turnos
 const relicRooms         = new Map();   // roomId -> caca as reliquias em arena
 const pirateRooms        = new Map();   // roomId -> Pirate Bomb em plataforma
+const cardWarsRooms      = new Map();   // roomId -> Card Wars Unity online shell
 const horrorRooms        = new Map();   // roomId -> Casa Sombria cooperativo
 const HORROR_MAX_PLAYERS = 4;
+const CARD_WARS_RECONNECT_GRACE_MS = 30000;
 
 function ensureSpectators(room) {
   if (!room.spectators) room.spectators = new Set();
@@ -5416,6 +5418,173 @@ function removeHorrorPlayer(room, socketId, reason = "") {
   broadcastOnlineList();
 }
 
+function makeCardWarsPlayer(socket, role) {
+  return {
+    socketId: socket.id,
+    userId: socket.userId,
+    username: socket.username,
+    avatar: socket.avatar || "",
+    role,
+    disconnected: false,
+    lastSeenAt: Date.now()
+  };
+}
+
+function cardWarsUrl(room, player, extra = {}) {
+  const params = new URLSearchParams({
+    online: "1",
+    roomId: room.roomId,
+    role: player.role || "player"
+  });
+  const opponent = room.players.find(item => item.userId !== player.userId);
+  if (opponent?.username) params.set("opponent", opponent.username);
+  Object.entries(extra).forEach(([key, value]) => {
+    if (value !== undefined && value !== null) params.set(key, String(value));
+  });
+  return `/cardwars/?${params.toString()}`;
+}
+
+function serializeCardWarsRoom(room, viewerSocketId = "") {
+  return {
+    roomId: room.roomId,
+    hostSocketId: room.hostSocketId,
+    hostUsername: room.hostUsername,
+    bet: room.bet,
+    status: room.status,
+    message: room.message,
+    players: room.players.map(player => ({
+      socketId: player.socketId,
+      userId: player.userId,
+      username: player.username,
+      avatar: player.avatar || "",
+      role: player.role,
+      disconnected: Boolean(player.disconnected),
+      isHost: player.role === "host",
+      isMe: player.socketId === viewerSocketId
+    }))
+  };
+}
+
+function emitCardWarsUpdate(room) {
+  room.players.forEach(player => {
+    if (!player.disconnected && player.socketId) {
+      io.to(player.socketId).emit("cardwars:update", serializeCardWarsRoom(room, player.socketId));
+    }
+  });
+}
+
+function emitCardWarsLaunch(room) {
+  room.players.forEach(player => {
+    if (!player.disconnected && player.socketId) {
+      io.to(player.socketId).emit("cardwars:launch", {
+        room: serializeCardWarsRoom(room, player.socketId),
+        url: cardWarsUrl(room, player)
+      });
+    }
+  });
+}
+
+function setOnlineCardWars(socketId, roomId) {
+  const online = onlinePlayers.get(socketId);
+  if (online) {
+    online.inGame = true;
+    online.roomId = roomId;
+    online.game = "cardwars";
+  }
+}
+
+function clearOnlineCardWars(socketId, roomId) {
+  const online = onlinePlayers.get(socketId);
+  if (online && online.roomId === roomId && online.game === "cardwars") {
+    online.inGame = false;
+    online.roomId = null;
+    online.game = null;
+  }
+}
+
+function findCardWarsRoomBySocket(socketId) {
+  for (const room of cardWarsRooms.values()) {
+    if (room.players.some(player => player.socketId === socketId)) return room;
+  }
+  return null;
+}
+
+function cancelCardWarsRoom(room, reason = "Sala de Card Wars cancelada.") {
+  if (!room) return;
+  if (room.reconnectTimer) {
+    clearTimeout(room.reconnectTimer);
+    room.reconnectTimer = null;
+  }
+  room.players.forEach(player => {
+    if (player.socketId) {
+      io.to(player.socketId).emit("cardwars:cancelled", { message: reason });
+      clearOnlineCardWars(player.socketId, room.roomId);
+      const liveSocket = io.sockets.sockets.get(player.socketId);
+      if (liveSocket) liveSocket.leave(room.roomId);
+    }
+  });
+  cardWarsRooms.delete(room.roomId);
+  broadcastOnlineList();
+}
+
+function scheduleCardWarsReconnectCleanup(room) {
+  if (!room || room.reconnectTimer) return;
+  room.reconnectTimer = setTimeout(() => {
+    room.reconnectTimer = null;
+    const current = cardWarsRooms.get(room.roomId);
+    if (!current) return;
+    const missing = current.players.some(player => player.disconnected);
+    if (missing) {
+      cancelCardWarsRoom(current, "Um jogador saiu do Card Wars online.");
+    }
+  }, CARD_WARS_RECONNECT_GRACE_MS);
+}
+
+function markCardWarsDisconnected(room, socketId, reason = "Jogador reconectando ao Card Wars.") {
+  const player = room?.players.find(item => item.socketId === socketId);
+  if (!player) return;
+  clearOnlineCardWars(socketId, room.roomId);
+  if (room.status === "waiting" || room.players.length < 2) {
+    cancelCardWarsRoom(room, reason);
+    return;
+  }
+  player.disconnected = true;
+  player.lastSeenAt = Date.now();
+  room.message = reason;
+  emitCardWarsUpdate(room);
+  scheduleCardWarsReconnectCleanup(room);
+  broadcastOnlineList();
+}
+
+function resumeCardWarsPlayer(room, socket) {
+  const player = room?.players.find(item => item.userId === socket.userId);
+  if (!player) return null;
+  if (room.reconnectTimer) {
+    clearTimeout(room.reconnectTimer);
+    room.reconnectTimer = null;
+  }
+  const previousSocketId = player.socketId;
+  if (previousSocketId && previousSocketId !== socket.id) {
+    clearOnlineCardWars(previousSocketId, room.roomId);
+    const previousSocket = io.sockets.sockets.get(previousSocketId);
+    if (previousSocket) previousSocket.leave(room.roomId);
+  }
+  player.socketId = socket.id;
+  player.avatar = socket.avatar || player.avatar || "";
+  player.disconnected = false;
+  player.lastSeenAt = Date.now();
+  if (player.role === "host") {
+    room.hostSocketId = socket.id;
+    room.hostUsername = socket.username;
+  }
+  socket.join(room.roomId);
+  setOnlineCardWars(socket.id, room.roomId);
+  room.message = `${socket.username} esta no Card Wars online.`;
+  emitCardWarsUpdate(room);
+  broadcastOnlineList();
+  return player;
+}
+
 io.on("connection", (socket) => {
   console.log(`[+] ${socket.username} conectado`);
   const connectedUser = normalizeUserProgress(db.findUser("id", socket.userId));
@@ -7092,6 +7261,83 @@ io.on("connection", (socket) => {
     broadcastOnlineList();
   });
 
+  socket.on("cardwars:create", ({ bet }) => {
+    const tableBet = clampNumber(bet || 10, 5, 50);
+    const user = db.findUser("id", socket.userId);
+    const player = onlinePlayers.get(socket.id);
+    if (!user || Number(user.bet_credits || 0) < tableBet)
+      return socket.emit("cardwars:error", "Creditos de aposta insuficientes.");
+    if (player?.inGame)
+      return socket.emit("cardwars:error", "Voce ja esta em uma partida.");
+
+    const roomId = `cardwars-${Date.now()}-${socket.id}`;
+    const room = {
+      roomId,
+      hostSocketId: socket.id,
+      hostUsername: socket.username,
+      bet: tableBet,
+      status: "waiting",
+      reconnectTimer: null,
+      message: "Sala aberta. Aguardando outro jogador entrar no Card Wars.",
+      players: [makeCardWarsPlayer(socket, "host")]
+    };
+    cardWarsRooms.set(roomId, room);
+    socket.join(roomId);
+    setOnlineCardWars(socket.id, roomId);
+
+    for (const [, target] of onlinePlayers) {
+      if (target.socketId !== socket.id && !target.inGame) {
+        io.to(target.socketId).emit("cardwars:invite", { roomId, fromUsername: socket.username, bet: tableBet });
+      }
+    }
+
+    socket.emit("cardwars:created", serializeCardWarsRoom(room, socket.id));
+    emitCardWarsUpdate(room);
+    broadcastOnlineList();
+  });
+
+  socket.on("cardwars:join", ({ roomId }) => {
+    const room = cardWarsRooms.get(roomId);
+    if (!room || room.status !== "waiting")
+      return socket.emit("cardwars:error", "Sala de Card Wars indisponivel.");
+    if (room.players.some(player => player.userId === socket.userId)) {
+      resumeCardWarsPlayer(room, socket);
+      return;
+    }
+    if (room.players.length >= 2)
+      return socket.emit("cardwars:error", "Sala de Card Wars cheia.");
+
+    const user = db.findUser("id", socket.userId);
+    const player = onlinePlayers.get(socket.id);
+    if (!user || Number(user.bet_credits || 0) < room.bet)
+      return socket.emit("cardwars:error", "Creditos de aposta insuficientes.");
+    if (player?.inGame)
+      return socket.emit("cardwars:error", "Voce ja esta em uma partida.");
+
+    room.players.push(makeCardWarsPlayer(socket, "guest"));
+    room.status = "playing";
+    room.message = `${socket.username} entrou. Abrindo Card Wars online.`;
+    socket.join(roomId);
+    setOnlineCardWars(socket.id, roomId);
+    emitCardWarsUpdate(room);
+    broadcastOnlineList();
+    emitCardWarsLaunch(room);
+  });
+
+  socket.on("cardwars:resume", ({ roomId }) => {
+    const room = cardWarsRooms.get(roomId);
+    if (!room) return socket.emit("cardwars:cancelled", { message: "Sala de Card Wars encerrada." });
+    const player = resumeCardWarsPlayer(room, socket);
+    if (!player) return socket.emit("cardwars:error", "Voce nao faz parte desta sala de Card Wars.");
+    socket.emit("cardwars:update", serializeCardWarsRoom(room, socket.id));
+  });
+
+  socket.on("cardwars:leave", ({ roomId }) => {
+    const room = cardWarsRooms.get(roomId) || findCardWarsRoomBySocket(socket.id);
+    if (!room) return;
+    cancelCardWarsRoom(room, `${socket.username} saiu do Card Wars online.`);
+  });
+
   socket.on("horse:create", ({ bet }) => {
     const tableBet = Math.max(5, Math.min(50, Number(bet) || 10));
     const user = db.findUser("id", socket.userId);
@@ -7356,6 +7602,11 @@ io.on("connection", (socket) => {
       } else {
         removePiratePlayer(pirateRoom, socket.id, `${socket.username} desconectou do Pirate Bomb.`);
       }
+    }
+
+    const cardWarsRoom = findCardWarsRoomBySocket(socket.id);
+    if (cardWarsRoom) {
+      markCardWarsDisconnected(cardWarsRoom, socket.id, `${socket.username} reconectando ao Card Wars.`);
     }
 
     const horrorRoom = findHorrorRoomBySocket(socket.id);

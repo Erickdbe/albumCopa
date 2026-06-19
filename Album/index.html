@@ -5786,7 +5786,7 @@
         <button class="mp-btn artillery-open-btn" type="button" onclick="createArtilleryRoom()">Canhao</button>
         <button class="mp-btn relic-open-btn" type="button" onclick="createRelicRoom()">Relic Rush</button>
         <button class="mp-btn pirate-open-btn" type="button" onclick="createPirateRoom()">Pirate Bomb</button>
-        <button class="mp-btn cardwars-open-btn" type="button" onclick="window.location.href='/cardwars/'">Card Wars</button>
+        <button class="mp-btn cardwars-open-btn" type="button" onclick="createCardWarsRoom()">Card Wars Online</button>
         <button class="mp-btn loan-open-btn" type="button" onclick="openLoanPanel()">Empréstimo</button>
         <button class="mp-btn blackjack-open-btn" type="button" onclick="createBlackjackRoom()">Mesa 21</button>
         <button class="mp-btn horse-open-btn" type="button" onclick="createHorseRoom()">🏇 Corrida</button>
@@ -5951,6 +5951,15 @@
     <div class="challenge-toast-btns">
       <button class="btn-accept" onclick="acceptHeadSoccerInvite()">Entrar</button>
       <button class="btn-reject" onclick="rejectHeadSoccerInvite()">Agora nao</button>
+    </div>
+  </div>
+
+  <div class="challenge-toast hidden" id="cardWarsInviteToast">
+    <h4>Card Wars online</h4>
+    <p id="cardWarsInviteMsg"></p>
+    <div class="challenge-toast-btns">
+      <button class="btn-accept" onclick="acceptCardWarsInvite()">Entrar</button>
+      <button class="btn-reject" onclick="rejectCardWarsInvite()">Agora nao</button>
     </div>
   </div>
 
@@ -8689,6 +8698,9 @@
       pirateRenderId: 0,
       pirateKeys: new Set(),
       pirateLastInputAt: 0,
+      cardWarsInviteRoomId: null,
+      cardWarsRoomId: null,
+      cardWarsRoom: null,
       headInviteRoomId: null,
       headRoomId: null,
       headRoom: null,
@@ -9343,6 +9355,48 @@
         showToast(msg || "Nao foi possivel jogar Pirate Bomb.");
       });
 
+      mp.socket.on("cardwars:created", (room) => {
+        mp.cardWarsRoomId = room.roomId;
+        mp.cardWarsRoom = room;
+        document.getElementById("waitingMsg").textContent = "Aguardando alguem aceitar o Card Wars online...";
+        document.getElementById("waitingOverlay").classList.remove("hidden");
+      });
+
+      mp.socket.on("cardwars:invite", ({ roomId, fromUsername, bet }) => {
+        mp.cardWarsInviteRoomId = roomId;
+        document.getElementById("cardWarsInviteMsg").textContent =
+          `${fromUsername} abriu uma sala de Card Wars. Aposta: ${bet} creditos.`;
+        document.getElementById("cardWarsInviteToast").classList.remove("hidden");
+      });
+
+      mp.socket.on("cardwars:update", (room) => {
+        mp.cardWarsRoomId = room.roomId;
+        mp.cardWarsRoom = room;
+      });
+
+      mp.socket.on("cardwars:launch", ({ room, url }) => {
+        mp.cardWarsRoomId = room?.roomId || mp.cardWarsRoomId;
+        mp.cardWarsRoom = room || mp.cardWarsRoom;
+        document.getElementById("waitingOverlay").classList.add("hidden");
+        document.getElementById("cardWarsInviteToast").classList.add("hidden");
+        document.getElementById("lobbyOverlay").classList.add("hidden");
+        if (url) {
+          window.location.href = url;
+        }
+      });
+
+      mp.socket.on("cardwars:cancelled", ({ message }) => {
+        clearCardWarsLobbyState();
+        document.getElementById("waitingOverlay").classList.add("hidden");
+        showToast(message || "Sala de Card Wars cancelada.");
+        updateLobbyHeader();
+      });
+
+      mp.socket.on("cardwars:error", (msg) => {
+        document.getElementById("waitingOverlay").classList.add("hidden");
+        showToast(msg || "Nao foi possivel jogar Card Wars online.");
+      });
+
       mp.socket.on("market:sold", ({ listing, buyer, updatedUser }) => {
         if (updatedUser) {
           applyServerData(updatedUser);
@@ -9445,7 +9499,8 @@
         crash: "Crash",
         artillery: "Canhao Arena",
         relic: "Relic Rush",
-        pirate: "Pirate Bomb"
+        pirate: "Pirate Bomb",
+        cardwars: "Card Wars"
       };
       return labels[game] || "Em jogo";
     }
@@ -10002,6 +10057,10 @@
       if (mp.pendingChallengeId) {
         mp.socket.emit("challenge:cancel", { challengeId: mp.pendingChallengeId });
         mp.pendingChallengeId = null;
+      }
+      if (mp.cardWarsRoomId) {
+        mp.socket?.emit("cardwars:leave", { roomId: mp.cardWarsRoomId });
+        clearCardWarsLobbyState();
       }
       document.getElementById("waitingOverlay").classList.add("hidden");
     }
@@ -12762,6 +12821,38 @@
     function rejectPirateInvite() {
       mp.pirateInviteRoomId = null;
       document.getElementById("pirateInviteToast").classList.add("hidden");
+    }
+
+    function clearCardWarsLobbyState() {
+      mp.cardWarsInviteRoomId = null;
+      mp.cardWarsRoomId = null;
+      mp.cardWarsRoom = null;
+      document.getElementById("cardWarsInviteToast")?.classList.add("hidden");
+    }
+
+    function createCardWarsRoom() {
+      if (!mp.isOnline) {
+        showToast("Faca login para abrir uma sala de Card Wars.");
+        document.getElementById("authOverlay").classList.remove("hidden");
+        return;
+      }
+      const bet = Number(document.getElementById("myBetInput").value) || 10;
+      if (bet < 5) { showToast("Aposta minima: 5 creditos."); return; }
+      if (bet > state.betCredits) { showToast("Creditos de aposta insuficientes."); return; }
+      mp.socket.emit("cardwars:create", { bet });
+      document.getElementById("lobbyOverlay").classList.add("hidden");
+    }
+
+    function acceptCardWarsInvite() {
+      if (!mp.cardWarsInviteRoomId) return;
+      document.getElementById("cardWarsInviteToast").classList.add("hidden");
+      mp.socket.emit("cardwars:join", { roomId: mp.cardWarsInviteRoomId });
+      mp.cardWarsInviteRoomId = null;
+    }
+
+    function rejectCardWarsInvite() {
+      mp.cardWarsInviteRoomId = null;
+      document.getElementById("cardWarsInviteToast").classList.add("hidden");
     }
 
     function startPirateRound() {

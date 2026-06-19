@@ -44,12 +44,12 @@ public class SQSettings
 	{
 		get
 		{
-            string empty = string.Empty;
-            string streamingAssetsFile = TFUtils.GetStreamingAssetsFile("server_settings.json");
-            empty = ((!streamingAssetsFile.Contains("://")) ? File.ReadAllText(streamingAssetsFile) : getJsonPath(streamingAssetsFile));
-            Dictionary<string, object> dictionary = (Dictionary<string, object>)Json.Deserialize(empty);
-            serverUrl = (string)dictionary["server_url"];
-            return serverUrl;
+			if (string.IsNullOrEmpty(serverUrl))
+			{
+				Dictionary<string, object> dictionary = (Dictionary<string, object>)Json.Deserialize(TFUtils.GetJsonFileContent("server_settings.json"));
+				serverUrl = (string)dictionary["server_url"];
+			}
+			return serverUrl;
 		}
 	}
 
@@ -136,15 +136,12 @@ public class SQSettings
 	{
 		TFUtils.DebugLog("Entering SQSettings Init()");
 		bundleIdentifier = "com.turner.cardwars";
-		string empty = string.Empty;
-		string streamingAssetsFile = TFUtils.GetStreamingAssetsFile("server_settings.json");
-		empty = ((!streamingAssetsFile.Contains("://")) ? File.ReadAllText(streamingAssetsFile) : getJsonPath(streamingAssetsFile));
+		string empty = TFUtils.GetJsonFileContent("server_settings.json");
 		Dictionary<string, object> dictionary = (Dictionary<string, object>)Json.Deserialize(empty);
 		serverUrl = (string)dictionary["server_url"];
 		cdnUrl = (string)dictionary["server_url"] + "/static/";
         manifestUrl = (string)dictionary["server_url"] + "/static/manifest.json";
-        streamingAssetsFile = TFUtils.GetStreamingAssetsFile("global_settings.json");
-		empty = ((!streamingAssetsFile.Contains("://")) ? File.ReadAllText(streamingAssetsFile) : getJsonPath(streamingAssetsFile));
+		empty = TFUtils.GetJsonFileContent("global_settings.json");
 		dictionary = (Dictionary<string, object>)Json.Deserialize(empty);
 		saveInterval = TFUtils.LoadInt(dictionary, "save_interval");
 		object value;

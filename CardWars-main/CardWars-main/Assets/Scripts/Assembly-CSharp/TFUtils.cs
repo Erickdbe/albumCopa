@@ -569,7 +569,11 @@ public class TFUtils
 		string streamingAssetsFile = GetStreamingAssetsFile(filename);
 		if (streamingAssetsFile.Contains("://"))
 		{
+		#if UNITY_WEBGL && !UNITY_EDITOR
+			return GetWebGLStreamingAssetContents(streamingAssetsFile);
+		#else
 			return GetAndroidFileContents(streamingAssetsFile);
+		#endif
 		}
 		return File.ReadAllText(streamingAssetsFile);
 	}
@@ -578,10 +582,42 @@ public class TFUtils
 	{
 		if (filename.Contains("://"))
 		{
+		#if UNITY_WEBGL && !UNITY_EDITOR
+			return GetWebGLStreamingAssetContents(filename);
+		#else
 			return GetAndroidFileContents(filename);
+		#endif
 		}
 		return File.ReadAllText(filename);
 	}
+
+	#if UNITY_WEBGL && !UNITY_EDITOR
+	private static string GetWebGLStreamingAssetContents(string filePath)
+	{
+		string normalizedPath = filePath.Replace('\\', '/');
+		string streamingAssetsPath = Application.streamingAssetsPath.Replace('\\', '/').TrimEnd('/');
+		if (normalizedPath.StartsWith(streamingAssetsPath, StringComparison.OrdinalIgnoreCase))
+		{
+			normalizedPath = normalizedPath.Substring(streamingAssetsPath.Length).TrimStart('/');
+		}
+		else
+		{
+			int marker = normalizedPath.IndexOf("/StreamingAssets/", StringComparison.OrdinalIgnoreCase);
+			if (marker >= 0)
+			{
+				normalizedPath = normalizedPath.Substring(marker + "/StreamingAssets/".Length);
+			}
+		}
+
+		TextAsset asset = Resources.Load("WebGLStreamingAssets/" + normalizedPath, typeof(TextAsset)) as TextAsset;
+		if (asset == null)
+		{
+			Debug.LogError("Missing embedded WebGL StreamingAsset: " + normalizedPath);
+			return string.Empty;
+		}
+		return asset.text;
+	}
+	#endif
 
 	private static string GetAndroidFileContents(string filePath)
 	{

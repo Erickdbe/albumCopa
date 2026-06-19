@@ -3,6 +3,7 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using UnityEditor;
+using UnityEngine;
 
 public static class CardWarsWebGLBuilder
 {
@@ -26,21 +27,29 @@ public static class CardWarsWebGLBuilder
 
         Directory.CreateDirectory(outputPath);
         ConfigureWebGL();
+        PrepareStreamingAssetResources();
 
-        string[] scenes = EditorBuildSettings.scenes
-            .Where(scene => scene.enabled)
-            .Select(scene => scene.path)
-            .ToArray();
-
-        if (scenes.Length == 0)
+        try
         {
-            throw new InvalidOperationException("No enabled scenes found in EditorBuildSettings.");
+            string[] scenes = EditorBuildSettings.scenes
+                .Where(scene => scene.enabled)
+                .Select(scene => scene.path)
+                .ToArray();
+
+            if (scenes.Length == 0)
+            {
+                throw new InvalidOperationException("No enabled scenes found in EditorBuildSettings.");
+            }
+
+            string error = BuildPipeline.BuildPlayer(scenes, outputPath, BuildTarget.WebGL, BuildOptions.None);
+            if (!string.IsNullOrEmpty(error))
+            {
+                throw new InvalidOperationException(error);
+            }
         }
-
-        string error = BuildPipeline.BuildPlayer(scenes, outputPath, BuildTarget.WebGL, BuildOptions.None);
-        if (!string.IsNullOrEmpty(error))
+        finally
         {
-            throw new InvalidOperationException(error);
+            RemoveStreamingAssetResources();
         }
     }
 
@@ -54,6 +63,39 @@ public static class CardWarsWebGLBuilder
 
         SetStaticProperty(webGLSettings, "compressionFormat", "Disabled");
         SetStaticProperty(webGLSettings, "memorySize", 512);
+        SetStaticProperty(webGLSettings, "useWasm", true);
+    }
+
+    private static void PrepareStreamingAssetResources()
+    {
+        string sourceRoot = Path.Combine(Application.dataPath, "StreamingAssets");
+        string destinationRoot = Path.Combine(Application.dataPath, "Resources/WebGLStreamingAssets");
+        RemoveStreamingAssetResources();
+        Directory.CreateDirectory(destinationRoot);
+
+        foreach (string sourceFile in Directory.GetFiles(sourceRoot, "*", SearchOption.AllDirectories))
+        {
+            if (sourceFile.EndsWith(".meta", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            string relativePath = sourceFile.Substring(sourceRoot.Length)
+                .TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            string destinationFile = Path.Combine(destinationRoot, relativePath + ".bytes");
+            Directory.CreateDirectory(Path.GetDirectoryName(destinationFile));
+            File.Copy(sourceFile, destinationFile, true);
+        }
+
+        AssetDatabase.Refresh(ImportAssetOptions.ForceUpdate);
+    }
+
+    private static void RemoveStreamingAssetResources()
+    {
+        string assetPath = "Assets/Resources/WebGLStreamingAssets";
+        FileUtil.DeleteFileOrDirectory(assetPath);
+        FileUtil.DeleteFileOrDirectory(assetPath + ".meta");
+        AssetDatabase.Refresh();
     }
 
     private static void SetStaticProperty(Type type, string propertyName, object value)

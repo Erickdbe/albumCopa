@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.IO;
 using System.Net;
+using System.Runtime.InteropServices;
 using System.Text;
 using MiniJSON;
 using UnityEngine;
@@ -32,6 +33,54 @@ public class TFServer
 
 	private bool shortCircuitRequests;
 
+#if UNITY_WEBGL && !UNITY_EDITOR
+	[DllImport("__Internal")]
+	private static extern string CardWarsAlbumSession();
+#endif
+
+	private static string GetCardWarsAlbumSession()
+	{
+#if UNITY_WEBGL && !UNITY_EDITOR
+		try
+		{
+			return CardWarsAlbumSession() ?? string.Empty;
+		}
+		catch
+		{
+			return string.Empty;
+		}
+#else
+		return string.Empty;
+#endif
+	}
+
+	private static void AddCardWarsAlbumSession(string url, Dictionary<string, object> postDict)
+	{
+		if (postDict == null || string.IsNullOrEmpty(url) || !url.Contains("/multiplayer/"))
+		{
+			return;
+		}
+		string session = GetCardWarsAlbumSession();
+		if (!string.IsNullOrEmpty(session))
+		{
+			postDict["album_session"] = session;
+		}
+	}
+
+	private static string AddCardWarsAlbumSession(string url)
+	{
+		if (string.IsNullOrEmpty(url) || !url.Contains("/multiplayer/"))
+		{
+			return url;
+		}
+		string session = GetCardWarsAlbumSession();
+		if (string.IsNullOrEmpty(session))
+		{
+			return url;
+		}
+		return url + ((url.IndexOf('?') >= 0) ? "&" : "?") + "album_session=" + WWW.EscapeURL(session);
+	}
+
 	public TFServer(CookieContainer cookies, int maxConnections)
 	{
 		this.cookies = cookies;
@@ -45,6 +94,7 @@ public class TFServer
 
 	public void PostToJSON(string url, Dictionary<string, object> postDict, JsonResponseHandler callback)
 	{
+		AddCardWarsAlbumSession(url, postDict);
 		string text = EncodePostData(postDict);
 		TFWebClient tFWebClient = RegisterCallback(callback);
 		if (shortCircuitRequests)
@@ -65,6 +115,7 @@ public class TFServer
 
 	public void PostToString(string url, Dictionary<string, object> postDict, JsonStringHandler callback)
 	{
+		AddCardWarsAlbumSession(url, postDict);
 		string text = EncodePostData(postDict);
 		TFWebClient tFWebClient = RegisterCallback(callback);
 		if (shortCircuitRequests)
@@ -85,6 +136,7 @@ public class TFServer
 
 	public void GetToJSON(string url, JsonResponseHandler callback)
 	{
+		url = AddCardWarsAlbumSession(url);
 		TFWebClient tFWebClient = RegisterCallback(callback);
 		if (shortCircuitRequests)
 		{

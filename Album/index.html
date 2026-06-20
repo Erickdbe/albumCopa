@@ -9397,6 +9397,10 @@
         showToast(msg || "Nao foi possivel jogar Card Wars online.");
       });
 
+      mp.socket.on("cardwars:battle-result", ({ message }) => {
+        showToast(message || "Uma batalha de Card Wars terminou contra o seu deck.");
+      });
+
       mp.socket.on("market:sold", ({ listing, buyer, updatedUser }) => {
         if (updatedUser) {
           applyServerData(updatedUser);

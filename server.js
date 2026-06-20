@@ -13,6 +13,7 @@ const cors       = require("cors");
 const fs         = require("fs");
 const path       = require("path");
 const crypto     = require("crypto");
+const { setupCardWarsApiRoutes } = require("./cardwars-api");
 
 function loadLocalEnv() {
   const envFile = path.join(__dirname, ".env");
@@ -389,6 +390,16 @@ const db = {
     saveDb(data);
     return data.users[idx];
   },
+  getCardWarsPlayers() {
+    return loadDb().users
+      .filter(user => user.cardwars_profile && user.cardwars_profile.deck)
+      .map(user => ({
+        id: user.id,
+        username: user.username,
+        avatar: user.avatar || "",
+        profile: user.cardwars_profile
+      }));
+  },
   getLoansForUser(userId) {
     const data = loadDb();
     return data.loans
@@ -666,6 +677,7 @@ const chatHistory = [];
 
 app.use(cors());
 app.use(express.json());
+app.use(express.urlencoded({ extended: false, limit: "4mb" }));
 app.get("/cardwars/Build/cardwars-unity.data.unityweb", (req, res, next) => {
   const partsDirectory = path.join(
     __dirname,
@@ -871,6 +883,18 @@ function authMiddleware(req, res, next) {
 }
 
 // ─── REST: Perfil ──────────────────────────────────────────────────────────
+setupCardWarsApiRoutes({
+  app,
+  authMiddleware,
+  jwt,
+  jwtSecret: JWT_SECRET,
+  verifyToken,
+  db,
+  io,
+  getCardWarsRooms: () => cardWarsRooms,
+  getOnlinePlayers: () => onlinePlayers
+});
+
 app.get("/api/me", authMiddleware, (req, res) => {
   try {
     let user = db.findUser("id", req.userId);

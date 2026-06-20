@@ -101,13 +101,13 @@
       <button class="fullscreen" type="button" aria-label="Tela cheia" onclick="gameInstance.SetFullscreen(1)"></button>
     </div>
     <script>
-      (function () {
+      var cardWarsBoot = (function () {
         var params = new URLSearchParams(window.location.search);
-        if (params.get("online") !== "1") return;
-
+        var isOnline = params.get("online") === "1";
         var roomId = params.get("roomId") || "";
         var role = params.get("role") || "player";
         var opponent = params.get("opponent") || "";
+        var token = localStorage.getItem("mp_token") || "";
         var badge = document.getElementById("cardWarsOnlineBadge");
         var status = document.getElementById("cardWarsOnlineStatus");
         var onlineSocket = null;
@@ -131,7 +131,6 @@
         }
 
         function connectOnlineSocket() {
-          var token = localStorage.getItem("mp_token");
           if (!roomId) {
             setStatus("Sala nao informada.");
             return;
@@ -159,6 +158,10 @@
             setStatus(message || "Nao foi possivel conectar a sala.");
           });
 
+          onlineSocket.on("cardwars:battle-result", function (payload) {
+            setStatus((payload && payload.message) || "Resultado online recebido.");
+          });
+
           onlineSocket.on("disconnect", function () {
             setStatus("Reconectando sala online...");
           });
@@ -174,14 +177,55 @@
           document.head.appendChild(script);
         }
 
-        if (badge) badge.classList.add("is-visible");
-        document.title = "Card Wars Online";
-        loadSocketClient();
+        function prepareApiSession() {
+          try {
+            sessionStorage.removeItem("cardwars_api_session");
+          } catch (error) {
+          }
+
+          if (!token) {
+            if (isOnline) setStatus("Entre pelo lobby do album para jogar online.");
+            return Promise.resolve();
+          }
+
+          if (isOnline) setStatus("Autenticando batalha online...");
+          return fetch("/api/cardwars/session", {
+            method: "POST",
+            headers: {
+              "Authorization": "Bearer " + token,
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({ roomId: isOnline ? roomId : "" })
+          }).then(function (response) {
+            return response.json().then(function (data) {
+              if (!response.ok || !data.session) {
+                throw new Error(data.error || "Falha ao autenticar Card Wars.");
+              }
+              sessionStorage.setItem("cardwars_api_session", data.session);
+              window.cardWarsApiSession = data.session;
+              if (isOnline) setStatus("Sala autenticada. Carregando o jogo...");
+            });
+          }).catch(function (error) {
+            if (isOnline) setStatus(error.message || "Falha ao autenticar Card Wars.");
+          });
+        }
+
+        if (isOnline) {
+          if (badge) badge.classList.add("is-visible");
+          document.title = "Card Wars Online";
+          loadSocketClient();
+        }
+
+        return prepareApiSession();
       }());
 
-      var gameInstance = UnityLoader.instantiate("gameContainer", "Build/cardwars-unity.json", {
-        onProgress: UnityProgress
-      });
+      var gameInstance = null;
+      function startCardWarsUnity() {
+        gameInstance = UnityLoader.instantiate("gameContainer", "Build/cardwars-unity.json", {
+          onProgress: UnityProgress
+        });
+      }
+      cardWarsBoot.then(startCardWarsUnity, startCardWarsUnity);
     </script>
   </body>
 </html>

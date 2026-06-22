@@ -25,3 +25,25 @@ cardwars-unity-new/
 CardWars-main/CardWars-main/Library/
 CardWars-main/CardWars-main/Temp/
 CardWars-main/CardWars-main/UnityPackageManager/
+
+# Casa Sombria Unity: generated imports, scene and editor caches
+CasaSombriaUnity/Assets/GameAssets/
+CasaSombriaUnity/Assets/Generated/
+CasaSombriaUnity/Assets/Scenes/
+CasaSombriaUnity/Assets/GameAssets.meta
+CasaSombriaUnity/Assets/Generated.meta
+CasaSombriaUnity/Assets/Scenes.meta
+CasaSombriaUnity/Library/
+CasaSombriaUnity/Temp/
+CasaSombriaUnity/Logs/
+CasaSombriaUnity/obj/
+CasaSombriaUnity/UnityPackageManager/
+CasaSombriaUnity/ProjectSettings/*
+!CasaSombriaUnity/ProjectSettings/ProjectVersion.txt
+
+# Local browser smoke-test profiles
+.browser-test/
+.chrome-casa-test/
+.edge-casa-sombria-test/
+.unity-profile/
+casa-sombria-unity-test.png

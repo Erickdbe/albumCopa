@@ -2,71 +2,70 @@
 <html lang="pt-BR">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Casa Sombria</title>
+  <link rel="icon" href="./Build/TemplateData/favicon.ico">
   <link rel="stylesheet" href="./styles.css">
-  <script type="importmap">
-    {
-      "imports": {
-        "three": "/node_modules/three/build/three.module.js",
-        "three/addons/": "/node_modules/three/examples/jsm/"
-      }
-    }
-  </script>
 </head>
 <body>
-  <main id="gameShell" aria-label="Casa Sombria">
-    <canvas id="gameCanvas"></canvas>
-    <div class="reticle" aria-hidden="true"></div>
-    <div class="vignette" aria-hidden="true"></div>
+  <main class="game-shell" aria-label="Casa Sombria">
+    <div id="gameContainer"></div>
 
-    <section class="hud hud-top" aria-label="Estado">
-      <div class="hud-block">
-        <span>Objetivo</span>
-        <strong id="objectiveText">Acorde</strong>
-      </div>
-      <div class="hud-block">
-        <span>Inventario</span>
-        <strong id="inventoryText">Vazio</strong>
-      </div>
-      <div class="hud-block danger">
-        <span>Vidas</span>
-        <strong id="livesText">10</strong>
-      </div>
-      <div class="hud-block">
-        <span>Presenca</span>
-        <strong id="presenceText">Distante</strong>
-      </div>
+    <section id="loader" class="loader" aria-live="polite">
+      <div class="loader-mark" aria-hidden="true"></div>
+      <strong>CASA SOMBRIA</strong>
+      <div class="loader-track"><span id="loaderBar"></span></div>
+      <small id="loaderText">Preparando a casa...</small>
     </section>
 
-    <section class="hud hud-bottom" aria-label="Interacao">
-      <div id="promptText" class="prompt-text"></div>
-      <div id="eventText" class="event-text"></div>
+    <section id="loadError" class="load-error" hidden>
+      <strong>O jogo nao conseguiu iniciar.</strong>
+      <button type="button" onclick="window.location.reload()">Tentar novamente</button>
     </section>
 
-    <section id="startOverlay" class="overlay is-visible" aria-label="Inicio">
-      <div class="overlay-panel">
-        <p class="eyebrow">Casa Sombria</p>
-        <h1>Al Makrmsha</h1>
-        <p id="loadText" class="overlay-copy">Carregando a casa...</p>
-        <button id="startButton" class="primary-button" type="button" disabled>Entrar</button>
-        <a class="ghost-link" href="/Album/index.html">Voltar ao album</a>
-      </div>
-    </section>
-
-    <section id="endOverlay" class="overlay" aria-label="Fim">
-      <div class="overlay-panel">
-        <p class="eyebrow" id="endEyebrow">Fim</p>
-        <h2 id="endTitle">Voce escapou</h2>
-        <p class="overlay-copy" id="endCopy"></p>
-        <div class="overlay-actions">
-          <button id="restartButton" class="primary-button" type="button">Jogar de novo</button>
-          <a class="ghost-link" href="/Album/index.html">Voltar ao album</a>
-        </div>
-      </div>
-    </section>
+    <nav class="game-tools" aria-label="Navegacao do jogo">
+      <a href="/Album/index.html" title="Voltar ao album" aria-label="Voltar ao album">&larr;</a>
+      <button id="fullscreenButton" type="button" title="Tela cheia" aria-label="Tela cheia">&#x26F6;</button>
+    </nav>
   </main>
 
-  <script type="module" src="./game.js"></script>
+  <script src="./Build/Build/UnityLoader.js"></script>
+  <script>
+    (function () {
+      var loader = document.getElementById("loader");
+      var loaderBar = document.getElementById("loaderBar");
+      var loaderText = document.getElementById("loaderText");
+      var loadError = document.getElementById("loadError");
+      var gameInstance;
+
+      function showError() {
+        loader.hidden = true;
+        loadError.hidden = false;
+      }
+
+      window.addEventListener("error", function (event) {
+        if (/unity|wasm|asm|webgl/i.test(String(event.message || ""))) showError();
+      });
+
+      try {
+        gameInstance = UnityLoader.instantiate("gameContainer", "./Build/Build/Build.json", {
+          onProgress: function (_instance, progress) {
+            var percent = Math.round(progress * 100);
+            loaderBar.style.width = percent + "%";
+            loaderText.textContent = percent < 100 ? "Carregando " + percent + "%" : "Entrando...";
+            if (progress >= 1) {
+              window.setTimeout(function () { loader.hidden = true; }, 350);
+            }
+          }
+        });
+      } catch (_error) {
+        showError();
+      }
+
+      document.getElementById("fullscreenButton").addEventListener("click", function () {
+        if (gameInstance) gameInstance.SetFullscreen(1);
+      });
+    }());
+  </script>
 </body>
 </html>

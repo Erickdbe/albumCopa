@@ -14,6 +14,7 @@ const fs         = require("fs");
 const path       = require("path");
 const crypto     = require("crypto");
 const { setupCardWarsApiRoutes } = require("./cardwars-api");
+const { setupAdventurePvp } = require("./adventure-pvp-api");
 
 function loadLocalEnv() {
   const envFile = path.join(__dirname, ".env");
@@ -1308,10 +1309,12 @@ const crashRooms         = new Map();   // roomId -> crash do aviao
 const artilleryRooms     = new Map();   // roomId -> artilharia por turnos
 const relicRooms         = new Map();   // roomId -> caca as reliquias em arena
 const pirateRooms        = new Map();   // roomId -> Pirate Bomb em plataforma
+const adventureRooms     = new Map();   // roomId -> Aventura PVP top-down
 const cardWarsRooms      = new Map();   // roomId -> Card Wars Unity online shell
 const horrorRooms        = new Map();   // roomId -> Casa Sombria cooperativo
 const HORROR_MAX_PLAYERS = 4;
 const CARD_WARS_RECONNECT_GRACE_MS = 30000;
+let adventurePvp         = null;
 
 function ensureSpectators(room) {
   if (!room.spectators) room.spectators = new Set();
@@ -1360,6 +1363,9 @@ function clearSocketFromSpectatorRooms(socketId) {
   }
   for (const room of pirateRooms.values()) {
     if (clearSpectator(room, socketId)) emitPirateUpdate(room);
+  }
+  for (const room of adventureRooms.values()) {
+    if (clearSpectator(room, socketId)) adventurePvp?.emitUpdate(room);
   }
 }
 
@@ -5609,6 +5615,22 @@ function resumeCardWarsPlayer(room, socket) {
   return player;
 }
 
+adventurePvp = setupAdventurePvp({
+  io,
+  db,
+  rooms: adventureRooms,
+  onlinePlayers,
+  clampNumber,
+  ensureSpectators,
+  clearSpectator,
+  roomSpectatorCount,
+  emitSystemChat,
+  broadcastOnlineList,
+  safeUser,
+  addExchangeWin,
+  resetExchangeLosses
+});
+
 io.on("connection", (socket) => {
   console.log(`[+] ${socket.username} conectado`);
   const connectedUser = normalizeUserProgress(db.findUser("id", socket.userId));
@@ -5641,6 +5663,8 @@ io.on("connection", (socket) => {
   });
 
   // ── Desafio ────────────────────────────────────────────────────────────
+  adventurePvp?.bindSocket(socket);
+
   socket.on("loan:request", ({ toSocketId, amount }) => {
     try {
       const requestedAmount = parseLoanAmount(amount);
@@ -7628,6 +7652,15 @@ io.on("connection", (socket) => {
       }
     }
 
+    const adventureRoom = adventurePvp?.findRoomBySocket(socket.id);
+    if (adventureRoom) {
+      if (adventureRoom.status === "waiting" && adventureRoom.hostSocketId === socket.id) {
+        adventurePvp.cancelRoom(adventureRoom, `${socket.username} cancelou o Aventura PVP.`);
+      } else {
+        adventurePvp.removePlayer(adventureRoom, socket.id, `${socket.username} desconectou do Aventura PVP.`);
+      }
+    }
+
     const cardWarsRoom = findCardWarsRoomBySocket(socket.id);
     if (cardWarsRoom) {
       markCardWarsDisconnected(cardWarsRoom, socket.id, `${socket.username} reconectando ao Card Wars.`);
@@ -7741,6 +7774,7 @@ function getSpectatableRoom(game, roomId) {
   if (game === "artillery") return artilleryRooms.get(roomId) || null;
   if (game === "relic") return relicRooms.get(roomId) || null;
   if (game === "pirate") return pirateRooms.get(roomId) || null;
+  if (game === "adventure") return adventureRooms.get(roomId) || null;
   return null;
 }
 

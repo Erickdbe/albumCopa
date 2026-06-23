@@ -872,6 +872,63 @@
       font-weight: 900;
     }
 
+    .adventure-side-button {
+      position: relative;
+      width: 100%;
+      min-height: 72px;
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 10px;
+      margin-top: 8px;
+      padding: 12px;
+      overflow: hidden;
+      border: 0;
+      border-radius: var(--radius);
+      color: #fff9e8;
+      background:
+        radial-gradient(circle at 78% 28%, rgba(255, 246, 167, .9) 0 8px, transparent 10px),
+        radial-gradient(circle at 60% 62%, rgba(95, 194, 91, .58) 0 15px, transparent 17px),
+        linear-gradient(135deg, #173b34, #25735d 54%, #7fbf55);
+      box-shadow: 0 14px 28px rgba(27, 88, 68, 0.24);
+      cursor: pointer;
+      font-weight: 950;
+      text-align: left;
+    }
+
+    .adventure-side-button::after {
+      content: "";
+      position: absolute;
+      right: 17px;
+      bottom: 15px;
+      width: 42px;
+      height: 42px;
+      border-radius: 10px;
+      background:
+        linear-gradient(45deg, transparent 0 18%, #ffe06f 19% 32%, transparent 33% 100%),
+        linear-gradient(135deg, #276c51 0 50%, #9ed061 51% 100%);
+      box-shadow: -18px -18px 0 -14px #fff6a7, 0 0 22px rgba(95, 194, 91, .38);
+      opacity: .95;
+      transform: rotate(-6deg);
+    }
+
+    .adventure-side-button span,
+    .adventure-side-button small {
+      position: relative;
+      z-index: 2;
+    }
+
+    .adventure-side-button span {
+      font-size: 1.02rem;
+      text-transform: uppercase;
+    }
+
+    .adventure-side-button small {
+      color: rgba(255, 249, 232, 0.84);
+      font-size: 0.72rem;
+      font-weight: 900;
+    }
+
     .cardwars-side-button {
       position: relative;
       width: 100%;
@@ -4105,6 +4162,7 @@
     }
 
     .pirate-open-btn { background: linear-gradient(135deg, #7b2f2f, #151a27); }
+    .adventure-open-btn { background: linear-gradient(135deg, #1f6b57, #76b955); }
     .cardwars-open-btn { background: linear-gradient(135deg, #315f94, #4b8f5d 56%, #d8a420); }
 
     .pirate-overlay {
@@ -5662,6 +5720,10 @@
             <span>Pirate Bomb</span>
             <small>Bombas no conves</small>
           </button>
+          <button class="adventure-side-button" type="button" onclick="window.location.href='/pvpAventura/'">
+            <span>Aventura PVP</span>
+            <small>Arena pixel online</small>
+          </button>
           <button class="cardwars-side-button" type="button" onclick="window.location.href='/cardwars/'">
             <span>Card Wars</span>
             <small>Solo com cartas</small>
@@ -5786,6 +5848,7 @@
         <button class="mp-btn artillery-open-btn" type="button" onclick="createArtilleryRoom()">Canhao</button>
         <button class="mp-btn relic-open-btn" type="button" onclick="createRelicRoom()">Relic Rush</button>
         <button class="mp-btn pirate-open-btn" type="button" onclick="createPirateRoom()">Pirate Bomb</button>
+        <button class="mp-btn adventure-open-btn" type="button" onclick="window.location.href='/pvpAventura/'">Aventura PVP</button>
         <button class="mp-btn cardwars-open-btn" type="button" onclick="createCardWarsRoom()">Card Wars Online</button>
         <button class="mp-btn loan-open-btn" type="button" onclick="openLoanPanel()">Empréstimo</button>
         <button class="mp-btn blackjack-open-btn" type="button" onclick="createBlackjackRoom()">Mesa 21</button>
@@ -6165,6 +6228,15 @@
     <div class="challenge-toast-btns">
       <button class="btn-accept" onclick="acceptPirateInvite()">Entrar</button>
       <button class="btn-reject" onclick="rejectPirateInvite()">Agora nao</button>
+    </div>
+  </div>
+
+  <div class="challenge-toast hidden" id="adventureInviteToast">
+    <h4>Aventura PVP</h4>
+    <p id="adventureInviteMsg"></p>
+    <div class="challenge-toast-btns">
+      <button class="btn-accept" onclick="acceptAdventureInvite()">Entrar</button>
+      <button class="btn-reject" onclick="rejectAdventureInvite()">Agora nao</button>
     </div>
   </div>
 
@@ -8698,6 +8770,7 @@
       pirateRenderId: 0,
       pirateKeys: new Set(),
       pirateLastInputAt: 0,
+      adventureInviteRoomId: null,
       cardWarsInviteRoomId: null,
       cardWarsRoomId: null,
       cardWarsRoom: null,
@@ -9355,6 +9428,24 @@
         showToast(msg || "Nao foi possivel jogar Pirate Bomb.");
       });
 
+      mp.socket.on("adventure:invite", ({ roomId, fromUsername, bet }) => {
+        mp.adventureInviteRoomId = roomId;
+        document.getElementById("adventureInviteMsg").textContent =
+          `${fromUsername} chamou voce para Aventura PVP. Aposta: ${bet} creditos.`;
+        document.getElementById("adventureInviteToast").classList.remove("hidden");
+      });
+
+      mp.socket.on("adventure:cancelled", ({ message }) => {
+        mp.adventureInviteRoomId = null;
+        document.getElementById("adventureInviteToast")?.classList.add("hidden");
+        showToast(message || "Sala de Aventura PVP cancelada.");
+        updateLobbyHeader();
+      });
+
+      mp.socket.on("adventure:error", (msg) => {
+        showToast(msg || "Nao foi possivel abrir Aventura PVP.");
+      });
+
       mp.socket.on("cardwars:created", (room) => {
         mp.cardWarsRoomId = room.roomId;
         mp.cardWarsRoom = room;
@@ -9504,6 +9595,7 @@
         artillery: "Canhao Arena",
         relic: "Relic Rush",
         pirate: "Pirate Bomb",
+        adventure: "Aventura PVP",
         cardwars: "Card Wars"
       };
       return labels[game] || "Em jogo";
@@ -9565,6 +9657,9 @@
           ${!p.inGame ? `
             <button class="challenge-btn" onclick="sendChallenge('${p.socketId}','${escHtml(p.username)}')">
               Desafiar
+            </button>
+            <button class="challenge-btn" onclick="challengeAdventurePlayer('${escHtml(p.socketId)}')">
+              Aventura
             </button>` : p.spectatable && p.roomId ? `
             <button class="challenge-btn" onclick="spectateGame('${escHtml(p.game)}','${escHtml(p.roomId)}')">
               Assistir partida
@@ -10047,6 +10142,16 @@
     }
 
     let lastChallengedSocketId = null;
+
+    function challengeAdventurePlayer(toSocketId) {
+      if (!mp.isOnline) {
+        showToast("Faca login para desafiar no Aventura PVP.");
+        document.getElementById("authOverlay").classList.remove("hidden");
+        return;
+      }
+      const query = toSocketId ? `?target=${encodeURIComponent(toSocketId)}` : "";
+      window.location.href = `/pvpAventura/${query}`;
+    }
 
     function sendChallenge(toSocketId, toUsername) {
       const myBet = Number(document.getElementById("myBetInput").value) || 10;
@@ -12827,6 +12932,19 @@
       document.getElementById("pirateInviteToast").classList.add("hidden");
     }
 
+    function acceptAdventureInvite() {
+      if (!mp.adventureInviteRoomId) return;
+      const roomId = mp.adventureInviteRoomId;
+      mp.adventureInviteRoomId = null;
+      document.getElementById("adventureInviteToast").classList.add("hidden");
+      window.location.href = `/pvpAventura/?join=${encodeURIComponent(roomId)}`;
+    }
+
+    function rejectAdventureInvite() {
+      mp.adventureInviteRoomId = null;
+      document.getElementById("adventureInviteToast").classList.add("hidden");
+    }
+
     function clearCardWarsLobbyState() {
       mp.cardWarsInviteRoomId = null;
       mp.cardWarsRoomId = null;
@@ -13477,6 +13595,10 @@
     function spectateGame(game, roomId) {
       if (!mp.socket?.connected) {
         showToast("Entre online para assistir partidas.");
+        return;
+      }
+      if (game === "adventure") {
+        window.location.href = `/pvpAventura/?spectate=${encodeURIComponent(roomId || "")}`;
         return;
       }
       const events = {

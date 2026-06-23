@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Aventura PVP</title>
+  <link rel="stylesheet" href="./styles.css">
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/phaser@3.90.0/dist/phaser.min.js"></script>
+</head>
+<body>
+  <main class="shell">
+    <aside class="side">
+      <header class="brand">
+        <span class="crest" aria-hidden="true"></span>
+        <div>
+          <h1>Aventura PVP</h1>
+          <small>arena pixel online</small>
+        </div>
+      </header>
+
+      <section class="panel user-panel">
+        <span id="connectionLabel">Conectando...</span>
+        <strong id="userLabel">Jogador</strong>
+      </section>
+
+      <section class="panel">
+        <div class="panel-title">
+          <strong>Personagem</strong>
+          <small id="characterHint">Escolha seu estilo</small>
+        </div>
+        <div class="character-grid" id="characterGrid"></div>
+      </section>
+
+      <section class="panel controls">
+        <label for="betInput">Aposta</label>
+        <input id="betInput" type="number" min="5" max="50" value="10">
+        <button id="trainingBtn" type="button">Treino contra bot</button>
+        <button id="createRoomBtn" type="button">Abrir sala</button>
+        <button id="leaveRoomBtn" type="button">Sair da partida</button>
+      </section>
+
+      <section class="panel">
+        <div class="panel-title">
+          <strong>Online</strong>
+          <small id="onlineCount">0 players</small>
+        </div>
+        <div class="online-list" id="onlineList"></div>
+      </section>
+
+      <section class="panel chat-panel">
+        <div class="panel-title">
+          <strong>Chat</strong>
+          <small id="chatCount">0 msg</small>
+        </div>
+        <div class="chat-log" id="chatLog"></div>
+        <form class="chat-form" id="chatForm">
+          <input id="chatInput" type="text" maxlength="220" placeholder="Mensagem">
+          <button type="submit">Enviar</button>
+        </form>
+      </section>
+    </aside>
+
+    <section class="game-wrap">
+      <div class="top-hud">
+        <div class="fighter-card" id="meCard">
+          <strong>Voce</strong>
+          <span>100 HP</span>
+          <div class="bar"><i></i></div>
+        </div>
+        <div class="match-status">
+          <strong id="matchTitle">Floresta de Aventura</strong>
+          <span id="matchStatus">Escolha um personagem e abra uma sala.</span>
+          <small id="timerLabel">--</small>
+        </div>
+        <div class="fighter-card enemy" id="enemyCard">
+          <strong>Oponente</strong>
+          <span>100 HP</span>
+          <div class="bar"><i></i></div>
+        </div>
+      </div>
+
+      <div class="game-frame">
+        <div id="gameMount"></div>
+        <div class="center-card" id="centerCard">
+          <h2>Aventura PVP</h2>
+          <p>WASD move, mouse mira, clique ataca, Shift/Q dash, E defesa/cura, R especial, X ultimate.</p>
+        </div>
+      </div>
+
+      <div class="skill-row">
+        <span><b>Mouse</b> ataque</span>
+        <span><b>Shift/Q</b> dash</span>
+        <span><b>E</b> defesa</span>
+        <span><b>R</b> especial</span>
+        <span><b>X</b> ultimate</span>
+      </div>
+    </section>
+  </main>
+
+  <div class="invite hidden" id="inviteBox">
+    <h3>Desafio recebido</h3>
+    <p id="inviteText"></p>
+    <div class="invite-actions">
+      <button id="acceptInviteBtn" type="button">Entrar</button>
+      <button id="rejectInviteBtn" type="button">Agora nao</button>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+  <script src="./game.js"></script>
+</body>
+</html>

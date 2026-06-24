@@ -739,6 +739,84 @@ app.get("/cardwars/Build/cardwars-unity.data.unityweb", (req, res, next) => {
 
   streamNextPart();
 });
+
+app.get("/aventura3d/Build/aventura3d.data", (req, res, next) => {
+  const partsDirectory = path.join(__dirname, "aventura3d", "Build");
+
+  let parts;
+  try {
+    parts = fs.readdirSync(partsDirectory)
+      .filter((name) => /^aventura3d\.data\.part\d+$/.test(name))
+      .sort()
+      .map((name) => path.join(partsDirectory, name));
+  } catch (error) {
+    return next(error);
+  }
+
+  if (parts.length === 0) {
+    return res.status(404).end();
+  }
+
+  let contentLength;
+  try {
+    contentLength = parts.reduce((total, filePath) => total + fs.statSync(filePath).size, 0);
+  } catch (error) {
+    return next(error);
+  }
+
+  res.setHeader("Content-Type", "application/octet-stream");
+  res.setHeader("Content-Length", contentLength);
+  res.setHeader("Accept-Ranges", "none");
+  res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+
+  if (req.method === "HEAD") {
+    return res.end();
+  }
+
+  let index = 0;
+  let currentStream = null;
+
+  const streamNextPart = () => {
+    if (index >= parts.length) {
+      res.end();
+      return;
+    }
+
+    currentStream = fs.createReadStream(parts[index]);
+    index += 1;
+    currentStream.on("error", (error) => res.destroy(error));
+    currentStream.on("end", streamNextPart);
+    currentStream.pipe(res, { end: false });
+  };
+
+  res.on("close", () => {
+    if (!res.writableEnded && currentStream) currentStream.destroy();
+  });
+
+  streamNextPart();
+});
+
+app.use("/aventura3d", express.static(path.join(__dirname, "aventura3d"), {
+  setHeaders(res, filePath) {
+    if (filePath.endsWith(".wasm")) {
+      res.setHeader("Content-Type", "application/wasm");
+      res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+      return;
+    }
+
+    if (filePath.endsWith(".data")) {
+      res.setHeader("Content-Type", "application/octet-stream");
+      res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+      return;
+    }
+
+    if (filePath.endsWith(".js")) {
+      res.setHeader("Content-Type", "application/javascript");
+      res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+    }
+  }
+}));
+
 app.use("/cardwars", express.static(path.join(__dirname, "cardwars-unity"), {
   setHeaders(res, filePath) {
     if (!filePath.endsWith(".unityweb")) return;

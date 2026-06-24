@@ -4163,6 +4163,7 @@
 
     .pirate-open-btn { background: linear-gradient(135deg, #7b2f2f, #151a27); }
     .adventure-open-btn { background: linear-gradient(135deg, #1f6b57, #76b955); }
+    .adventure3d-open-btn { background: linear-gradient(135deg, #24435f, #68a75a 58%, #d8a64d); }
     .cardwars-open-btn { background: linear-gradient(135deg, #315f94, #4b8f5d 56%, #d8a420); }
 
     .pirate-overlay {
@@ -5724,6 +5725,10 @@
             <span>Aventura PVP</span>
             <small>Arena pixel online</small>
           </button>
+          <button class="adventure-side-button" type="button" onclick="window.location.href='/aventura3d/'">
+            <span>Aventura 3D</span>
+            <small>Mundo aberto prototipo</small>
+          </button>
           <button class="cardwars-side-button" type="button" onclick="window.location.href='/cardwars/'">
             <span>Card Wars</span>
             <small>Solo com cartas</small>
@@ -5849,6 +5854,7 @@
         <button class="mp-btn relic-open-btn" type="button" onclick="createRelicRoom()">Relic Rush</button>
         <button class="mp-btn pirate-open-btn" type="button" onclick="createPirateRoom()">Pirate Bomb</button>
         <button class="mp-btn adventure-open-btn" type="button" onclick="window.location.href='/pvpAventura/'">Aventura PVP</button>
+        <button class="mp-btn adventure3d-open-btn" type="button" onclick="window.location.href='/aventura3d/'">Aventura 3D</button>
         <button class="mp-btn cardwars-open-btn" type="button" onclick="createCardWarsRoom()">Card Wars Online</button>
         <button class="mp-btn loan-open-btn" type="button" onclick="openLoanPanel()">Empréstimo</button>
         <button class="mp-btn blackjack-open-btn" type="button" onclick="createBlackjackRoom()">Mesa 21</button>

@@ -41,6 +41,15 @@ CasaSombriaUnity/UnityPackageManager/
 CasaSombriaUnity/ProjectSettings/*
 !CasaSombriaUnity/ProjectSettings/ProjectVersion.txt
 
+# Aventura Mundo 3D Unity project
+AventuraMundo3D/Library/
+AventuraMundo3D/Temp/
+AventuraMundo3D/Logs/
+AventuraMundo3D/UserSettings/
+AventuraMundo3D/obj/
+AventuraMundo3D/Assets/Game/Bosses/Source/Meshy_AI_Bosses_Giants__of_the_Realms_0623235641/
+AventuraMundo3D/Assets/Game/Bosses/Source/Meshy_AI_Bosses_Giants__of_the_Realms_0623235641.meta
+
 # Local browser smoke-test profiles
 .browser-test/
 .chrome-casa-test/

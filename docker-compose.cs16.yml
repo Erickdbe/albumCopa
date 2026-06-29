@@ -1,0 +1,15 @@
+services:
+  cs16:
+    image: yohimik/cs-web-server:latest
+    platform: linux/386
+    restart: unless-stopped
+    command: ["+map de_dust2", "+maxplayers 14"]
+    environment:
+      IP: ${CS16_PUBLIC_IP:-127.0.0.1}
+      PORT: ${CS16_UDP_PORT:-27018}
+    volumes:
+      - ./cs16-server/valve.zip:/xashds/public/valve.zip:ro
+    ports:
+      - "27016:27016"
+      - "${CS16_UDP_PORT:-27018}:${CS16_UDP_PORT:-27018}"
+      - "${CS16_UDP_PORT:-27018}:${CS16_UDP_PORT:-27018}/udp"

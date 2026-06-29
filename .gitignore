@@ -57,3 +57,17 @@ aventura3d/Build/aventura3d.data
 .edge-casa-sombria-test/
 .unity-profile/
 casa-sombria-unity-test.png
+
+# Original Counter-Strike content must stay local and outside Git.
+cs16-server/valve.zip
+.tmp-webxash/
+.edge-cs16-desktop/
+.edge-cs16-mobile/
+.edge-cs16-module/
+browser-test-cs16-desktop/
+browser-test-cs16-mobile/
+cs16-desktop.png
+cs16-mobile.png
+cs1.6-master.zip
+cs16-client-main.zip
+FreeCS-master.zip

@@ -1100,6 +1100,64 @@
       font-weight: 900;
     }
 
+    .cs16-side-button {
+      position: relative;
+      width: 100%;
+      min-height: 72px;
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 10px;
+      margin-top: 8px;
+      padding: 12px;
+      overflow: hidden;
+      border: 0;
+      border-radius: var(--radius);
+      color: #f4f0d7;
+      background:
+        linear-gradient(90deg, rgba(0, 0, 0, .18) 0 48%, transparent 49%),
+        linear-gradient(135deg, #20251f, #526145 52%, #a46a32);
+      box-shadow: 0 14px 28px rgba(34, 42, 31, 0.26);
+      cursor: pointer;
+      font-weight: 950;
+      text-align: left;
+    }
+
+    .cs16-side-button::after {
+      content: "+";
+      position: absolute;
+      right: 17px;
+      bottom: 12px;
+      display: grid;
+      place-items: center;
+      width: 46px;
+      height: 46px;
+      border: 2px solid rgba(244, 240, 215, .88);
+      border-radius: 50%;
+      color: #f4f0d7;
+      box-shadow: 0 0 0 7px rgba(244, 240, 215, .08);
+      font-size: 1.6rem;
+      font-weight: 400;
+      line-height: 1;
+    }
+
+    .cs16-side-button span,
+    .cs16-side-button small {
+      position: relative;
+      z-index: 2;
+    }
+
+    .cs16-side-button span {
+      font-size: 1.02rem;
+      text-transform: uppercase;
+    }
+
+    .cs16-side-button small {
+      color: rgba(244, 240, 215, .82);
+      font-size: 0.72rem;
+      font-weight: 900;
+    }
+
     .filter-group {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
@@ -5737,6 +5795,10 @@
             <span>Casa Sombria</span>
             <small>Jogo nativo</small>
           </button>
+          <button class="cs16-side-button" type="button" onclick="openCs16Picker()">
+            <span>Counter-Strike 1.6</span>
+            <small>FPS no navegador</small>
+          </button>
           <button class="blackjack-side-button" id="openBlackjackGame" type="button">
             <span>Mesa 21</span>
             <small>Cartas online</small>
@@ -5855,6 +5917,7 @@
         <button class="mp-btn pirate-open-btn" type="button" onclick="createPirateRoom()">Pirate Bomb</button>
         <button class="mp-btn adventure-open-btn" type="button" onclick="window.location.href='/pvpAventura/'">Aventura PVP</button>
         <button class="mp-btn adventure3d-open-btn" type="button" onclick="window.location.href='/aventura3d/'">Aventura 3D</button>
+        <button class="mp-btn cs16-open-btn" type="button" onclick="openCs16Picker()">CS 1.6</button>
         <button class="mp-btn cardwars-open-btn" type="button" onclick="createCardWarsRoom()">Card Wars Online</button>
         <button class="mp-btn loan-open-btn" type="button" onclick="openLoanPanel()">Empréstimo</button>
         <button class="mp-btn blackjack-open-btn" type="button" onclick="createBlackjackRoom()">Mesa 21</button>
@@ -6029,6 +6092,15 @@
     <div class="challenge-toast-btns">
       <button class="btn-accept" onclick="acceptCardWarsInvite()">Entrar</button>
       <button class="btn-reject" onclick="rejectCardWarsInvite()">Agora nao</button>
+    </div>
+  </div>
+
+  <div class="challenge-toast hidden" id="cs16InviteToast">
+    <h4>Counter-Strike 1.6</h4>
+    <p id="cs16InviteMsg"></p>
+    <div class="challenge-toast-btns">
+      <button class="btn-accept" onclick="acceptCs16Invite()">Entrar</button>
+      <button class="btn-reject" onclick="rejectCs16Invite()">Agora nao</button>
     </div>
   </div>
 
@@ -8777,6 +8849,8 @@
       pirateKeys: new Set(),
       pirateLastInputAt: 0,
       adventureInviteRoomId: null,
+      cs16InviteChallengeId: null,
+      cs16PendingChallengeId: null,
       cardWarsInviteRoomId: null,
       cardWarsRoomId: null,
       cardWarsRoom: null,
@@ -9452,6 +9526,49 @@
         showToast(msg || "Nao foi possivel abrir Aventura PVP.");
       });
 
+      mp.socket.on("cs16:invite", ({ challengeId, fromUsername }) => {
+        mp.cs16InviteChallengeId = challengeId;
+        document.getElementById("cs16InviteMsg").textContent =
+          `${fromUsername} chamou voce para uma partida de Counter-Strike 1.6.`;
+        document.getElementById("cs16InviteToast").classList.remove("hidden");
+      });
+
+      mp.socket.on("cs16:sent", ({ challengeId, toUsername }) => {
+        mp.cs16PendingChallengeId = challengeId;
+        document.getElementById("waitingMsg").textContent =
+          `Aguardando ${toUsername} aceitar o Counter-Strike 1.6...`;
+        document.getElementById("waitingOverlay").classList.remove("hidden");
+      });
+
+      mp.socket.on("cs16:launch", ({ roomId }) => {
+        mp.cs16PendingChallengeId = null;
+        mp.cs16InviteChallengeId = null;
+        document.getElementById("waitingOverlay").classList.add("hidden");
+        document.getElementById("cs16InviteToast").classList.add("hidden");
+        document.getElementById("lobbyOverlay").classList.add("hidden");
+        window.location.href = `/cs16/?room=${encodeURIComponent(roomId)}`;
+      });
+
+      mp.socket.on("cs16:rejected", ({ username }) => {
+        mp.cs16PendingChallengeId = null;
+        document.getElementById("waitingOverlay").classList.add("hidden");
+        showToast(`${username} recusou o Counter-Strike 1.6.`);
+      });
+
+      mp.socket.on("cs16:cancelled", ({ message }) => {
+        mp.cs16PendingChallengeId = null;
+        mp.cs16InviteChallengeId = null;
+        document.getElementById("waitingOverlay").classList.add("hidden");
+        document.getElementById("cs16InviteToast")?.classList.add("hidden");
+        showToast(message || "Convite de Counter-Strike cancelado.");
+      });
+
+      mp.socket.on("cs16:error", (msg) => {
+        mp.cs16PendingChallengeId = null;
+        document.getElementById("waitingOverlay").classList.add("hidden");
+        showToast(msg || "Nao foi possivel abrir o Counter-Strike 1.6.");
+      });
+
       mp.socket.on("cardwars:created", (room) => {
         mp.cardWarsRoomId = room.roomId;
         mp.cardWarsRoom = room;
@@ -9602,6 +9719,7 @@
         relic: "Relic Rush",
         pirate: "Pirate Bomb",
         adventure: "Aventura PVP",
+        cs16: "Counter-Strike 1.6",
         cardwars: "Card Wars"
       };
       return labels[game] || "Em jogo";
@@ -9666,6 +9784,9 @@
             </button>
             <button class="challenge-btn" onclick="challengeAdventurePlayer('${escHtml(p.socketId)}')">
               Aventura
+            </button>
+            <button class="challenge-btn" onclick="challengeCs16Player('${escHtml(p.socketId)}')">
+              CS 1.6
             </button>` : p.spectatable && p.roomId ? `
             <button class="challenge-btn" onclick="spectateGame('${escHtml(p.game)}','${escHtml(p.roomId)}')">
               Assistir partida
@@ -10159,6 +10280,25 @@
       window.location.href = `/pvpAventura/${query}`;
     }
 
+    function challengeCs16Player(toSocketId) {
+      if (!mp.isOnline || !mp.socket?.connected) {
+        showToast("Faca login para desafiar no Counter-Strike 1.6.");
+        document.getElementById("authOverlay").classList.remove("hidden");
+        return;
+      }
+      mp.socket.emit("cs16:challenge", { toSocketId });
+      document.getElementById("lobbyOverlay").classList.add("hidden");
+    }
+
+    function openCs16Picker() {
+      if (!mp.isOnline || !mp.socket?.connected) {
+        window.location.href = "/cs16/";
+        return;
+      }
+      openLobby();
+      showToast("Escolha um jogador disponivel e clique em CS 1.6.");
+    }
+
     function sendChallenge(toSocketId, toUsername) {
       const myBet = Number(document.getElementById("myBetInput").value) || 10;
       if (myBet < 5) { showToast("Aposta mínima: 5 créditos."); return; }
@@ -10176,6 +10316,10 @@
       if (mp.cardWarsRoomId) {
         mp.socket?.emit("cardwars:leave", { roomId: mp.cardWarsRoomId });
         clearCardWarsLobbyState();
+      }
+      if (mp.cs16PendingChallengeId) {
+        mp.socket?.emit("cs16:cancel", { challengeId: mp.cs16PendingChallengeId });
+        mp.cs16PendingChallengeId = null;
       }
       document.getElementById("waitingOverlay").classList.add("hidden");
     }
@@ -12949,6 +13093,22 @@
     function rejectAdventureInvite() {
       mp.adventureInviteRoomId = null;
       document.getElementById("adventureInviteToast").classList.add("hidden");
+    }
+
+    function acceptCs16Invite() {
+      if (!mp.cs16InviteChallengeId) return;
+      const challengeId = mp.cs16InviteChallengeId;
+      mp.cs16InviteChallengeId = null;
+      document.getElementById("cs16InviteToast").classList.add("hidden");
+      mp.socket.emit("cs16:accept", { challengeId });
+    }
+
+    function rejectCs16Invite() {
+      if (mp.cs16InviteChallengeId) {
+        mp.socket?.emit("cs16:reject", { challengeId: mp.cs16InviteChallengeId });
+      }
+      mp.cs16InviteChallengeId = null;
+      document.getElementById("cs16InviteToast").classList.add("hidden");
     }
 
     function clearCardWarsLobbyState() {

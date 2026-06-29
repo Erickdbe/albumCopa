@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Counter-Strike 1.6</title>
+  <script>
+    const isMobile = /android|avantgo|blackberry|bolt|boost|cricket|docomo|fone|hiptop|mini|mobi|palm|phone|pie|tablet|up\.browser|up\.link|webos|wos/i.test(navigator.userAgent);
+    const hasRoom = new URLSearchParams(window.location.search).has("room");
+    const target = hasRoom ? "home.html" : (isMobile ? "mobile_home.html" : "home.html");
+    window.location.replace(target + window.location.search + window.location.hash);
+  </script>
+</head>
+<body>
+  <a href="./home.html">Abrir Counter-Strike 1.6</a>
+</body>
+</html>

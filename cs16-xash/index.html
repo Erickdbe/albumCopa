@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#171a16" />
+  <title>Counter-Strike 1.6 | Album Copa Arcade</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <main class="launcher" id="launcher">
+    <section class="setup-view" id="setupView" aria-labelledby="gameTitle">
+      <a class="back-link" href="/" data-leave-cs16 aria-label="Voltar para o Album">&#8592; Album</a>
+
+      <div class="setup-content">
+        <p class="eyebrow">Album Copa Arcade</p>
+        <h1 id="gameTitle">Counter-Strike 1.6</h1>
+        <p class="setup-status" id="statusText">Procurando cs16-server/valve.zip...</p>
+
+        <div class="source-actions" id="dropZone">
+          <button class="primary-action" id="openFolderButton" type="button">Abrir pasta do jogo</button>
+          <button class="secondary-action" id="openZipButton" type="button">Abrir ZIP</button>
+          <span class="privacy-note">Use um ZIP ou pasta com valve e cstrike.</span>
+        </div>
+
+        <div class="load-stage" id="loadStage" hidden>
+          <div class="progress-track" role="progressbar" aria-label="Carregamento" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+            <span id="progressBar"></span>
+          </div>
+          <div class="load-copy">
+            <strong id="loadTitle">Preparando arquivos</strong>
+            <span id="loadPercent">0%</span>
+          </div>
+        </div>
+
+        <div class="error-panel" id="errorPanel" role="alert" hidden>
+          <strong>Nao foi possivel iniciar.</strong>
+          <span id="errorText"></span>
+          <button id="retryButton" type="button">Tentar novamente</button>
+        </div>
+      </div>
+
+      <div class="drop-hint" id="dropHint">Solte aqui o ZIP do jogo</div>
+    </section>
+
+    <section class="game-view" id="gameView" aria-label="Counter-Strike 1.6" hidden>
+      <canvas id="gameCanvas" tabindex="0"></canvas>
+      <header class="game-toolbar">
+        <a href="/" data-leave-cs16 aria-label="Sair do jogo">&#8592;</a>
+        <span>Counter-Strike 1.6</span>
+        <button id="fullscreenButton" type="button" aria-label="Entrar em tela cheia" title="Tela cheia">&#9974;</button>
+      </header>
+    </section>
+
+    <input id="folderInput" type="file" webkitdirectory directory multiple hidden />
+    <input id="zipInput" type="file" accept=".zip,application/zip" hidden />
+  </main>
+
+  <script type="module" src="./game.js"></script>
+</body>
+</html>

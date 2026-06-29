@@ -51,6 +51,8 @@ function resolveConfiguredPath(value) {
 // ─── Config ────────────────────────────────────────────────────────────────
 const PORT        = process.env.PORT || 3000;
 const JWT_SECRET  = process.env.JWT_SECRET || "albumcopa_secret_mude_em_producao";
+const CS16_WS_URL = String(process.env.CS16_WS_URL || "").trim().replace(/\/+$/, "");
+const CS16_LOCAL_GAME_ZIP = path.join(__dirname, "cs16-server", "valve.zip");
 const SALT_ROUNDS = 10;
 const DB_PATH_CONFIGURED = Boolean(process.env.DB_FILE || process.env.DATA_DIR);
 const DATA_DIR    = process.env.DATA_DIR ? resolveConfiguredPath(process.env.DATA_DIR) : null;
@@ -679,6 +681,38 @@ const chatHistory = [];
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: false, limit: "4mb" }));
+
+function isLocalRequest(req) {
+  const hostname = String(req.hostname || "").toLowerCase();
+  const addresses = [
+    req.ip,
+    req.socket?.remoteAddress
+  ].filter(Boolean).map((value) => String(value).toLowerCase());
+
+  return hostname === "localhost"
+    || hostname === "127.0.0.1"
+    || hostname === "::1"
+    || hostname.endsWith(".localhost")
+    || addresses.some((value) => (
+      value === "127.0.0.1"
+      || value === "::1"
+      || value === "::ffff:127.0.0.1"
+    ));
+}
+
+app.get(["/cs16/local-valve.zip", "/cs16-server/valve.zip"], (req, res) => {
+  if (!fs.existsSync(CS16_LOCAL_GAME_ZIP)) {
+    return res.status(404).json({ error: "Arquivo cs16-server/valve.zip nao encontrado" });
+  }
+
+  if (!isLocalRequest(req)) {
+    return res.status(403).json({ error: "Os arquivos originais do CS 1.6 so podem ser servidos no localhost." });
+  }
+
+  res.setHeader("Content-Type", "application/zip");
+  res.setHeader("Cache-Control", "no-store");
+  res.sendFile(CS16_LOCAL_GAME_ZIP);
+});
 app.get("/cardwars/Build/cardwars-unity.data.unityweb", (req, res, next) => {
   const partsDirectory = path.join(
     __dirname,
@@ -1390,8 +1424,11 @@ const pirateRooms        = new Map();   // roomId -> Pirate Bomb em plataforma
 const adventureRooms     = new Map();   // roomId -> Aventura PVP top-down
 const cardWarsRooms      = new Map();   // roomId -> Card Wars Unity online shell
 const horrorRooms        = new Map();   // roomId -> Casa Sombria cooperativo
+const pendingCs16Challenges = new Map(); // challengeId -> convite individual de CS 1.6
+const cs16Rooms           = new Map();   // roomId -> sessao no servidor dedicado
 const HORROR_MAX_PLAYERS = 4;
 const CARD_WARS_RECONNECT_GRACE_MS = 30000;
+const CS16_RECONNECT_GRACE_MS = 45000;
 let adventurePvp         = null;
 
 function ensureSpectators(room) {
@@ -5709,6 +5746,183 @@ adventurePvp = setupAdventurePvp({
   resetExchangeLosses
 });
 
+function resolveCs16ServerUrl(socket) {
+  if (CS16_WS_URL) return CS16_WS_URL;
+  const forwarded = socket?.handshake?.headers?.["x-forwarded-host"];
+  const rawHost = String(forwarded || socket?.handshake?.headers?.host || "localhost")
+    .split(",")[0]
+    .trim();
+  try {
+    return `${new URL(`http://${rawHost}`).hostname}:27016`;
+  } catch (_) {
+    return "localhost:27016";
+  }
+}
+
+function findCs16RoomBySocket(socketId) {
+  for (const room of cs16Rooms.values()) {
+    if (room.players.some(player => player.socketId === socketId)) return room;
+  }
+  return null;
+}
+
+function findCs16RoomByUser(userId) {
+  for (const room of cs16Rooms.values()) {
+    if (room.players.some(player => Number(player.userId) === Number(userId))) return room;
+  }
+  return null;
+}
+
+function setOnlineCs16(socketId, roomId) {
+  const online = onlinePlayers.get(socketId);
+  if (!online) return;
+  online.inGame = true;
+  online.roomId = roomId;
+  online.game = "cs16";
+}
+
+function clearOnlineCs16(socketId, roomId) {
+  const online = onlinePlayers.get(socketId);
+  if (!online || online.roomId !== roomId || online.game !== "cs16") return;
+  online.inGame = false;
+  online.roomId = null;
+  online.game = null;
+}
+
+function emitCs16Session(room, player) {
+  if (!room || !player?.socketId || player.disconnected) return;
+  const opponent = room.players.find(item => item.userId !== player.userId);
+  io.to(player.socketId).emit("cs16:session", {
+    roomId: room.roomId,
+    playerId: player.userId,
+    role: player.role,
+    team: player.team,
+    username: player.username,
+    opponentUsername: opponent?.username || "Oponente",
+    opponentConnected: Boolean(opponent && !opponent.disconnected),
+    serverUrl: room.serverUrl,
+    players: room.players.map(item => ({
+      userId: item.userId,
+      username: item.username,
+      role: item.role,
+      team: item.team,
+      connected: !item.disconnected,
+      health: item.health,
+      kills: item.kills,
+      deaths: item.deaths
+    })),
+    score: buildCs16Score(room)
+  });
+}
+
+function buildCs16Score(room) {
+  return {
+    players: room.players.map(player => ({
+      userId: player.userId,
+      username: player.username,
+      team: player.team,
+      health: player.health,
+      kills: player.kills || 0,
+      deaths: player.deaths || 0,
+      connected: !player.disconnected
+    }))
+  };
+}
+
+function sanitizeCs16State(state) {
+  if (!state || typeof state !== "object") return null;
+  const number = (value, fallback = 0) => {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : fallback;
+  };
+  return {
+    x: Math.max(-5000, Math.min(5000, number(state.x))),
+    y: Math.max(-500, Math.min(1000, number(state.y, 54))),
+    z: Math.max(-5000, Math.min(5000, number(state.z))),
+    rx: Math.max(-Math.PI * 2, Math.min(Math.PI * 2, number(state.rx))),
+    ry: Math.max(-Math.PI * 2, Math.min(Math.PI * 2, number(state.ry))),
+    health: Math.max(0, Math.min(100, number(state.health, 100))),
+    moving: Boolean(state.moving),
+    shooting: Boolean(state.shooting),
+    alive: state.alive !== false
+  };
+}
+
+function cancelCs16Room(room, message = "Partida de Counter-Strike encerrada.") {
+  if (!room || !cs16Rooms.has(room.roomId)) return;
+  if (room.reconnectTimer) clearTimeout(room.reconnectTimer);
+  room.players.forEach((player) => {
+    clearOnlineCs16(player.socketId, room.roomId);
+    if (!player.disconnected && player.socketId) {
+      io.to(player.socketId).emit("cs16:cancelled", { message });
+      io.sockets.sockets.get(player.socketId)?.leave(room.roomId);
+    }
+  });
+  cs16Rooms.delete(room.roomId);
+  broadcastOnlineList();
+}
+
+function scheduleCs16ReconnectCleanup(room) {
+  if (room.reconnectTimer) clearTimeout(room.reconnectTimer);
+  room.reconnectTimer = setTimeout(() => {
+    const current = cs16Rooms.get(room.roomId);
+    if (current?.players.some(player => player.disconnected)) {
+      cancelCs16Room(current, "Oponente nao reconectou ao Counter-Strike.");
+    }
+  }, CS16_RECONNECT_GRACE_MS);
+}
+
+function markCs16Disconnected(room, socketId, username) {
+  const player = room?.players.find(item => item.socketId === socketId);
+  if (!player) return;
+  clearOnlineCs16(socketId, room.roomId);
+  player.disconnected = true;
+  player.lastSeenAt = Date.now();
+  room.players
+    .filter(item => !item.disconnected && item.socketId)
+    .forEach(item => io.to(item.socketId).emit("cs16:opponent-status", {
+      connected: false,
+      message: `${username} esta entrando no Counter-Strike.`
+    }));
+  scheduleCs16ReconnectCleanup(room);
+}
+
+function resumeCs16Player(room, socket) {
+  const player = room?.players.find(item => Number(item.userId) === Number(socket.userId));
+  if (!player) return null;
+  const previousSocketId = player.socketId;
+  if (previousSocketId && previousSocketId !== socket.id) {
+    clearOnlineCs16(previousSocketId, room.roomId);
+    io.sockets.sockets.get(previousSocketId)?.leave(room.roomId);
+  }
+  player.socketId = socket.id;
+  player.username = socket.username;
+  player.disconnected = false;
+  player.lastSeenAt = Date.now();
+  socket.join(room.roomId);
+  setOnlineCs16(socket.id, room.roomId);
+
+  if (room.players.every(item => !item.disconnected)) {
+    if (room.reconnectTimer) clearTimeout(room.reconnectTimer);
+    room.reconnectTimer = null;
+  } else {
+    scheduleCs16ReconnectCleanup(room);
+  }
+
+  emitCs16Session(room, player);
+  room.players
+    .filter(item => item.userId !== player.userId && !item.disconnected && item.socketId)
+    .forEach(item => {
+      io.to(item.socketId).emit("cs16:opponent-status", {
+        connected: true,
+        message: `${socket.username} entrou na partida.`
+      });
+      emitCs16Session(room, item);
+    });
+  broadcastOnlineList();
+  return player;
+}
+
 io.on("connection", (socket) => {
   console.log(`[+] ${socket.username} conectado`);
   const connectedUser = normalizeUserProgress(db.findUser("id", socket.userId));
@@ -5742,6 +5956,203 @@ io.on("connection", (socket) => {
 
   // ── Desafio ────────────────────────────────────────────────────────────
   adventurePvp?.bindSocket(socket);
+
+  socket.on("cs16:challenge", ({ toSocketId }) => {
+    const challenger = onlinePlayers.get(socket.id);
+    const opponent = onlinePlayers.get(String(toSocketId || ""));
+    if (!challenger || challenger.inGame)
+      return socket.emit("cs16:error", "Voce ja esta em uma partida.");
+    if (!opponent || opponent.inGame || opponent.socketId === socket.id)
+      return socket.emit("cs16:error", "Jogador indisponivel para Counter-Strike.");
+
+    const challengeId = `cs16-challenge-${Date.now()}-${socket.id}`;
+    pendingCs16Challenges.set(challengeId, {
+      challengeId,
+      fromSocketId: socket.id,
+      fromUserId: socket.userId,
+      fromUsername: socket.username,
+      toSocketId: opponent.socketId,
+      toUserId: opponent.userId,
+      toUsername: opponent.username,
+      createdAt: Date.now()
+    });
+
+    io.to(opponent.socketId).emit("cs16:invite", {
+      challengeId,
+      fromUsername: socket.username
+    });
+    socket.emit("cs16:sent", {
+      challengeId,
+      toUsername: opponent.username
+    });
+
+    setTimeout(() => {
+      const pending = pendingCs16Challenges.get(challengeId);
+      if (!pending) return;
+      pendingCs16Challenges.delete(challengeId);
+      io.to(pending.fromSocketId).emit("cs16:cancelled", { message: "Convite de Counter-Strike expirou." });
+      io.to(pending.toSocketId).emit("cs16:cancelled", { message: "Convite de Counter-Strike expirou." });
+    }, 60000);
+  });
+
+  socket.on("cs16:accept", ({ challengeId }) => {
+    const challenge = pendingCs16Challenges.get(String(challengeId || ""));
+    if (!challenge || Number(challenge.toUserId) !== Number(socket.userId))
+      return socket.emit("cs16:error", "Convite de Counter-Strike expirado.");
+
+    const hostOnline = onlinePlayers.get(challenge.fromSocketId);
+    const guestOnline = onlinePlayers.get(socket.id);
+    if (!hostOnline || hostOnline.inGame || !guestOnline || guestOnline.inGame) {
+      pendingCs16Challenges.delete(challenge.challengeId);
+      return socket.emit("cs16:error", "Um dos jogadores nao esta mais disponivel.");
+    }
+
+    pendingCs16Challenges.delete(challenge.challengeId);
+    const roomId = `cs16-${Date.now()}-${challenge.fromUserId}-${socket.userId}`;
+    const room = {
+      roomId,
+      status: "playing",
+      serverUrl: resolveCs16ServerUrl(socket),
+      reconnectTimer: null,
+      players: [
+        {
+          socketId: challenge.fromSocketId,
+          userId: challenge.fromUserId,
+          username: challenge.fromUsername,
+          role: "host",
+          team: "terrorists",
+          health: 100,
+          kills: 0,
+          deaths: 0,
+          state: null,
+          disconnected: false,
+          lastSeenAt: Date.now()
+        },
+        {
+          socketId: socket.id,
+          userId: socket.userId,
+          username: socket.username,
+          role: "guest",
+          team: "counter-terrorists",
+          health: 100,
+          kills: 0,
+          deaths: 0,
+          state: null,
+          disconnected: false,
+          lastSeenAt: Date.now()
+        }
+      ]
+    };
+
+    cs16Rooms.set(roomId, room);
+    room.players.forEach((player) => {
+      io.sockets.sockets.get(player.socketId)?.join(roomId);
+      setOnlineCs16(player.socketId, roomId);
+      io.to(player.socketId).emit("cs16:launch", { roomId });
+    });
+    broadcastOnlineList();
+  });
+
+  socket.on("cs16:reject", ({ challengeId }) => {
+    const challenge = pendingCs16Challenges.get(String(challengeId || ""));
+    if (!challenge || Number(challenge.toUserId) !== Number(socket.userId)) return;
+    pendingCs16Challenges.delete(challenge.challengeId);
+    io.to(challenge.fromSocketId).emit("cs16:rejected", { username: socket.username });
+  });
+
+  socket.on("cs16:cancel", ({ challengeId }) => {
+    const challenge = pendingCs16Challenges.get(String(challengeId || ""));
+    if (!challenge || Number(challenge.fromUserId) !== Number(socket.userId)) return;
+    pendingCs16Challenges.delete(challenge.challengeId);
+    io.to(challenge.toSocketId).emit("cs16:cancelled", { message: `${socket.username} cancelou o convite.` });
+  });
+
+  socket.on("cs16:resume", ({ roomId }) => {
+    const room = cs16Rooms.get(String(roomId || ""));
+    if (!room) return socket.emit("cs16:error", "Sala de Counter-Strike encerrada.");
+    if (!resumeCs16Player(room, socket)) {
+      socket.emit("cs16:error", "Voce nao faz parte desta sala de Counter-Strike.");
+    }
+  });
+
+  socket.on("cs16:leave", ({ roomId } = {}) => {
+    const room = cs16Rooms.get(String(roomId || "")) || findCs16RoomByUser(socket.userId);
+    if (room) cancelCs16Room(room, `${socket.username} saiu do Counter-Strike.`);
+  });
+
+  socket.on("cs16:state", ({ roomId, state } = {}) => {
+    const room = cs16Rooms.get(String(roomId || ""));
+    if (!room) return;
+    const player = room.players.find(item => Number(item.userId) === Number(socket.userId));
+    if (!player || player.disconnected || player.health <= 0) return;
+    const cleanState = sanitizeCs16State(state);
+    if (!cleanState) return;
+    cleanState.health = player.health;
+    cleanState.alive = player.health > 0;
+    player.state = cleanState;
+    player.lastSeenAt = Date.now();
+    socket.to(room.roomId).emit("cs16:state", {
+      userId: player.userId,
+      username: player.username,
+      team: player.team,
+      state: cleanState
+    });
+  });
+
+  socket.on("cs16:shot", ({ roomId, origin, direction } = {}) => {
+    const room = cs16Rooms.get(String(roomId || ""));
+    if (!room) return;
+    const player = room.players.find(item => Number(item.userId) === Number(socket.userId));
+    if (!player || player.disconnected || player.health <= 0) return;
+    socket.to(room.roomId).emit("cs16:shot", {
+      userId: player.userId,
+      origin: sanitizeCs16State(origin),
+      direction: sanitizeCs16State(direction),
+      at: Date.now()
+    });
+  });
+
+  socket.on("cs16:hit", ({ roomId, targetUserId, damage, headshot } = {}) => {
+    const room = cs16Rooms.get(String(roomId || ""));
+    if (!room) return;
+    const attacker = room.players.find(item => Number(item.userId) === Number(socket.userId));
+    const target = room.players.find(item => Number(item.userId) === Number(targetUserId));
+    if (!attacker || !target || attacker.userId === target.userId) return;
+    if (attacker.disconnected || target.disconnected || attacker.health <= 0 || target.health <= 0) return;
+
+    const amount = Math.max(1, Math.min(100, Number(damage) || 0));
+    target.health = Math.max(0, target.health - amount);
+    const killed = target.health <= 0;
+    if (killed) {
+      attacker.kills = (attacker.kills || 0) + 1;
+      target.deaths = (target.deaths || 0) + 1;
+    }
+
+    io.to(room.roomId).emit("cs16:hit", {
+      attackerUserId: attacker.userId,
+      targetUserId: target.userId,
+      damage: amount,
+      headshot: Boolean(headshot),
+      health: target.health,
+      killed,
+      score: buildCs16Score(room)
+    });
+
+    if (killed) {
+      setTimeout(() => {
+        const current = cs16Rooms.get(room.roomId);
+        const respawnPlayer = current?.players.find(item => Number(item.userId) === Number(target.userId));
+        if (!respawnPlayer || respawnPlayer.disconnected || respawnPlayer.health > 0) return;
+        respawnPlayer.health = 100;
+        respawnPlayer.state = null;
+        io.to(current.roomId).emit("cs16:respawn", {
+          userId: respawnPlayer.userId,
+          health: respawnPlayer.health,
+          score: buildCs16Score(current)
+        });
+      }, 2500);
+    }
+  });
 
   socket.on("loan:request", ({ toSocketId, amount }) => {
     try {
@@ -7744,6 +8155,11 @@ io.on("connection", (socket) => {
       markCardWarsDisconnected(cardWarsRoom, socket.id, `${socket.username} reconectando ao Card Wars.`);
     }
 
+    const cs16Room = findCs16RoomBySocket(socket.id);
+    if (cs16Room) {
+      markCs16Disconnected(cs16Room, socket.id, socket.username);
+    }
+
     const horrorRoom = findHorrorRoomBySocket(socket.id);
     if (horrorRoom) {
       removeHorrorPlayer(horrorRoom, socket.id, `${socket.username} desconectou da Casa Sombria.`);
@@ -7775,6 +8191,14 @@ io.on("connection", (socket) => {
         const notifySid = request.fromSocketId === socket.id ? request.toSocketId : request.fromSocketId;
         io.to(notifySid).emit("loan:cancelled", { requestId: id, username: socket.username });
         pendingLoanRequests.delete(id);
+      }
+    }
+
+    for (const [id, challenge] of pendingCs16Challenges) {
+      if (challenge.fromSocketId === socket.id || challenge.toSocketId === socket.id) {
+        const notifySid = challenge.fromSocketId === socket.id ? challenge.toSocketId : challenge.fromSocketId;
+        io.to(notifySid).emit("cs16:cancelled", { message: `${socket.username} desconectou.` });
+        pendingCs16Challenges.delete(id);
       }
     }
 

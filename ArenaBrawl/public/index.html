@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Arena Brawl</title>
+  <link rel="stylesheet" href="./css/style.css">
+  <script src="/socket.io/socket.io.js"></script>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "/node_modules/three/build/three.module.js",
+        "three/addons/": "/node_modules/three/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <div id="lobbyRoot" class="lobby-root">
+
+    <!-- 1. Tela inicial -->
+    <section id="screenTitle" class="screen screen-title">
+      <div class="title-card">
+        <h1>ARENA BRAWL</h1>
+        <p class="tagline">FPS arcade .io — rapido, competitivo, low-poly</p>
+        <input id="nicknameInput" class="nickname-input" maxlength="18" placeholder="Seu nome" />
+        <button id="playBtn" class="big-btn">JOGAR</button>
+      </div>
+    </section>
+
+    <!-- 2. Tela de setup: classe, secundaria, mapa, opcoes de sala -->
+    <section id="screenSetup" class="screen screen-setup" hidden>
+      <div class="setup-columns">
+        <div class="setup-col">
+          <h2>Classe</h2>
+          <div id="classGrid" class="pick-grid"></div>
+          <h2>Arma secundaria</h2>
+          <div id="secondaryGrid" class="pick-grid secondary-grid"></div>
+        </div>
+
+        <div class="setup-col">
+          <h2>Mapa</h2>
+          <div id="mapGrid" class="pick-grid map-grid"></div>
+
+          <h2>Opcoes de partida</h2>
+          <div class="option-row">
+            <label>Tempo</label>
+            <select id="durationSelect"></select>
+          </div>
+          <div class="option-row">
+            <label>Pontos</label>
+            <select id="scoreLimitSelect"></select>
+          </div>
+          <div class="option-row">
+            <label>Modo</label>
+            <select id="modeSelect">
+              <option value="ffa">Todos contra todos</option>
+              <option value="teams">Time contra time</option>
+            </select>
+          </div>
+
+          <h2>Configuracoes</h2>
+          <div class="option-row">
+            <label>Velocidade <span id="speedLabel"></span></label>
+            <input id="speedRange" type="range" min="0.7" max="1.4" step="0.05" />
+          </div>
+          <div class="option-row">
+            <label>Altura do pulo</label>
+            <input id="jumpRange" type="range" min="0.7" max="1.6" step="0.05" />
+          </div>
+          <div class="option-row">
+            <label>Granadas</label>
+            <input id="grenadesToggle" type="checkbox" />
+          </div>
+          <div class="option-row">
+            <label>Arma secundaria</label>
+            <input id="secondaryToggle" type="checkbox" />
+          </div>
+          <div class="option-row">
+            <label>Max. jogadores (<span id="maxPlayersLabel"></span>)</label>
+            <input id="maxPlayersRange" type="range" min="2" max="16" step="1" />
+          </div>
+
+          <div class="room-actions">
+            <button id="createRoomBtn" class="big-btn">Criar sala</button>
+            <div class="join-row">
+              <input id="joinRoomInput" maxlength="6" placeholder="Codigo da sala" />
+              <button id="joinRoomBtn">Entrar</button>
+            </div>
+          </div>
+          <p id="setupError" class="error-text"></p>
+          <button id="backToTitleBtn" class="link-btn">Voltar</button>
+        </div>
+
+        <div class="setup-col">
+          <h2>Salas abertas</h2>
+          <div id="lobbyRoomList" class="room-list"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 3. Sala de espera -->
+    <section id="screenRoom" class="screen screen-room" hidden>
+      <div class="room-card">
+        <h2>Sala <span id="roomCodeLabel"></span></h2>
+        <p id="roomSettingsLabel" class="room-settings"></p>
+        <div id="roomPlayerList" class="room-player-list"></div>
+        <div class="room-buttons">
+          <button id="startMatchBtn" class="big-btn">Iniciar partida</button>
+          <button id="leaveRoomBtn" class="link-btn">Sair da sala</button>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- Tela de jogo -->
+  <div id="gameRoot" style="display:none">
+    <canvas id="gameCanvas"></canvas>
+    <div class="crosshair" id="crosshair" aria-hidden="true"></div>
+
+    <section class="hud hud-top-left" id="hudTopLeft">
+      <div class="hud-health">
+        <div class="hud-health-bar"><div id="healthFill" class="hud-health-fill"></div></div>
+        <span id="healthText">100</span>
+      </div>
+      <div class="hud-ability">
+        <div class="hud-ability-bar"><div id="abilityFill" class="hud-ability-fill"></div></div>
+        <span id="abilityName">Habilidade</span>
+      </div>
+    </section>
+
+    <section class="hud hud-bottom-right" id="hudBottomRight">
+      <div class="hud-grenade">
+        <strong id="grenadeCount">2</strong>
+        <span id="grenadeName">Explosiva</span>
+      </div>
+      <div class="hud-ammo">
+        <strong id="ammoCount">30</strong>
+        <span id="weaponName">Arma</span>
+      </div>
+    </section>
+
+    <section class="hud hud-top-right" id="hudTopRight">
+      <div class="scoreboard-title">Placar</div>
+      <div id="scoreboardList" class="scoreboard-list"></div>
+    </section>
+
+    <section class="hud hud-killfeed" id="killFeed"></section>
+
+    <div id="deathScreen" class="death-screen" hidden>
+      <div>
+        <h2>Voce morreu</h2>
+        <p id="deathBy"></p>
+        <p class="respawn-note">Respawn em breve...</p>
+      </div>
+    </div>
+
+    <div id="endScreen" class="end-screen" hidden>
+      <div class="end-card">
+        <h2>Fim de partida</h2>
+        <div id="endResults" class="end-results"></div>
+      </div>
+    </div>
+
+    <div id="pauseHint" class="pause-hint" hidden>Clique na tela para continuar jogando</div>
+  </div>
+
+  <script type="module" src="./js/lobby.js"></script>
+</body>
+</html>

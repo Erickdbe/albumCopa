@@ -14,7 +14,7 @@ const CLASSES = {
   },
   archer: {
     id: "archer", name: "Arqueiro", color: "#8bd450",
-    primary: { id: "bow", name: "Arco", damage: 55, fireRateMs: 750, magSize: 6, reloadMs: 1400, spread: 0.01, range: 90, kind: "projectile", projectileSpeed: 55, speedMul: 1.05 },
+    primary: { id: "bow", name: "Arco", damage: 55, fireRateMs: 750, magSize: 6, reloadMs: 1400, spread: 0.01, range: 90, kind: "projectile", projectileSpeed: 55, speedMul: 1.05, chargeable: true, chargeMs: 1100, minChargeDamageMul: 0.35 },
     ability: { id: "flecha_explosiva", name: "Flecha Explosiva", cooldownMs: 14000, durationMs: 0 }
   },
   crossbow: {
@@ -132,7 +132,7 @@ const DEFAULT_SETTINGS = {
   jumpHeightMul: 1,
   grenadesEnabled: true,
   secondaryEnabled: true,
-  maxPlayers: 10
+  maxPlayers: 16
 };
 
 function clamp(value, min, max) {

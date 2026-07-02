@@ -6114,6 +6114,15 @@
     </div>
   </div>
 
+  <div class="challenge-toast hidden" id="arenaBrawlInviteToast">
+    <h4>Arena Brawl</h4>
+    <p id="arenaBrawlInviteMsg"></p>
+    <div class="challenge-toast-btns">
+      <button class="btn-accept" onclick="acceptArenaBrawlInvite()">Entrar</button>
+      <button class="btn-reject" onclick="rejectArenaBrawlInvite()">Agora nao</button>
+    </div>
+  </div>
+
   <div class="challenge-toast hidden" id="blackjackInviteToast">
     <h4>21 online</h4>
     <p id="blackjackInviteMsg"></p>
@@ -8859,6 +8868,7 @@
       pirateKeys: new Set(),
       pirateLastInputAt: 0,
       adventureInviteRoomId: null,
+      arenaBrawlInviteRoomId: null,
       cs16InviteChallengeId: null,
       cs16PendingChallengeId: null,
       cardWarsInviteRoomId: null,
@@ -9541,6 +9551,14 @@
         document.getElementById("cs16InviteMsg").textContent =
           `${fromUsername} chamou voce para uma partida de Counter-Strike 1.6.`;
         document.getElementById("cs16InviteToast").classList.remove("hidden");
+      });
+
+      mp.socket.on("arena-brawl:invite", ({ roomId, fromUsername }) => {
+        if (!roomId) return;
+        mp.arenaBrawlInviteRoomId = roomId;
+        document.getElementById("arenaBrawlInviteMsg").textContent =
+          `${fromUsername} abriu uma sala. Entre para jogar com todo mundo.`;
+        document.getElementById("arenaBrawlInviteToast").classList.remove("hidden");
       });
 
       mp.socket.on("cs16:sent", ({ challengeId, toUsername }) => {
@@ -13119,6 +13137,19 @@
       }
       mp.cs16InviteChallengeId = null;
       document.getElementById("cs16InviteToast").classList.add("hidden");
+    }
+
+    function acceptArenaBrawlInvite() {
+      if (!mp.arenaBrawlInviteRoomId) return;
+      const roomId = mp.arenaBrawlInviteRoomId;
+      mp.arenaBrawlInviteRoomId = null;
+      document.getElementById("arenaBrawlInviteToast").classList.add("hidden");
+      window.location.href = `/ArenaBrawl/?room=${encodeURIComponent(roomId)}`;
+    }
+
+    function rejectArenaBrawlInvite() {
+      mp.arenaBrawlInviteRoomId = null;
+      document.getElementById("arenaBrawlInviteToast").classList.add("hidden");
     }
 
     function clearCardWarsLobbyState() {

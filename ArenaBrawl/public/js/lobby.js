@@ -5,6 +5,7 @@ import {
 import { attachSocket, onMatchEnd, initGamePlayerJoinHandler } from "./game.js";
 
 const token = localStorage.getItem("mp_token");
+const invitedRoomId = new URLSearchParams(window.location.search).get("room")?.trim().toUpperCase() || "";
 const socket = window.io(window.location.origin, { auth: { token } });
 attachSocket(socket);
 initGamePlayerJoinHandler(socket);
@@ -26,7 +27,7 @@ const state = {
   secondaryId: "pistol_common",
   settings: {
     mapId: "praia", durationMin: 10, scoreLimit: 50, mode: "ffa",
-    moveSpeedMul: 1, jumpHeightMul: 1, grenadesEnabled: true, secondaryEnabled: true, maxPlayers: 10
+    moveSpeedMul: 1, jumpHeightMul: 1, grenadesEnabled: true, secondaryEnabled: true, maxPlayers: 16
   },
   currentRoom: null
 };
@@ -159,7 +160,25 @@ socket.on("lobby:rooms", (rooms) => {
     });
   });
 });
-socket.on("connect", refreshLobbyRooms);
+socket.on("connect", () => {
+  refreshLobbyRooms();
+  if (invitedRoomId) {
+    socket.emit("room:join", {
+      username: state.username,
+      roomId: invitedRoomId,
+      classId: state.classId,
+      secondaryId: state.secondaryId
+    });
+    return;
+  }
+
+  socket.emit("arena-brawl:open", {
+    username: state.username,
+    settings: state.settings,
+    classId: state.classId,
+    secondaryId: state.secondaryId
+  });
+});
 
 /* ── Tela de sala ───────────────────────────────────────────────────── */
 socket.on("room:error", (message) => { el("setupError").textContent = message || "Erro."; });
@@ -192,7 +211,7 @@ function renderRoomScreen(roomState) {
     </div>`
   ).join("");
   el("startMatchBtn").hidden = !isHost;
-  el("startMatchBtn").disabled = roomState.players.length < 1;
+  el("startMatchBtn").disabled = roomState.players.length < 2;
 }
 
 el("startMatchBtn").addEventListener("click", () => socket.emit("room:start"));

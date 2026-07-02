@@ -74,7 +74,8 @@ function createRoomsModule(io) {
       abilityActive: false,
       abilityExpiresAt: 0,
       abilityCooldownUntil: 0,
-      blindedUntil: 0
+      blindedUntil: 0,
+      chargeStartedAt: 0
     };
   }
 
@@ -207,8 +208,13 @@ function createRoomsModule(io) {
   function bindSocket(socket) {
     socket.on("lobby:list", () => socket.emit("lobby:rooms", publicRoomList()));
 
-    socket.on("room:create", ({ username, settings, classId, secondaryId } = {}) => {
-      if (findRoomBySocket(socket.id)) return socket.emit("room:error", "Voce ja esta em uma sala.");
+    function createRoom({ username, settings, classId, secondaryId } = {}, inviteOnlinePlayers = false) {
+      const existingRoom = findRoomBySocket(socket.id);
+      if (existingRoom) {
+        socket.emit("room:joined", serializeRoom(existingRoom));
+        return existingRoom;
+      }
+
       if (!socket.userId) {
         socket.username = String(username || "Jogador").slice(0, 18) || "Jogador";
       }
@@ -228,8 +234,20 @@ function createRoomsModule(io) {
       socket.join(room.roomId);
 
       socket.emit("room:joined", serializeRoom(room));
+      if (inviteOnlinePlayers) {
+        socket.broadcast.emit("arena-brawl:invite", {
+          roomId: room.roomId,
+          fromUsername: socket.username,
+          maxPlayers: room.settings.maxPlayers
+        });
+      }
       broadcastLobbyList();
-    });
+      return room;
+    }
+
+    socket.on("arena-brawl:open", (options = {}) => createRoom(options, true));
+
+    socket.on("room:create", (options = {}) => createRoom(options, false));
 
     socket.on("room:join", ({ username, roomId, classId, secondaryId } = {}) => {
       const room = rooms.get(String(roomId || "").toUpperCase());
@@ -237,7 +255,9 @@ function createRoomsModule(io) {
       if (room.players.length >= room.settings.maxPlayers) return socket.emit("room:error", "Sala cheia.");
       if (findRoomBySocket(socket.id)) return socket.emit("room:error", "Voce ja esta em uma sala.");
 
-      socket.username = String(username || "Jogador").slice(0, 18) || "Jogador";
+      if (!socket.userId) {
+        socket.username = String(username || "Jogador").slice(0, 18) || "Jogador";
+      }
       const player = makePlayer(socket, classId);
       player.secondaryId = SECONDARY_WEAPONS[secondaryId] ? secondaryId : "pistol_common";
       room.players.push(player);
@@ -305,6 +325,21 @@ function createRoomsModule(io) {
       });
     });
 
+    socket.on("match:charge-start", ({ slot } = {}) => {
+      const room = findRoomBySocket(socket.id);
+      if (!room || room.status !== "playing") return;
+      const player = room.players.find((p) => p.socketId === socket.id);
+      if (!player || !player.alive) return;
+      const weapon = weaponFor(player, slot === "secondary" ? "secondary" : "primary");
+      if (weapon?.chargeable) player.chargeStartedAt = Date.now();
+    });
+
+    socket.on("match:charge-cancel", () => {
+      const room = findRoomBySocket(socket.id);
+      const player = room?.players.find((p) => p.socketId === socket.id);
+      if (player) player.chargeStartedAt = 0;
+    });
+
     socket.on("match:shoot", ({ slot, targetSocketId, hitZone, pelletHits } = {}) => {
       const room = findRoomBySocket(socket.id);
       if (!room || room.status !== "playing") return;
@@ -323,6 +358,14 @@ function createRoomsModule(io) {
       shooter.lastShotAt[slot] = now;
       socket.to(room.roomId).volatile.emit("match:shot-fired", { socketId: socket.id, slot, weaponId: weapon.id });
 
+      let chargeDamageMultiplier = 1;
+      if (weapon.chargeable) {
+        const elapsed = Math.max(0, now - Number(shooter.chargeStartedAt || now));
+        const charge = Math.max(0, Math.min(1, elapsed / weapon.chargeMs));
+        chargeDamageMultiplier = weapon.minChargeDamageMul + (1 - weapon.minChargeDamageMul) * charge;
+        shooter.chargeStartedAt = 0;
+      }
+
       if (!targetSocketId) return;
       const target = room.players.find((p) => p.socketId === targetSocketId);
       if (!target || target.socketId === shooter.socketId || !target.alive) return;
@@ -335,7 +378,13 @@ function createRoomsModule(io) {
       let piercingBonus = 1;
       if (shooter.abilityActive && now < shooter.abilityExpiresAt && CLASSES[shooter.classId]?.ability?.id === "disparo_perfurante") piercingBonus = 1;
 
-      applyDamage(room, shooter, target, weapon.damage * falloff * pellets * piercingBonus, hitZone === "head");
+      applyDamage(
+        room,
+        shooter,
+        target,
+        weapon.damage * falloff * pellets * piercingBonus * chargeDamageMultiplier,
+        hitZone === "head"
+      );
     });
 
     socket.on("match:reload", ({ slot } = {}) => {

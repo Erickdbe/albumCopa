@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { PointerLockControls } from "three/addons/controls/PointerLockControls.js";
 import { buildMap } from "./maps.js";
+import { buildWeaponModel, setBowChargeVisual } from "./weapon-models.js";
 import {
   CLASSES, SECONDARY_WEAPONS, GRENADES, GRENADE_ORDER, GRENADE_CHARGES_PER_LIFE,
   ARENA_HALF, EYE_HEIGHT, GRAVITY, WALK_SPEED, SPRINT_MUL, CROUCH_MUL, MOVE_SEND_MS,
@@ -9,6 +10,7 @@ import {
 
 const STEP_TOLERANCE = 0.65;
 const JUMP_HEIGHT_BASE = 1.5; // altura de pulo de referencia (multiplicada por jumpHeightMul)
+const DEFAULT_FOV = 78;
 
 let scene, camera, renderer, controls, clock, raycaster;
 let obstacles = [];
@@ -36,7 +38,10 @@ const local = {
   abilityActive: false, abilityExpiresAt: 0, abilityCooldownUntil: 0,
   pendingSpecialShot: null,
   blindedUntil: 0,
-  mouseDown: false
+  mouseDown: false,
+  aiming: false,
+  charging: false,
+  chargeStartedAt: 0
 };
 
 /* ── DOM ────────────────────────────────────────────────────────────── */
@@ -46,7 +51,7 @@ function cacheDom() {
     "gameCanvas", "crosshair", "healthFill", "healthText", "ammoCount", "weaponName",
     "scoreboardList", "killFeed", "deathScreen", "deathBy", "pauseHint", "hudTopLeft",
     "hudBottomRight", "hudTopRight", "abilityFill", "abilityName", "grenadeCount", "grenadeName",
-    "matchTimer", "endScreen", "endResults", "gameRoot"
+    "matchTimer", "endScreen", "endResults", "gameRoot", "scopeOverlay", "chargeMeter", "chargeFill"
   ].forEach((id) => { dom[id] = document.getElementById(id); });
 }
 
@@ -90,10 +95,14 @@ function ensureScene() {
   window.addEventListener("keydown", (e) => { keys[e.code] = true; onKeyDown(e); });
   window.addEventListener("keyup", (e) => { keys[e.code] = false; });
   document.addEventListener("mousedown", onMouseDown);
-  document.addEventListener("mouseup", (e) => { if (e.button === 0) local.mouseDown = false; });
+  document.addEventListener("mouseup", onMouseUp);
   dom.gameCanvas.addEventListener("click", () => { if (local.alive) controls.lock(); });
   controls.addEventListener("lock", () => { dom.pauseHint.hidden = true; });
-  controls.addEventListener("unlock", () => { if (local.alive) dom.pauseHint.hidden = false; });
+  controls.addEventListener("unlock", () => {
+    setAiming(false);
+    cancelCharge();
+    if (local.alive) dom.pauseHint.hidden = false;
+  });
 
   requestAnimationFrame(render);
 }
@@ -136,29 +145,13 @@ function isBlockedAt(x, z, feetY) {
 }
 
 /* ── Armas em 1a pessoa (view model) ───────────────────────────────── */
-function buildWeaponMesh(color, kind) {
-  const group = new THREE.Group();
-  const mat = new THREE.MeshStandardMaterial({ color });
-  const body = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.14, 0.5), mat);
-  body.position.set(0, 0, -0.1);
-  group.add(body);
-  const barrelLen = kind === "sniper_rifle" ? 0.8 : kind === "crossbow" || kind === "bow" ? 0.35 : 0.55;
-  const barrel = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, barrelLen), mat);
-  barrel.position.set(0, 0.01, -0.35 - barrelLen / 2 + 0.2);
-  group.add(barrel);
-  if (kind !== "knife") {
-    const mag = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.2, 0.1), mat);
-    mag.position.set(0, -0.15, 0.02);
-    group.add(mag);
-  }
-  group.position.set(0.28, -0.28, -0.55);
-  group.rotation.y = Math.PI;
-  return group;
-}
 function setViewWeapon(color, kind) {
   if (currentWeaponMesh) weaponRig.remove(currentWeaponMesh);
-  currentWeaponMesh = buildWeaponMesh(color, kind);
+  currentWeaponMesh = buildWeaponModel(kind, color);
   weaponRig.add(currentWeaponMesh);
+  const muzzle = currentWeaponMesh.userData.muzzlePosition || new THREE.Vector3(0, 0, -0.8);
+  muzzleFlash.position.copy(currentWeaponMesh.position).add(muzzle);
+  setBowChargeVisual(currentWeaponMesh, 0);
 }
 function playMuzzleFlash() {
   muzzleFlash.intensity = 6;
@@ -166,9 +159,53 @@ function playMuzzleFlash() {
 }
 function recoilKick() {
   if (!currentWeaponMesh) return;
-  const base = currentWeaponMesh.position.z;
-  currentWeaponMesh.position.z = base + 0.09;
-  setTimeout(() => { if (currentWeaponMesh) currentWeaponMesh.position.z = base; }, 90);
+  const weaponMesh = currentWeaponMesh;
+  const base = weaponMesh.position.z;
+  weaponMesh.position.z = base + 0.09;
+  setTimeout(() => { weaponMesh.position.z = base; }, 90);
+}
+
+function setAiming(enabled) {
+  local.aiming = Boolean(enabled && local.alive && room?.status === "playing");
+}
+
+function currentChargeAmount() {
+  const weapon = currentWeapon();
+  if (!local.charging || !weapon.chargeable) return 0;
+  return THREE.MathUtils.clamp((performance.now() - local.chargeStartedAt) / weapon.chargeMs, 0, 1);
+}
+
+function cancelCharge() {
+  const wasCharging = local.charging;
+  local.charging = false;
+  local.chargeStartedAt = 0;
+  if (wasCharging && socket) socket.emit("match:charge-cancel");
+  if (currentWeaponMesh) setBowChargeVisual(currentWeaponMesh, 0);
+  if (dom.chargeMeter) dom.chargeMeter.classList.remove("active");
+}
+
+function updateWeaponPresentation(delta) {
+  if (!camera || !currentWeaponMesh) return;
+  const weapon = currentWeapon();
+  const scoped = local.aiming && weapon.id === "sniper_rifle";
+  const abilityZoom = local.abilityActive && local.classId === "sniper";
+  const targetFov = scoped ? 28 : local.aiming ? 58 : abilityZoom ? 62 : DEFAULT_FOV;
+  camera.fov = THREE.MathUtils.lerp(camera.fov, targetFov, Math.min(1, delta * 13));
+  camera.updateProjectionMatrix();
+
+  const targetPosition = local.aiming
+    ? currentWeaponMesh.userData.aimPosition
+    : currentWeaponMesh.userData.hipPosition;
+  currentWeaponMesh.position.lerp(targetPosition, Math.min(1, delta * 14));
+  currentWeaponMesh.visible = !scoped;
+  dom.scopeOverlay.classList.toggle("active", scoped);
+  dom.crosshair.style.opacity = scoped ? "0" : "1";
+  dom.crosshair.classList.toggle("aiming", local.aiming && !scoped);
+
+  const charge = currentChargeAmount();
+  setBowChargeVisual(currentWeaponMesh, charge);
+  dom.chargeMeter.classList.toggle("active", local.charging);
+  dom.chargeFill.style.width = `${Math.round(charge * 100)}%`;
 }
 
 /* ── Avatares ───────────────────────────────────────────────────────── */
@@ -211,9 +248,12 @@ function buildAvatar(p) {
   rightLeg.geometry.translate(0, -0.37, 0);
   root.add(rightLeg);
 
-  const gun = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.14, 0.5), new THREE.MeshStandardMaterial({ color: 0x24262c }));
+  const remoteWeaponId = CLASSES[p.classId]?.primary?.id || "assault_rifle";
+  const gun = buildWeaponModel(remoteWeaponId, teamColor);
   rightArm.add(gun);
-  gun.position.set(0.05, -0.1, -0.35);
+  gun.scale.setScalar(0.24);
+  gun.position.set(0.03, -0.18, -0.12);
+  gun.rotation.set(0, 0, 0);
 
   const tagCanvas = document.createElement("canvas");
   tagCanvas.width = 256; tagCanvas.height = 64;
@@ -312,10 +352,11 @@ function fireHitscan(weapon, slot) {
   const pelletHits = new Map();
   let headshotFor = null;
   const pelletCount = weapon.pellets || 1;
+  const spread = weapon.spread * (local.aiming ? 0.35 : 1);
   for (let i = 0; i < pelletCount; i++) {
     const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
-    dir.x += (Math.random() - 0.5) * weapon.spread;
-    dir.y += (Math.random() - 0.5) * weapon.spread;
+    dir.x += (Math.random() - 0.5) * spread;
+    dir.y += (Math.random() - 0.5) * spread;
     dir.normalize();
     raycaster.set(camera.getWorldPosition(new THREE.Vector3()), dir);
     raycaster.far = weapon.range;
@@ -336,14 +377,15 @@ function fireHitscan(weapon, slot) {
   });
 }
 
-function fireProjectile(weapon, slot) {
+function fireProjectile(weapon, slot, charge = 1) {
   // Visual: flecha/virote viaja ate o ponto de impacto. O acerto e resolvido de imediato
   // no servidor (mesma logica de hitscan), a viagem e apenas cosmetica.
   scene.updateMatrixWorld(true);
   const hittable = gatherHittable();
   const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
-  dir.x += (Math.random() - 0.5) * weapon.spread;
-  dir.y += (Math.random() - 0.5) * weapon.spread;
+  const spread = weapon.spread * (local.aiming ? 0.35 : 1);
+  dir.x += (Math.random() - 0.5) * spread;
+  dir.y += (Math.random() - 0.5) * spread;
   dir.normalize();
   const origin = camera.getWorldPosition(new THREE.Vector3());
   raycaster.set(origin, dir);
@@ -357,7 +399,8 @@ function fireProjectile(weapon, slot) {
   projMesh.position.copy(origin);
   projMesh.lookAt(endPoint);
   scene.add(projMesh);
-  const travelMs = Math.min(300, origin.distanceTo(endPoint) * 4);
+  const projectileSpeed = weapon.projectileSpeed * (weapon.chargeable ? 0.45 + charge * 0.55 : 1);
+  const travelMs = Math.min(1200, Math.max(80, origin.distanceTo(endPoint) / projectileSpeed * 1000));
   const start = performance.now();
   (function step() {
     const t = Math.min(1, (performance.now() - start) / travelMs);
@@ -368,11 +411,12 @@ function fireProjectile(weapon, slot) {
 
   socket.emit("match:shoot", {
     slot, targetSocketId: socketId, pelletHits: 1,
-    hitZone: socketId && isHead ? "head" : "body"
+    hitZone: socketId && isHead ? "head" : "body",
+    charge
   });
 }
 
-function shoot() {
+function shoot(charge = 1) {
   if (!local.alive || !room) return;
   const slot = local.slot;
   const weapon = currentWeapon(slot);
@@ -382,16 +426,38 @@ function shoot() {
   if (weapon.kind !== "melee" && local.ammo[slot] <= 0) { reload(); return; }
 
   local.lastShotAt[slot] = now;
-  playMuzzleFlash();
+  if (weapon.kind === "hitscan") playMuzzleFlash();
   recoilKick();
 
-  if (weapon.kind === "projectile") fireProjectile(weapon, slot);
+  if (weapon.kind === "projectile") fireProjectile(weapon, slot, charge);
   else fireHitscan(weapon, slot);
 
   if (weapon.kind !== "melee") {
     local.ammo[slot] = Math.max(0, local.ammo[slot] - 1);
     updateAmmoHud();
   }
+}
+
+function beginCharge() {
+  const weapon = currentWeapon();
+  if (!weapon.chargeable || local.charging) return;
+  if (local.ammo[local.slot] <= 0) {
+    reload();
+    return;
+  }
+  local.charging = true;
+  local.chargeStartedAt = performance.now();
+  socket.emit("match:charge-start", { slot: local.slot });
+}
+
+function releaseCharge() {
+  if (!local.charging) return;
+  const charge = currentChargeAmount();
+  local.charging = false;
+  local.chargeStartedAt = 0;
+  shoot(charge);
+  setBowChargeVisual(currentWeaponMesh, 0);
+  dom.chargeMeter.classList.remove("active");
 }
 
 function reload() {
@@ -405,6 +471,8 @@ function reload() {
 
 function switchSlot(slot) {
   if (slot === "secondary" && !room.settings.secondaryEnabled) return;
+  cancelCharge();
+  setAiming(false);
   local.slot = slot;
   const weapon = currentWeapon(slot);
   setViewWeapon(slot === "primary" ? "#4c5a3a" : "#555a63", weapon.id);
@@ -475,20 +543,29 @@ function useAbility() {
   if (now < local.abilityCooldownUntil) return;
   socket.emit("match:ability");
 }
-function applyAbilityVisual(classId, durationMs) {
-  if (classId === "sniper") {
-    const original = camera.fov;
-    camera.fov = 45;
-    camera.updateProjectionMatrix();
-    setTimeout(() => { camera.fov = original; camera.updateProjectionMatrix(); }, durationMs);
-  }
-}
-
 /* ── Input ──────────────────────────────────────────────────────────── */
 function onMouseDown(e) {
   if (!controls.isLocked) return;
-  if (e.button === 0) { local.mouseDown = true; shoot(); }
-  if (e.button === 2) e.preventDefault();
+  if (e.button === 0) {
+    const weapon = currentWeapon();
+    if (weapon.chargeable) beginCharge();
+    else {
+      local.mouseDown = true;
+      shoot();
+    }
+  }
+  if (e.button === 2) {
+    e.preventDefault();
+    setAiming(true);
+  }
+}
+
+function onMouseUp(e) {
+  if (e.button === 0) {
+    local.mouseDown = false;
+    releaseCharge();
+  }
+  if (e.button === 2) setAiming(false);
 }
 document.addEventListener("contextmenu", (e) => { if (controls?.isLocked) e.preventDefault(); });
 
@@ -594,6 +671,7 @@ function render() {
     updateGrenadesPhysics(delta);
     animateAvatars(delta);
     updateAbilityHud();
+    updateWeaponPresentation(delta);
   }
   renderer.render(scene, camera);
   requestAnimationFrame(render);
@@ -626,6 +704,9 @@ export function attachSocket(activeSocket) {
     local.ammo.primary = CLASSES[local.classId].primary.magSize;
     local.ammo.secondary = SECONDARY_WEAPONS[local.secondaryId].magSize;
     local.abilityCooldownUntil = 0;
+    local.aiming = false;
+    local.charging = false;
+    local.chargeStartedAt = 0;
 
     camera.position.set(me?.x || 0, EYE_HEIGHT + (me?.y || 0), me?.z || 0);
     camera.quaternion.setFromEuler(new THREE.Euler(0, me?.yaw || 0, 0, "YXZ"));
@@ -672,6 +753,8 @@ export function attachSocket(activeSocket) {
     else { const a = remotePlayers.get(killerId); if (a) { a.kills += 1; a.score = (a.score || 0) + 1; } }
     if (victimId === selfId) {
       local.alive = false; local.health = 0;
+      setAiming(false);
+      cancelCharge();
       updateHealthHud();
       dom.deathBy.textContent = killerName ? `Eliminado por ${killerName}` : "";
       dom.deathScreen.hidden = false;
@@ -704,7 +787,6 @@ export function attachSocket(activeSocket) {
     if (socketId === selfId) {
       local.abilityActive = true;
       local.abilityExpiresAt = performance.now() + durationMs;
-      applyAbilityVisual(local.classId, durationMs);
       if (durationMs > 0) setTimeout(() => { local.abilityActive = false; }, durationMs);
     }
   });
@@ -738,6 +820,8 @@ export function attachSocket(activeSocket) {
 
   socket.on("match:end", ({ reason, results, teamScores }) => {
     room = { ...room, status: "finished" };
+    setAiming(false);
+    cancelCharge();
     controls.unlock();
     dom.endScreen.hidden = false;
     const header = teamScores ? `<h3>Vermelho ${teamScores.red} x ${teamScores.blue} Azul</h3>` : "";

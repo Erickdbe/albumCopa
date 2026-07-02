@@ -16,6 +16,7 @@ const crypto     = require("crypto");
 const { setupCardWarsApiRoutes } = require("./cardwars-api");
 const { setupAdventurePvp } = require("./adventure-pvp-api");
 const { setupFpsShooter } = require("./fps-shooter-api");
+const { createRoomsModule: createArenaBrawlRoomsModule } = require("./ArenaBrawl/server/rooms");
 
 function loadLocalEnv() {
   const envFile = path.join(__dirname, ".env");
@@ -870,6 +871,11 @@ app.use("/cardwars", express.static(path.join(__dirname, "cardwars-unity"), {
     res.setHeader("Content-Type", "application/octet-stream");
   }
 }));
+app.use(
+  "/ArenaBrawl/vendor/three",
+  express.static(path.join(__dirname, "node_modules", "three"))
+);
+app.use("/ArenaBrawl", express.static(path.join(__dirname, "ArenaBrawl", "public")));
 app.use(express.static(path.join(__dirname)));
 
 // Rota raiz → abre o álbum
@@ -1433,6 +1439,7 @@ const CARD_WARS_RECONNECT_GRACE_MS = 30000;
 const CS16_RECONNECT_GRACE_MS = 45000;
 let adventurePvp         = null;
 let fpsShooter            = null;
+let arenaBrawl            = null;
 
 function ensureSpectators(room) {
   if (!room.spectators) room.spectators = new Set();
@@ -5757,6 +5764,8 @@ fpsShooter = setupFpsShooter({
   broadcastOnlineList
 });
 
+arenaBrawl = createArenaBrawlRoomsModule(io);
+
 function resolveCs16ServerUrl(socket) {
   if (CS16_WS_URL) return CS16_WS_URL;
   const forwarded = socket?.handshake?.headers?.["x-forwarded-host"];
@@ -5968,6 +5977,7 @@ io.on("connection", (socket) => {
   // ── Desafio ────────────────────────────────────────────────────────────
   adventurePvp?.bindSocket(socket);
   fpsShooter?.bindSocket(socket);
+  arenaBrawl?.bindSocket(socket);
 
   socket.on("cs16:challenge", ({ toSocketId }) => {
     const challenger = onlinePlayers.get(socket.id);

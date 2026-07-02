@@ -4,7 +4,8 @@ import {
 } from "./config.js";
 import { attachSocket, onMatchEnd, initGamePlayerJoinHandler } from "./game.js";
 
-const socket = window.io(window.location.origin);
+const token = localStorage.getItem("mp_token");
+const socket = window.io(window.location.origin, { auth: { token } });
 attachSocket(socket);
 initGamePlayerJoinHandler(socket);
 
@@ -29,6 +30,12 @@ const state = {
   },
   currentRoom: null
 };
+
+socket.on("connect_error", () => {
+  document.querySelector(".tagline").textContent = token
+    ? "Nao foi possivel conectar ao servidor do Arena Brawl."
+    : "Entre na sua conta do Album da Copa para jogar online.";
+});
 
 /* ── Tela inicial ───────────────────────────────────────────────────── */
 el("nicknameInput").value = state.username;

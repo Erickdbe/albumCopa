@@ -209,7 +209,9 @@ function createRoomsModule(io) {
 
     socket.on("room:create", ({ username, settings, classId, secondaryId } = {}) => {
       if (findRoomBySocket(socket.id)) return socket.emit("room:error", "Voce ja esta em uma sala.");
-      socket.username = String(username || "Jogador").slice(0, 18) || "Jogador";
+      if (!socket.userId) {
+        socket.username = String(username || "Jogador").slice(0, 18) || "Jogador";
+      }
 
       const room = {
         roomId: makeRoomId(),

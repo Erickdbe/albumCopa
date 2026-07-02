@@ -15,6 +15,7 @@ const path       = require("path");
 const crypto     = require("crypto");
 const { setupCardWarsApiRoutes } = require("./cardwars-api");
 const { setupAdventurePvp } = require("./adventure-pvp-api");
+const { setupFpsShooter } = require("./fps-shooter-api");
 
 function loadLocalEnv() {
   const envFile = path.join(__dirname, ".env");
@@ -1426,10 +1427,12 @@ const cardWarsRooms      = new Map();   // roomId -> Card Wars Unity online shel
 const horrorRooms        = new Map();   // roomId -> Casa Sombria cooperativo
 const pendingCs16Challenges = new Map(); // challengeId -> convite individual de CS 1.6
 const cs16Rooms           = new Map();   // roomId -> sessao no servidor dedicado
+const fpsRooms            = new Map();   // roomId -> Arena FPS estilo Krunker
 const HORROR_MAX_PLAYERS = 4;
 const CARD_WARS_RECONNECT_GRACE_MS = 30000;
 const CS16_RECONNECT_GRACE_MS = 45000;
 let adventurePvp         = null;
+let fpsShooter            = null;
 
 function ensureSpectators(room) {
   if (!room.spectators) room.spectators = new Set();
@@ -5746,6 +5749,14 @@ adventurePvp = setupAdventurePvp({
   resetExchangeLosses
 });
 
+fpsShooter = setupFpsShooter({
+  io,
+  db,
+  rooms: fpsRooms,
+  onlinePlayers,
+  broadcastOnlineList
+});
+
 function resolveCs16ServerUrl(socket) {
   if (CS16_WS_URL) return CS16_WS_URL;
   const forwarded = socket?.handshake?.headers?.["x-forwarded-host"];
@@ -5956,6 +5967,7 @@ io.on("connection", (socket) => {
 
   // ── Desafio ────────────────────────────────────────────────────────────
   adventurePvp?.bindSocket(socket);
+  fpsShooter?.bindSocket(socket);
 
   socket.on("cs16:challenge", ({ toSocketId }) => {
     const challenger = onlinePlayers.get(socket.id);
@@ -8164,6 +8176,8 @@ io.on("connection", (socket) => {
     if (horrorRoom) {
       removeHorrorPlayer(horrorRoom, socket.id, `${socket.username} desconectou da Casa Sombria.`);
     }
+
+    fpsShooter?.removePlayer(socket.id, `${socket.username} desconectou da Arena FPS.`);
 
     const blackjackRoom = findBlackjackRoomBySocket(socket.id);
     if (blackjackRoom) {

@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Arena FPS</title>
+  <link rel="stylesheet" href="./styles.css">
+  <script src="/socket.io/socket.io.js"></script>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "/node_modules/three/build/three.module.js",
+        "three/addons/": "/node_modules/three/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <main id="shell">
+    <canvas id="gameCanvas"></canvas>
+
+    <section id="lobby" class="lobby">
+      <div class="lobby-card">
+        <h1>Arena FPS</h1>
+        <p class="lobby-sub">Tiro em primeira pessoa online — estilo Krunker</p>
+
+        <div class="weapon-grid" id="weaponGrid"></div>
+
+        <button id="playBtn" class="play-btn" type="button">Entrar na partida</button>
+        <p id="lobbyStatus" class="lobby-status">Conectando...</p>
+      </div>
+    </section>
+
+    <div class="crosshair" id="crosshair" aria-hidden="true"></div>
+
+    <section class="hud hud-top-left">
+      <div class="hud-health">
+        <div class="hud-health-bar"><div id="healthFill" class="hud-health-fill"></div></div>
+        <span id="healthText">100</span>
+      </div>
+    </section>
+
+    <section class="hud hud-bottom-right">
+      <div class="hud-ammo">
+        <strong id="ammoCount">30</strong>
+        <span id="weaponName">Rifle de Assalto</span>
+      </div>
+    </section>
+
+    <section class="hud hud-top-right" id="scoreboard">
+      <div class="scoreboard-title">Placar</div>
+      <div id="scoreboardList" class="scoreboard-list"></div>
+    </section>
+
+    <section class="hud hud-killfeed" id="killFeed"></section>
+
+    <div id="deathScreen" class="death-screen" hidden>
+      <div>
+        <h2>Voce morreu</h2>
+        <p id="deathBy"></p>
+        <p class="respawn-note">Respawn em breve...</p>
+      </div>
+    </div>
+
+    <div id="pauseHint" class="pause-hint" hidden>Clique na tela para continuar jogando</div>
+  </main>
+
+  <script type="module" src="./game.js"></script>
+</body>
+</html>

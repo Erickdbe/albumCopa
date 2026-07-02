@@ -66,10 +66,40 @@ export const MAP_META = {
 };
 export const MAP_ORDER = ["praia", "cidade", "floresta"];
 
+export const MAP_HALF_SIZES = { praia: 90, cidade: 78, floresta: 92 };
+
+export const VEHICLE_SPAWNS = {
+  cidade: [
+    { id: "city-car-red", type: "car", x: -24, y: 0, z: -4, yaw: Math.PI / 2 },
+    { id: "city-car-blue", type: "car", x: 24, y: 0, z: 4, yaw: -Math.PI / 2 },
+    { id: "city-bike-east", type: "motorcycle", x: 5, y: 0, z: 24, yaw: Math.PI },
+    { id: "city-bike-west", type: "motorcycle", x: -5, y: 0, z: -24, yaw: 0 }
+  ],
+  floresta: [
+    { id: "forest-plane", type: "plane", x: 0, y: 5, z: 66, yaw: Math.PI },
+    { id: "forest-cannon", type: "cannon", x: -44, y: 0, z: 8, yaw: Math.PI / 2 }
+  ],
+  praia: [
+    { id: "beach-jetski-a", type: "jetski", x: -14, y: 0.2, z: 48, yaw: Math.PI },
+    { id: "beach-jetski-b", type: "jetski", x: 14, y: 0.2, z: 54, yaw: Math.PI },
+    { id: "beach-quad", type: "quad", x: -30, y: 0, z: -12, yaw: Math.PI / 2 },
+    { id: "beach-plane", type: "plane", x: 38, y: 5, z: 24, yaw: -Math.PI / 2 }
+  ]
+};
+
+export const VEHICLE_STATS = {
+  car: { name: "Carro", maxHealth: 260, maxSpeed: 19 },
+  motorcycle: { name: "Moto", maxHealth: 150, maxSpeed: 25 },
+  quad: { name: "Quadriciclo", maxHealth: 220, maxSpeed: 17 },
+  jetski: { name: "Jetski", maxHealth: 180, maxSpeed: 23 },
+  plane: { name: "Aviao", maxHealth: 320, maxSpeed: 34, builtInWeapon: true },
+  cannon: { name: "Canhao", maxHealth: 420, maxSpeed: 0, builtInWeapon: true }
+};
+
 export const MATCH_DURATIONS_MIN = [3, 5, 10, 15];
 export const SCORE_LIMITS = [25, 50, 100, 200];
 
-export const ARENA_HALF = 38;
+export const ARENA_HALF = 92;
 export const EYE_HEIGHT = 1.7;
 export const GRAVITY = -22;
 export const WALK_SPEED = 6.4;

@@ -72,7 +72,37 @@ const MAP_META = {
   floresta: { id: "floresta", name: "Floresta" }
 };
 
-const ARENA_HALF = 38;
+const MAP_HALF_SIZES = { praia: 90, cidade: 78, floresta: 92 };
+
+const VEHICLE_SPAWNS = {
+  cidade: [
+    { id: "city-car-red", type: "car", x: -24, y: 0, z: -4, yaw: Math.PI / 2 },
+    { id: "city-car-blue", type: "car", x: 24, y: 0, z: 4, yaw: -Math.PI / 2 },
+    { id: "city-bike-east", type: "motorcycle", x: 5, y: 0, z: 24, yaw: Math.PI },
+    { id: "city-bike-west", type: "motorcycle", x: -5, y: 0, z: -24, yaw: 0 }
+  ],
+  floresta: [
+    { id: "forest-plane", type: "plane", x: 0, y: 5, z: 66, yaw: Math.PI },
+    { id: "forest-cannon", type: "cannon", x: -44, y: 0, z: 8, yaw: Math.PI / 2 }
+  ],
+  praia: [
+    { id: "beach-jetski-a", type: "jetski", x: -14, y: 0.2, z: 48, yaw: Math.PI },
+    { id: "beach-jetski-b", type: "jetski", x: 14, y: 0.2, z: 54, yaw: Math.PI },
+    { id: "beach-quad", type: "quad", x: -30, y: 0, z: -12, yaw: Math.PI / 2 },
+    { id: "beach-plane", type: "plane", x: 38, y: 5, z: 24, yaw: -Math.PI / 2 }
+  ]
+};
+
+const VEHICLE_STATS = {
+  car: { maxHealth: 260, maxSpeed: 19, acceleration: 15, turnSpeed: 1.8 },
+  motorcycle: { maxHealth: 150, maxSpeed: 25, acceleration: 19, turnSpeed: 2.25 },
+  quad: { maxHealth: 220, maxSpeed: 17, acceleration: 14, turnSpeed: 1.9 },
+  jetski: { maxHealth: 180, maxSpeed: 23, acceleration: 17, turnSpeed: 1.75 },
+  plane: { maxHealth: 320, maxSpeed: 34, acceleration: 11, turnSpeed: 1.15, builtInWeapon: true },
+  cannon: { maxHealth: 420, maxSpeed: 0, acceleration: 0, turnSpeed: 0.8, builtInWeapon: true }
+};
+
+const ARENA_HALF = 92;
 
 // Pontos de spawn por mapa (compartilhado com public/js/maps.js no cliente).
 const MAP_SPAWNS = {
@@ -161,6 +191,7 @@ module.exports = {
   SECONDARY_WEAPONS, SECONDARY_IDS,
   GRENADES, GRENADE_IDS, GRENADE_CHARGES_PER_LIFE,
   MAP_IDS, MAP_META, MAP_SPAWNS, ARENA_HALF,
+  MAP_HALF_SIZES, VEHICLE_SPAWNS, VEHICLE_STATS,
   MATCH_DURATIONS_MIN, SCORE_LIMITS, MODES,
   DEFAULT_SETTINGS,
   normalizeSettings,

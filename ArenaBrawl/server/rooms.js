@@ -6,6 +6,9 @@ const {
   GRENADES, GRENADE_CHARGES_PER_LIFE,
   MAP_IDS,
   ARENA_HALF,
+  MAP_HALF_SIZES,
+  VEHICLE_SPAWNS,
+  VEHICLE_STATS,
   normalizeSettings,
   pickSpawn,
   HEADSHOT_MULTIPLIER
@@ -13,6 +16,8 @@ const {
 
 const RESPAWN_MS = 3500;
 const RANGE_TOLERANCE = 1.15;
+const WORLD_TICK_MS = 50;
+const WORLD_EVENT_TIME_SCALE = Math.max(0.02, Number(process.env.ARENA_EVENT_TIME_SCALE) || 1);
 
 function normalizeClassId(value) {
   return CLASS_IDS.includes(value) ? value : "rifle";
@@ -25,6 +30,37 @@ function makeRoomId() {
 function distance3(a, b) {
   const dx = a.x - b.x, dy = a.y - b.y, dz = a.z - b.z;
   return Math.sqrt(dx * dx + dy * dy + dz * dz);
+}
+
+function approach(value, target, amount) {
+  if (value < target) return Math.min(target, value + amount);
+  return Math.max(target, value - amount);
+}
+
+function makeVehicles(mapId) {
+  return (VEHICLE_SPAWNS[mapId] || []).map((spawn) => {
+    const stats = VEHICLE_STATS[spawn.type];
+    return {
+      ...spawn,
+      health: stats.maxHealth,
+      maxHealth: stats.maxHealth,
+      speed: 0,
+      driverId: null,
+      destroyed: false,
+      input: { throttle: 0, steer: 0, lift: 0 },
+      lastFireAt: 0,
+      lastRamAt: new Map()
+    };
+  });
+}
+
+function publicVehicle(vehicle) {
+  return {
+    id: vehicle.id, type: vehicle.type,
+    x: vehicle.x, y: vehicle.y, z: vehicle.z, yaw: vehicle.yaw,
+    speed: vehicle.speed, health: vehicle.health, maxHealth: vehicle.maxHealth,
+    driverId: vehicle.driverId, destroyed: vehicle.destroyed
+  };
 }
 
 function createRoomsModule(io) {
@@ -75,7 +111,10 @@ function createRoomsModule(io) {
       abilityExpiresAt: 0,
       abilityCooldownUntil: 0,
       blindedUntil: 0,
-      chargeStartedAt: 0
+      chargeStartedAt: 0,
+      vehicleId: null,
+      lastWorldForceAt: 0,
+      lastEnvironmentHitAt: 0
     };
   }
 
@@ -84,7 +123,8 @@ function createRoomsModule(io) {
       socketId: p.socketId, username: p.username, classId: p.classId, team: p.team,
       x: p.x, y: p.y, z: p.z, yaw: p.yaw, pitch: p.pitch,
       moving: p.moving, sprinting: p.sprinting, jumping: p.jumping, crouching: p.crouching,
-      health: p.health, alive: p.alive, kills: p.kills, deaths: p.deaths, score: p.score
+      health: p.health, alive: p.alive, kills: p.kills, deaths: p.deaths, score: p.score,
+      vehicleId: p.vehicleId || null
     };
   }
 
@@ -95,6 +135,8 @@ function createRoomsModule(io) {
       settings: room.settings,
       hostSocketId: room.players[0]?.socketId || null,
       players: room.players.map(publicPlayer),
+      vehicles: (room.vehicles || []).map(publicVehicle),
+      worldEvent: room.worldEvent || null,
       endsAt: room.endsAt || null
     };
   }
@@ -109,6 +151,11 @@ function createRoomsModule(io) {
   }
 
   function respawnPlayer(room, player) {
+    if (player.vehicleId) {
+      const vehicle = room.vehicles?.find((item) => item.id === player.vehicleId);
+      if (vehicle?.driverId === player.socketId) vehicle.driverId = null;
+      player.vehicleId = null;
+    }
     const spawn = pickSpawn(room.settings.mapId, room.settings.mode, player.team);
     player.x = spawn.x; player.y = spawn.y; player.z = spawn.z; player.yaw = spawn.yaw; player.pitch = 0;
     player.health = 100;
@@ -123,6 +170,8 @@ function createRoomsModule(io) {
     if (room.status !== "playing") return;
     room.status = "finished";
     if (room.timer) clearTimeout(room.timer);
+    if (room.worldTimer) clearInterval(room.worldTimer);
+    room.worldTimer = null;
     const results = [...room.players]
       .map(publicPlayer)
       .sort((a, b) => b.score - a.score);
@@ -179,6 +228,221 @@ function createRoomsModule(io) {
     }
   }
 
+  function releaseVehicle(room, player, reason = "exit") {
+    if (!player?.vehicleId) return null;
+    const vehicle = room.vehicles?.find((item) => item.id === player.vehicleId);
+    if (vehicle?.driverId === player.socketId) vehicle.driverId = null;
+    player.vehicleId = null;
+    if (vehicle) {
+      player.x = vehicle.x + Math.cos(vehicle.yaw) * 2.2;
+      player.y = Math.max(0, vehicle.y);
+      player.z = vehicle.z - Math.sin(vehicle.yaw) * 2.2;
+    }
+    io.to(player.socketId).emit("vehicle:exited", { reason, x: player.x, y: player.y, z: player.z });
+    return vehicle;
+  }
+
+  function damageVehicle(room, vehicle, amount, attacker = null) {
+    if (!vehicle || vehicle.destroyed) return;
+    vehicle.health = Math.max(0, vehicle.health - Math.max(0, Math.min(120, Number(amount) || 0)));
+    io.to(room.roomId).emit("vehicle:damaged", {
+      vehicleId: vehicle.id,
+      health: vehicle.health,
+      maxHealth: vehicle.maxHealth
+    });
+    if (vehicle.health > 0) return;
+
+    vehicle.destroyed = true;
+    vehicle.speed = 0;
+    const driver = room.players.find((player) => player.socketId === vehicle.driverId);
+    if (driver) {
+      releaseVehicle(room, driver, "exploded");
+      applyDamage(room, attacker, driver, 32, false);
+      io.to(driver.socketId).emit("world:force", { x: 0, y: 11, z: 0, fallDamage: 7 });
+    }
+    vehicle.driverId = null;
+    io.to(room.roomId).emit("vehicle:exploded", {
+      vehicleId: vehicle.id, x: vehicle.x, y: vehicle.y, z: vehicle.z
+    });
+  }
+
+  function eventForRoom(room, now) {
+    const elapsed = Math.max(0, now - room.startedAt) / 1000 / WORLD_EVENT_TIME_SCALE;
+    if (room.settings.mapId === "praia") {
+      if (elapsed < 35) return null;
+      const cycle = (elapsed - 35) % 105;
+      if (cycle < 10) return { type: "tsunami", phase: "warning", progress: cycle / 10 };
+      if (cycle < 22) return { type: "tsunami", phase: "surge", progress: (cycle - 10) / 12 };
+      if (cycle < 37) return { type: "tsunami", phase: "flooded", progress: (cycle - 22) / 15 };
+      if (cycle < 52) return { type: "tsunami", phase: "drain", progress: (cycle - 37) / 15 };
+      return null;
+    }
+    if (room.settings.mapId === "floresta") {
+      if (elapsed < 45) return null;
+      const cycle = (elapsed - 45) % 120;
+      if (cycle < 10) return { type: "tornado", phase: "warning", progress: cycle / 10 };
+      if (cycle < 32) return { type: "tornado", phase: "active", progress: (cycle - 10) / 22 };
+      if (cycle < 39) return { type: "tornado", phase: "recovery", progress: (cycle - 32) / 7 };
+    }
+    return null;
+  }
+
+  function applyWorldEventForces(room, event, now) {
+    if (!event) return;
+    if (event.type === "tsunami" && event.phase === "surge") {
+      const half = MAP_HALF_SIZES.praia;
+      const waveZ = half - (half * 2 - 8) * event.progress;
+      room.players.forEach((player) => {
+        if (!player.alive || now - player.lastWorldForceAt < 800 || Math.abs(player.z - waveZ) > 7) return;
+        player.lastWorldForceAt = now;
+        player.z = Math.max(-half + 2, player.z - 5);
+        io.to(player.socketId).emit("world:force", { x: 0, y: 4.5, z: -13, fallDamage: 0 });
+      });
+      room.vehicles.forEach((vehicle) => {
+        if (!vehicle.destroyed && Math.abs(vehicle.z - waveZ) < 8) vehicle.z -= 2.2;
+      });
+    }
+    if (event.type === "tornado" && event.phase === "active") {
+      const tornadoX = -70 + event.progress * 140;
+      const tornadoZ = Math.sin(event.progress * Math.PI * 3) * 30;
+      room.players.forEach((player) => {
+        if (!player.alive || now - player.lastWorldForceAt < 1400) return;
+        const distance = Math.hypot(player.x - tornadoX, player.z - tornadoZ);
+        if (distance > 12) return;
+        player.lastWorldForceAt = now;
+        io.to(player.socketId).emit("world:force", {
+          x: (tornadoX - player.x) * 0.8,
+          y: 14,
+          z: (tornadoZ - player.z) * 0.8,
+          fallDamage: 5
+        });
+      });
+      room.vehicles.forEach((vehicle) => {
+        if (vehicle.destroyed || Math.hypot(vehicle.x - tornadoX, vehicle.z - tornadoZ) > 11) return;
+        vehicle.y = Math.min(12, vehicle.y + 0.5);
+        vehicle.yaw += 0.16;
+      });
+    }
+  }
+
+  function updateVehicles(room, delta, now) {
+    const half = MAP_HALF_SIZES[room.settings.mapId] || ARENA_HALF;
+    room.vehicles.forEach((vehicle) => {
+      if (vehicle.destroyed) return;
+      const stats = VEHICLE_STATS[vehicle.type];
+      const driver = room.players.find((player) => player.socketId === vehicle.driverId && player.alive);
+      if (!driver && vehicle.driverId) vehicle.driverId = null;
+      const input = driver ? vehicle.input : { throttle: 0, steer: 0, lift: 0 };
+
+      if (vehicle.type === "cannon") {
+        vehicle.yaw += input.steer * stats.turnSpeed * delta;
+      } else {
+        const targetSpeed = input.throttle * stats.maxSpeed;
+        vehicle.speed = approach(vehicle.speed, targetSpeed, stats.acceleration * delta);
+        if (!driver) vehicle.speed = approach(vehicle.speed, 0, stats.acceleration * 0.6 * delta);
+        const steerStrength = Math.min(1, Math.abs(vehicle.speed) / Math.max(1, stats.maxSpeed * 0.35));
+        vehicle.yaw += input.steer * stats.turnSpeed * steerStrength * delta * (vehicle.speed >= 0 ? 1 : -1);
+        vehicle.x -= Math.sin(vehicle.yaw) * vehicle.speed * delta;
+        vehicle.z -= Math.cos(vehicle.yaw) * vehicle.speed * delta;
+      }
+
+      if (vehicle.type === "plane") {
+        vehicle.y = Math.max(3, Math.min(36, vehicle.y + input.lift * 12 * delta));
+        if (driver && Math.abs(vehicle.speed) < 9) vehicle.speed = approach(vehicle.speed, 9, 8 * delta);
+      } else if (vehicle.type === "jetski") {
+        vehicle.y = 0.2;
+      } else if (vehicle.type !== "cannon") {
+        vehicle.y = Math.max(0, vehicle.y - 8 * delta);
+      }
+
+      vehicle.x = Math.max(-half + 3, Math.min(half - 3, vehicle.x));
+      vehicle.z = Math.max(-half + 3, Math.min(half - 3, vehicle.z));
+      if (vehicle.type === "jetski" && room.settings.mapId === "praia" && vehicle.z < 29) {
+        vehicle.z = 29;
+        vehicle.speed = Math.max(0, vehicle.speed * 0.45);
+      }
+      if (driver) {
+        driver.x = vehicle.x;
+        driver.y = vehicle.y;
+        driver.z = vehicle.z;
+        driver.yaw = vehicle.yaw;
+      }
+
+      if (Math.abs(vehicle.speed) > 7 && now % 250 < WORLD_TICK_MS) {
+        room.players.forEach((target) => {
+          if (!target.alive || target.socketId === vehicle.driverId || target.vehicleId) return;
+          if (Math.hypot(target.x - vehicle.x, target.z - vehicle.z) > 2.4) return;
+          const lastRam = vehicle.lastRamAt.get(target.socketId) || 0;
+          if (now - lastRam < 1800) return;
+          vehicle.lastRamAt.set(target.socketId, now);
+          const driverPlayer = room.players.find((player) => player.socketId === vehicle.driverId) || null;
+          applyDamage(room, driverPlayer, target, 9, false);
+          io.to(target.socketId).emit("world:force", {
+            x: -Math.sin(vehicle.yaw) * Math.abs(vehicle.speed) * 0.8,
+            y: 9,
+            z: -Math.cos(vehicle.yaw) * Math.abs(vehicle.speed) * 0.8,
+            fallDamage: 6
+          });
+        });
+      }
+    });
+  }
+
+  function startWorldSystems(room) {
+    if (room.worldTimer) clearInterval(room.worldTimer);
+    room.startedAt = Date.now();
+    room.vehicles = makeVehicles(room.settings.mapId);
+    room.worldObjects = new Map();
+    room.worldEvent = null;
+    room.worldTick = 0;
+    room.worldTimer = setInterval(() => {
+      if (!rooms.has(room.roomId) || room.status !== "playing") return;
+      const now = Date.now();
+      const event = eventForRoom(room, now);
+      room.worldEvent = event;
+      updateVehicles(room, WORLD_TICK_MS / 1000, now);
+      applyWorldEventForces(room, event, now);
+      room.worldTick += 1;
+      if (room.worldTick % 2 === 0) {
+        io.to(room.roomId).volatile.emit("vehicle:state", room.vehicles.map(publicVehicle));
+      }
+      if (room.worldTick % 4 === 0) {
+        io.to(room.roomId).emit("arena-world:event", event || { type: "none", phase: "idle", progress: 0 });
+      }
+    }, WORLD_TICK_MS);
+  }
+
+  function worldObjectMaxHealth(mapId, objectId) {
+    if (mapId !== "cidade") return 0;
+    if (/^city-lamp-\d+$/.test(objectId)) return 55;
+    if (/^city-building-\d+-panel-\d+$/.test(objectId)) return 85;
+    if (/^city-building-\d+-core$/.test(objectId)) return 280;
+    return 0;
+  }
+
+  function damageWorldObject(room, objectId, amount, position = {}) {
+    const maxHealth = worldObjectMaxHealth(room.settings.mapId, objectId);
+    if (!maxHealth) return;
+    let object = room.worldObjects.get(objectId);
+    if (!object) {
+      object = {
+        id: objectId, health: maxHealth, maxHealth,
+        x: Number(position.x) || 0, z: Number(position.z) || 0
+      };
+      room.worldObjects.set(objectId, object);
+    }
+    object.health = Math.max(0, object.health - Math.max(0, Math.min(100, Number(amount) || 0)));
+    const ratio = object.health / object.maxHealth;
+    const state = {
+      id: object.id,
+      health: object.health,
+      maxHealth: object.maxHealth,
+      stage: ratio <= 0 ? 3 : ratio < 0.35 ? 2 : ratio < 0.7 ? 1 : 0,
+      destroyed: object.health <= 0
+    };
+    io.to(room.roomId).emit("world:object-state", state);
+  }
+
   function weaponFor(player, slot) {
     if (slot === "secondary") return SECONDARY_WEAPONS[player.secondaryId] || null;
     return CLASSES[player.classId].primary;
@@ -189,6 +453,7 @@ function createRoomsModule(io) {
     if (!room) return;
     const player = room.players.find((p) => p.socketId === socketId);
     if (!player) return;
+    releaseVehicle(room, player, "disconnect");
     const liveSocket = io.sockets.sockets.get(socketId);
     if (liveSocket) liveSocket.leave(room.roomId);
 
@@ -197,6 +462,7 @@ function createRoomsModule(io) {
 
     if (!room.players.length) {
       if (room.timer) clearTimeout(room.timer);
+      if (room.worldTimer) clearInterval(room.worldTimer);
       rooms.delete(room.roomId);
     } else {
       emitRoomUpdate(room);
@@ -224,6 +490,10 @@ function createRoomsModule(io) {
         status: "waiting",
         settings: normalizeSettings(settings),
         players: [],
+        vehicles: [],
+        worldObjects: new Map(),
+        worldEvent: null,
+        worldTimer: null,
         timer: null,
         endsAt: null
       };
@@ -298,20 +568,141 @@ function createRoomsModule(io) {
       room.status = "playing";
       room.endsAt = Date.now() + room.settings.durationMin * 60000;
       room.timer = setTimeout(() => endMatch(room, "time"), room.settings.durationMin * 60000);
+      startWorldSystems(room);
       io.to(room.roomId).emit("match:start", serializeRoom(room));
       broadcastLobbyList();
     });
 
     socket.on("room:leave", () => removePlayer(socket.id, `${socket.username} saiu da sala.`));
 
+    socket.on("vehicle:enter", ({ vehicleId } = {}) => {
+      const room = findRoomBySocket(socket.id);
+      if (!room || room.status !== "playing") return;
+      const player = room.players.find((item) => item.socketId === socket.id);
+      const vehicle = room.vehicles.find((item) => item.id === String(vehicleId || ""));
+      if (!player || !player.alive || player.vehicleId || !vehicle || vehicle.destroyed || vehicle.driverId) return;
+      const verticalDistance = Math.abs(player.y - vehicle.y);
+      if (Math.hypot(player.x - vehicle.x, player.z - vehicle.z) > 4 || verticalDistance > 5) return;
+      vehicle.driverId = socket.id;
+      vehicle.input = { throttle: 0, steer: 0, lift: 0 };
+      player.vehicleId = vehicle.id;
+      player.x = vehicle.x; player.y = vehicle.y; player.z = vehicle.z;
+      io.to(room.roomId).emit("vehicle:occupied", { vehicleId: vehicle.id, driverId: socket.id });
+      socket.emit("vehicle:entered", publicVehicle(vehicle));
+    });
+
+    socket.on("vehicle:exit", () => {
+      const room = findRoomBySocket(socket.id);
+      const player = room?.players.find((item) => item.socketId === socket.id);
+      if (room && player) releaseVehicle(room, player);
+    });
+
+    socket.on("vehicle:input", (input = {}) => {
+      const room = findRoomBySocket(socket.id);
+      const player = room?.players.find((item) => item.socketId === socket.id);
+      const vehicle = room?.vehicles.find((item) => item.id === player?.vehicleId && item.driverId === socket.id);
+      if (!vehicle || vehicle.destroyed) return;
+      const clampInput = (value) => Math.max(-1, Math.min(1, Number(value) || 0));
+      vehicle.input = {
+        throttle: clampInput(input.throttle),
+        steer: clampInput(input.steer),
+        lift: clampInput(input.lift)
+      };
+    });
+
+    socket.on("vehicle:hit", ({ vehicleId, slot, pelletHits } = {}) => {
+      const room = findRoomBySocket(socket.id);
+      if (!room || room.status !== "playing") return;
+      const attacker = room.players.find((item) => item.socketId === socket.id);
+      const vehicle = room.vehicles.find((item) => item.id === String(vehicleId || ""));
+      if (!attacker || !attacker.alive || !vehicle || vehicle.destroyed || vehicle.driverId === socket.id) return;
+      const weapon = weaponFor(attacker, slot === "secondary" ? "secondary" : "primary");
+      if (!weapon || distance3(attacker, vehicle) > weapon.range * RANGE_TOLERANCE + 5) return;
+      const now = Date.now();
+      if (now - attacker.lastEnvironmentHitAt < Math.max(55, weapon.fireRateMs * 0.7)) return;
+      attacker.lastEnvironmentHitAt = now;
+      const pellets = Math.max(1, Math.min(weapon.pellets || 1, Number(pelletHits) || 1));
+      damageVehicle(room, vehicle, weapon.damage * pellets * 0.7, attacker);
+    });
+
+    socket.on("vehicle:fire", ({ vehicleId, targetSocketId, targetVehicleId, origin, direction } = {}) => {
+      const room = findRoomBySocket(socket.id);
+      const shooter = room?.players.find((item) => item.socketId === socket.id);
+      const vehicle = room?.vehicles.find((item) => item.id === vehicleId && item.driverId === socket.id);
+      if (!room || !shooter || !vehicle || vehicle.destroyed || !VEHICLE_STATS[vehicle.type]?.builtInWeapon) return;
+      const now = Date.now();
+      const cooldown = vehicle.type === "cannon" ? 2400 : 125;
+      if (now - vehicle.lastFireAt < cooldown) return;
+      vehicle.lastFireAt = now;
+      const range = vehicle.type === "cannon" ? 140 : 120;
+      const damage = vehicle.type === "cannon" ? 78 : 18;
+      const target = room.players.find((item) => item.socketId === targetSocketId);
+      if (target && target.alive && target.socketId !== shooter.socketId && distance3(vehicle, target) <= range) {
+        applyDamage(room, shooter, target, damage, false);
+      }
+      const targetVehicle = room.vehicles.find((item) => item.id === targetVehicleId);
+      if (targetVehicle && targetVehicle.id !== vehicle.id && distance3(vehicle, targetVehicle) <= range) {
+        damageVehicle(room, targetVehicle, damage * 1.15, shooter);
+      }
+      io.to(room.roomId).emit("vehicle:fired", {
+        vehicleId: vehicle.id,
+        type: vehicle.type,
+        origin: origin || { x: vehicle.x, y: vehicle.y + 1, z: vehicle.z },
+        direction: direction || { x: 0, y: 0, z: -1 }
+      });
+    });
+
+    socket.on("vehicle:launch-self", ({ vehicleId } = {}) => {
+      const room = findRoomBySocket(socket.id);
+      const player = room?.players.find((item) => item.socketId === socket.id);
+      const vehicle = room?.vehicles.find((item) => item.id === vehicleId && item.driverId === socket.id);
+      if (!room || !player || !vehicle || vehicle.type !== "cannon") return;
+      const yaw = vehicle.yaw;
+      releaseVehicle(room, player, "launched");
+      io.to(socket.id).emit("world:force", {
+        x: -Math.sin(yaw) * 28,
+        y: 22,
+        z: -Math.cos(yaw) * 28,
+        fallDamage: 8
+      });
+    });
+
+    socket.on("world:hit", ({ id, damage, x, z } = {}) => {
+      const room = findRoomBySocket(socket.id);
+      const player = room?.players.find((item) => item.socketId === socket.id);
+      if (!room || room.status !== "playing" || !player?.alive) return;
+      if (Math.hypot(player.x - Number(x || 0), player.z - Number(z || 0)) > 145) return;
+      damageWorldObject(room, String(id || ""), damage, { x, z });
+    });
+
+    socket.on("world:blast", ({ x, z, radius, damage } = {}) => {
+      const room = findRoomBySocket(socket.id);
+      if (!room || room.status !== "playing") return;
+      const px = Number(x) || 0, pz = Number(z) || 0;
+      const blastRadius = Math.max(1, Math.min(12, Number(radius) || 5));
+      room.worldObjects.forEach((object) => {
+        if (Math.hypot(object.x - px, object.z - pz) <= blastRadius) {
+          damageWorldObject(room, object.id, Math.min(80, Number(damage) || 45), object);
+        }
+      });
+    });
+
+    socket.on("world:fall-damage", ({ damage } = {}) => {
+      const room = findRoomBySocket(socket.id);
+      const player = room?.players.find((item) => item.socketId === socket.id);
+      if (!room || !player?.alive || player.vehicleId) return;
+      applyDamage(room, null, player, Math.max(0, Math.min(10, Number(damage) || 0)), false);
+    });
+
     socket.on("match:move", (state = {}) => {
       const room = findRoomBySocket(socket.id);
       if (!room || room.status !== "playing") return;
       const player = room.players.find((p) => p.socketId === socket.id);
-      if (!player || !player.alive) return;
+      if (!player || !player.alive || player.vehicleId) return;
+      const mapHalf = MAP_HALF_SIZES[room.settings.mapId] || ARENA_HALF;
       const num = (v, fb) => (Number.isFinite(Number(v)) ? Number(v) : fb);
-      player.x = Math.max(-ARENA_HALF, Math.min(ARENA_HALF, num(state.x, player.x)));
-      player.z = Math.max(-ARENA_HALF, Math.min(ARENA_HALF, num(state.z, player.z)));
+      player.x = Math.max(-mapHalf, Math.min(mapHalf, num(state.x, player.x)));
+      player.z = Math.max(-mapHalf, Math.min(mapHalf, num(state.z, player.z)));
       player.y = Math.max(0, Math.min(24, num(state.y, player.y)));
       player.yaw = num(state.yaw, player.yaw);
       player.pitch = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, num(state.pitch, player.pitch)));
@@ -440,6 +831,20 @@ function createRoomsModule(io) {
       const point = { x: Number(x) || thrower.x, y: 0, z: Number(z) || thrower.z };
 
       io.to(room.roomId).emit("match:grenadeDetonate", { grenadeId, x: point.x, z: point.z, byId: socket.id });
+
+      if (grenade.damage > 0) {
+        room.vehicles.forEach((vehicle) => {
+          const distance = Math.hypot(vehicle.x - point.x, vehicle.z - point.z);
+          if (!vehicle.destroyed && distance <= grenade.radius + 2) {
+            damageVehicle(room, vehicle, grenade.damage * Math.max(0.25, 1 - distance / (grenade.radius + 2)), thrower);
+          }
+        });
+        room.worldObjects.forEach((object) => {
+          if (Math.hypot(object.x - point.x, object.z - point.z) <= grenade.radius + 2) {
+            damageWorldObject(room, object.id, grenade.damage, object);
+          }
+        });
+      }
 
       if (grenade.damage > 0) {
         room.players.forEach((target) => {

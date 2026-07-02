@@ -1,246 +1,387 @@
 import * as THREE from "three";
-import { ARENA_HALF, MAP_META } from "./config.js";
+import { MAP_HALF_SIZES, MAP_META } from "./config.js";
 
-// Cada obstaculo tem uma "caixa" de colisao (minX/maxX/minZ/maxZ) e uma altura (topY).
-// solid=true bloqueia o jogador enquanto ele nao estiver alto o suficiente para ficar em cima
-// (usado em paredes, troncos, carros). solid=false e uma plataforma pisavel (telhado, degrau,
-// ponte) que nunca bloqueia horizontalmente, so oferece uma nova altura de piso.
-function box(minX, maxX, minZ, maxZ, topY, solid) {
-  return { minX, maxX, minZ, maxZ, topY, solid };
+function collisionBox(x, z, w, d, topY, solid = true) {
+  return {
+    minX: x - w / 2, maxX: x + w / 2,
+    minZ: z - d / 2, maxZ: z + d / 2,
+    topY, solid, active: true
+  };
 }
 
-function addMesh(scene, geometry, color, x, y, z, rotY = 0) {
-  const mesh = new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({ color }));
+function makeMaterial(color, options = {}) {
+  return new THREE.MeshStandardMaterial({ color, roughness: 0.78, ...options });
+}
+
+function addMesh(world, geometry, color, x, y, z, options = {}) {
+  const mesh = new THREE.Mesh(geometry, makeMaterial(color, options.material));
   mesh.position.set(x, y, z);
-  mesh.rotation.y = rotY;
-  mesh.castShadow = true;
-  mesh.receiveShadow = true;
-  scene.add(mesh);
+  mesh.rotation.set(options.rotX || 0, options.rotY || 0, options.rotZ || 0);
+  mesh.castShadow = options.castShadow !== false;
+  mesh.receiveShadow = options.receiveShadow !== false;
+  world.root.add(mesh);
   return mesh;
 }
 
-function addSolidBox(scene, obstacles, x, z, w, h, d, color, baseY = 0) {
-  addMesh(scene, new THREE.BoxGeometry(w, h, d), color, x, baseY + h / 2, z);
-  obstacles.push(box(x - w / 2, x + w / 2, z - d / 2, z + d / 2, baseY + h, true));
-}
-
-// Predio/cabana com escada externa (degraus) e telhado pisavel.
-function addClimbableBuilding(scene, obstacles, opts) {
-  const { x, z, w, d, h, wallColor, roofColor, stairSide = "south" } = opts;
-  addSolidBox(scene, obstacles, x, z, w, h, d, wallColor);
-  addMesh(scene, new THREE.BoxGeometry(w + 0.4, 0.3, d + 0.4), roofColor, x, h + 0.15, z);
-  obstacles.push(box(x - w / 2 - 0.2, x + w / 2 + 0.2, z - d / 2 - 0.2, z + d / 2 + 0.2, h + 0.3, false));
-
-  const steps = 5;
-  const stepH = h / steps;
-  for (let i = 0; i < steps; i++) {
-    const stepY = stepH * i;
-    let sx = x, sz = z;
-    const offset = (d / 2 + 0.5) + i * 0.55;
-    if (stairSide === "south") sz = z + offset;
-    else if (stairSide === "north") sz = z - offset;
-    else if (stairSide === "east") sx = x + offset;
-    else sx = x - offset;
-    addMesh(scene, new THREE.BoxGeometry(1.4, 0.3, 1.1), wallColor, sx, stepY + stepH / 2, sz);
-    obstacles.push(box(sx - 0.7, sx + 0.7, sz - 0.55, sz + 0.55, stepY + stepH, false));
-  }
-}
-
-function addTower(scene, obstacles, x, z, topSize, height, legColor, topColor) {
-  const legOffset = topSize / 2 - 0.3;
-  [[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(([sx, sz]) => {
-    addSolidBox(scene, obstacles, x + sx * legOffset, z + sz * legOffset, 0.35, height, 0.35, legColor);
+function registerDestructible(world, id, mesh, kind, obstacle = null) {
+  mesh.userData.destructibleId = id;
+  mesh.traverse((child) => { child.userData.destructibleId = id; });
+  world.destructibles.set(id, {
+    id, mesh, kind, obstacle, destroyed: false, falling: false,
+    velocity: new THREE.Vector3(), angularVelocity: new THREE.Vector3(),
+    linkedMeshes: [], linkedObstacles: []
   });
-  addMesh(scene, new THREE.BoxGeometry(topSize, 0.3, topSize), topColor, x, height + 0.15, z);
-  obstacles.push(box(x - topSize / 2, x + topSize / 2, z - topSize / 2, z + topSize / 2, height + 0.3, false));
-
-  const steps = Math.round(height / 0.55);
-  for (let i = 0; i < steps; i++) {
-    const stepY = (height / steps) * i;
-    const sz = z + legOffset + 0.9 + i * 0.5;
-    addMesh(scene, new THREE.BoxGeometry(1.1, 0.25, 0.9), legColor, x, stepY + 0.2, sz);
-    obstacles.push(box(x - 0.55, x + 0.55, sz - 0.45, sz + 0.45, stepY + 0.35, false));
-  }
+  return mesh;
 }
 
-function addRamp(scene, obstacles, x, z, length, width, height, axis, color) {
-  const steps = Math.max(3, Math.round(height / 0.35));
+function addSolidBox(world, x, z, w, h, d, color, baseY = 0, destructible = null) {
+  const mesh = addMesh(world, new THREE.BoxGeometry(w, h, d), color, x, baseY + h / 2, z);
+  const obstacle = collisionBox(x, z, w, d, baseY + h, true);
+  world.obstacles.push(obstacle);
+  if (destructible) registerDestructible(world, destructible.id, mesh, destructible.kind, obstacle);
+  return mesh;
+}
+
+function addPlatform(world, x, y, z, w, d, color) {
+  const mesh = addMesh(world, new THREE.BoxGeometry(w, 0.28, d), color, x, y, z);
+  const obstacle = collisionBox(x, z, w, d, y + 0.14, false);
+  world.obstacles.push(obstacle);
+  return { mesh, obstacle };
+}
+
+function addRamp(world, x, z, length, width, height, axis, color, baseY = 0) {
+  const steps = Math.max(4, Math.round(height / 0.42));
   for (let i = 0; i < steps; i++) {
-    const stepY = (height / steps) * i;
+    const stepY = baseY + (height / steps) * i;
     const offset = (i - steps / 2) * (length / steps);
     const sx = axis === "x" ? x + offset : x;
     const sz = axis === "z" ? z + offset : z;
     const w = axis === "x" ? length / steps + 0.2 : width;
     const d = axis === "z" ? length / steps + 0.2 : width;
-    addMesh(scene, new THREE.BoxGeometry(w, 0.3, d), color, sx, stepY + 0.15, sz);
-    obstacles.push(box(sx - w / 2, sx + w / 2, sz - d / 2, sz + d / 2, stepY + 0.3, false));
+    addPlatform(world, sx, stepY + 0.16, sz, w, d, color);
   }
 }
 
-function addBoundaryWalls(scene, obstacles, color = 0x2b2f36, height = 6) {
-  const half = ARENA_HALF;
-  addSolidBox(scene, obstacles, 0, -half, half * 2, height, 1, color);
-  addSolidBox(scene, obstacles, 0, half, half * 2, height, 1, color);
-  addSolidBox(scene, obstacles, -half, 0, 1, height, half * 2, color);
-  addSolidBox(scene, obstacles, half, 0, 1, height, half * 2, color);
+function addBoundary(world, color) {
+  const half = world.half;
+  addSolidBox(world, 0, -half, half * 2, 8, 1, color);
+  addSolidBox(world, 0, half, half * 2, 8, 1, color);
+  addSolidBox(world, -half, 0, 1, 8, half * 2, color);
+  addSolidBox(world, half, 0, 1, 8, half * 2, color);
 }
 
-function addGround(scene, color) {
-  const ground = new THREE.Mesh(
-    new THREE.PlaneGeometry(ARENA_HALF * 2, ARENA_HALF * 2),
-    new THREE.MeshStandardMaterial({ color })
+function addGround(world, color) {
+  const ground = addMesh(
+    world,
+    new THREE.PlaneGeometry(world.half * 2, world.half * 2),
+    color, 0, -0.03, 0,
+    { rotX: -Math.PI / 2, castShadow: false }
   );
-  ground.rotation.x = -Math.PI / 2;
   ground.receiveShadow = true;
-  scene.add(ground);
+}
+
+function addClimbableBuilding(world, options) {
+  const { x, z, w, d, h, wallColor, roofColor, stairSide = "south", destructiblePrefix = "" } = options;
+  const id = destructiblePrefix ? `${destructiblePrefix}-core` : null;
+  addSolidBox(world, x, z, w, h, d, wallColor, 0, id ? { id, kind: "building" } : null);
+  const roof = addPlatform(world, x, h + 0.18, z, w + 0.5, d + 0.5, roofColor);
+  if (id) {
+    roof.mesh.userData.destructibleId = id;
+    const core = world.destructibles.get(id);
+    core.linkedMeshes.push(roof.mesh);
+    core.linkedObstacles.push(roof.obstacle);
+  }
+
+  const steps = Math.max(6, Math.round(h / 0.55));
+  for (let i = 0; i < steps; i++) {
+    const stepY = (h / steps) * i;
+    const offset = d / 2 + 0.7 + i * 0.55;
+    let sx = x, sz = z;
+    if (stairSide === "south") sz += offset;
+    else if (stairSide === "north") sz -= offset;
+    else if (stairSide === "east") sx += offset;
+    else sx -= offset;
+    addPlatform(world, sx, stepY + 0.18, sz, 1.5, 1.05, wallColor);
+  }
+
+  if (destructiblePrefix) {
+    const pieces = [
+      [-w * 0.28, h * 0.72, d / 2 + 0.05, 0], [w * 0.28, h * 0.72, d / 2 + 0.05, 0],
+      [-w * 0.28, h * 0.35, -d / 2 - 0.05, 0], [w * 0.28, h * 0.35, -d / 2 - 0.05, 0]
+    ];
+    pieces.forEach(([ox, y, oz], index) => {
+      const panel = addMesh(world, new THREE.BoxGeometry(w * 0.42, h * 0.28, 0.18), index % 2 ? 0x737b84 : 0x8c949d, x + ox, y, z + oz);
+      registerDestructible(world, `${destructiblePrefix}-panel-${index}`, panel, "building-piece");
+    });
+  }
+}
+
+function addTree(world, x, z, scale = 1, large = false) {
+  const height = (large ? 11 : 6.5) * scale;
+  const radius = (large ? 1.35 : 0.7) * scale;
+  const trunk = addMesh(world, new THREE.CylinderGeometry(radius * 0.75, radius, height, 9), 0x654326, x, height / 2, z);
+  world.obstacles.push(collisionBox(x, z, radius * 1.5, radius * 1.5, height, true));
+  const crown = addMesh(world, new THREE.IcosahedronGeometry((large ? 4.5 : 2.7) * scale, 1), large ? 0x285f31 : 0x34743a, x, height + 1.8 * scale, z);
+  world.animated.trees.push({ trunk, crown, phase: (x * 0.13 + z * 0.07) % Math.PI });
+  return { trunk, crown, height, radius };
+}
+
+function addTreeHouse(world, x, z, rotation = 0) {
+  const tree = addTree(world, x, z, 1.2, true);
+  const level = tree.height * 0.72;
+  addPlatform(world, x, level, z, 8.5, 7.5, 0x624025);
+  addSolidBox(world, x, z, 5.5, 3.3, 4.5, 0x91623a, level, null);
+  addMesh(world, new THREE.ConeGeometry(4.4, 2.5, 4), 0x3f2a1a, x, level + 4.5, z, { rotY: Math.PI / 4 });
+  addPlatform(world, x + Math.cos(rotation) * 5.5, level + 0.1, z + Math.sin(rotation) * 5.5, 5.5, 1.4, 0x76502f);
+  addRamp(world, x - 5.2, z + 4.5, 10, 1.7, level, "z", 0x76502f);
+}
+
+function addMountain(world, x, z, radius, height, color = 0x53604d) {
+  const mesh = addMesh(world, new THREE.ConeGeometry(radius, height, 8), color, x, height / 2 - 0.1, z, { rotY: Math.PI / 8 });
+  mesh.receiveShadow = true;
+  world.obstacles.push(collisionBox(x, z, radius * 1.25, radius * 1.25, height * 0.72, true));
+}
+
+function addLampPost(world, id, x, z, rotY = 0) {
+  const group = new THREE.Group();
+  group.position.set(x, 0, z);
+  group.rotation.y = rotY;
+  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.18, 5.8, 9), makeMaterial(0x34383d, { metalness: 0.65 }));
+  pole.position.y = 2.9;
+  group.add(pole);
+  const arm = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.13, 0.13), makeMaterial(0x34383d));
+  arm.position.set(0.65, 5.65, 0);
+  group.add(arm);
+  const lamp = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.22, 0.35), makeMaterial(0xffe8a0, { emissive: 0x554411 }));
+  lamp.position.set(1.3, 5.48, 0);
+  group.add(lamp);
+  world.root.add(group);
+  const obstacle = collisionBox(x, z, 0.45, 0.45, 5.8, true);
+  world.obstacles.push(obstacle);
+  registerDestructible(world, id, group, "lamp", obstacle);
+}
+
+function createWorld(mapId, scene) {
+  const root = new THREE.Group();
+  root.name = `world-${mapId}`;
+  scene.add(root);
+  return {
+    mapId, scene, root, half: MAP_HALF_SIZES[mapId], obstacles: [], destructibles: new Map(),
+    animated: { trees: [], waves: [], sharks: [], debris: [], elapsed: 0 },
+    water: null, tsunami: null, tornado: null, event: null
+  };
 }
 
 function buildPraia(scene) {
+  const world = createWorld("praia", scene);
   const meta = MAP_META.praia;
   scene.background = new THREE.Color(meta.sky);
-  scene.fog = new THREE.Fog(meta.sky, 45, 100);
-  addGround(scene, meta.ground);
+  scene.fog = new THREE.Fog(meta.sky, 80, 210);
+  addGround(world, meta.ground);
+  addBoundary(world, 0x89764d);
 
-  const sea = new THREE.Mesh(new THREE.PlaneGeometry(60, 30), new THREE.MeshStandardMaterial({ color: 0x2f8fd6, transparent: true, opacity: 0.85 }));
-  sea.rotation.x = -Math.PI / 2;
-  sea.position.set(0, -0.15, ARENA_HALF + 12);
-  scene.add(sea);
-
-  const obstacles = [];
-  addBoundaryWalls(scene, obstacles, 0x8a7a52);
-
-  // duna central com rampas de acesso
-  addSolidBox(scene, obstacles, 0, 0, 10, 1.4, 10, 0xdcc878);
-  addRamp(scene, obstacles, 0, -7.5, 5, 3, 1.4, "z", 0xdcc878);
-  addRamp(scene, obstacles, 7.5, 0, 5, 3, 1.4, "x", 0xdcc878);
-
-  // barracas de praia (cobertura triangular simplificada)
-  [[-16, -6], [16, 6], [-6, 16]].forEach(([x, z]) => {
-    addMesh(scene, new THREE.ConeGeometry(2.6, 2.2, 4), 0xe85d5d, x, 1.1, z, Math.PI / 4);
-    obstacles.push(box(x - 1.5, x + 1.5, z - 1.5, z + 1.5, 0.9, true));
+  world.water = addMesh(world, new THREE.PlaneGeometry(world.half * 2 - 2, 62, 28, 10), 0x238fd0, 0, 0.02, 58, {
+    rotX: -Math.PI / 2, castShadow: false,
+    material: { transparent: true, opacity: 0.82, metalness: 0.05, roughness: 0.24 }
   });
 
-  // coqueiros
-  [[-20, 10], [20, -10], [-10, -20], [10, 20], [0, -16]].forEach(([x, z]) => {
-    addSolidBox(scene, obstacles, x, z, 0.7, 4.5, 0.7, 0x8a6a44);
-    addMesh(scene, new THREE.SphereGeometry(1.6, 8, 6), 0x3f9e44, x, 5, z);
-  });
-
-  // pedras e caixas (cobertura baixa)
-  [[-22, -22], [22, 22], [-22, 22], [22, -22]].forEach(([x, z]) => {
-    addSolidBox(scene, obstacles, x, z, 2.4, 1.5, 2.4, 0x8b8b8b);
-  });
-  [[-8, 8], [8, -8]].forEach(([x, z]) => {
-    addSolidBox(scene, obstacles, x, z, 1.4, 1.1, 1.4, 0xb08a4f);
-  });
-
-  // barcos encalhados
-  addMesh(scene, new THREE.BoxGeometry(5, 1.2, 1.8), 0x7a4b2b, -14, 0.6, -14, 0.3);
-  obstacles.push(box(-17, -11, -16, -12, 1.2, true));
-
-  // casas de praia com telhado acessivel
-  addClimbableBuilding(scene, obstacles, { x: -18, z: 4, w: 6, d: 6, h: 3.2, wallColor: 0xf0e0b0, roofColor: 0xb5493f, stairSide: "east" });
-  addClimbableBuilding(scene, obstacles, { x: 18, z: -4, w: 6, d: 6, h: 3.2, wallColor: 0xf0e0b0, roofColor: 0x3f6cb5, stairSide: "west" });
-
-  // ponte de madeira ligando a duna a casa
-  for (let i = 0; i < 6; i++) {
-    const z = 6 + i * 1.4;
-    addMesh(scene, new THREE.BoxGeometry(2.2, 0.25, 1.3), 0x8a6a3f, 6, 0.15, z);
-    obstacles.push(box(4.9, 7.1, z - 0.65, z + 0.65, 0.3, false));
+  for (let i = 0; i < 7; i++) {
+    const wave = addMesh(world, new THREE.BoxGeometry(world.half * 1.9, 0.18, 0.8), 0x8edbf2, 0, 0.16, 31 + i * 8, {
+      castShadow: false, material: { transparent: true, opacity: 0.58 }
+    });
+    world.animated.waves.push({ mesh: wave, phase: i * 0.8 });
   }
 
-  return obstacles;
+  for (let i = 0; i < 3; i++) {
+    const shark = new THREE.Group();
+    const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.55, 2.2, 5, 10), makeMaterial(0x405662));
+    body.rotation.z = Math.PI / 2;
+    shark.add(body);
+    const fin = new THREE.Mesh(new THREE.ConeGeometry(0.45, 1.2, 3), makeMaterial(0x344854));
+    fin.position.y = 0.55;
+    shark.add(fin);
+    world.root.add(shark);
+    world.animated.sharks.push({ mesh: shark, radius: 22 + i * 9, speed: 0.18 + i * 0.04, phase: i * 2.1 });
+  }
+
+  world.tsunami = addMesh(world, new THREE.BoxGeometry(world.half * 2, 1, 6), 0x3cb9df, 0, -8, world.half - 4, {
+    castShadow: false, material: { transparent: true, opacity: 0.78, roughness: 0.18 }
+  });
+  world.tsunami.visible = false;
+
+  addSolidBox(world, 0, -8, 15, 2.4, 15, 0xd8c16f);
+  addRamp(world, 0, -20, 9, 4, 2.4, "z", 0xd8c16f);
+  [[-48,-30],[46,-26],[-28,8],[30,4],[-58,18],[56,16],[0,-42]].forEach(([x,z],i)=>{
+    addTree(world,x,z,0.72 + (i%3)*0.1,false);
+  });
+  [[-58,-52],[56,-50],[-22,-58],[25,-60]].forEach(([x,z],i)=>{
+    addClimbableBuilding(world,{x,z,w:8,d:7,h:4,wallColor:i%2?0xd7e0d0:0xf1d6a2,roofColor:i%2?0x3975a9:0xb34d42,stairSide:i%2?"west":"east"});
+  });
+  [[-38,14],[38,18],[-62,-2],[62,-5]].forEach(([x,z])=>addSolidBox(world,x,z,3.2,2,3.2,0x888b8c));
+  for(let i=0;i<8;i++) addPlatform(world,-12+i*3,0.22,27+i*0.45,3.1,2.2,0x76502f);
+  return world;
 }
 
 function buildCidade(scene) {
+  const world = createWorld("cidade", scene);
   const meta = MAP_META.cidade;
   scene.background = new THREE.Color(meta.sky);
-  scene.fog = new THREE.Fog(meta.sky, 45, 100);
-  addGround(scene, meta.ground);
+  scene.fog = new THREE.Fog(meta.sky, 85, 190);
+  addGround(world, 0x62676c);
+  addBoundary(world, 0x25292e);
 
-  const obstacles = [];
-  addBoundaryWalls(scene, obstacles, 0x24272c);
-
-  const road = new THREE.Mesh(new THREE.PlaneGeometry(ARENA_HALF * 2, 8), new THREE.MeshStandardMaterial({ color: 0x3a3d42 }));
-  road.rotation.x = -Math.PI / 2;
-  road.position.y = 0.01;
-  scene.add(road);
-  const road2 = road.clone();
-  road2.rotation.z = Math.PI / 2;
-  scene.add(road2);
-
-  addClimbableBuilding(scene, obstacles, { x: -20, z: -20, w: 8, d: 8, h: 4.5, wallColor: 0x9aa0a8, roofColor: 0x555b62, stairSide: "east" });
-  addClimbableBuilding(scene, obstacles, { x: 20, z: 20, w: 8, d: 8, h: 4.5, wallColor: 0x9aa0a8, roofColor: 0x555b62, stairSide: "west" });
-  addClimbableBuilding(scene, obstacles, { x: -20, z: 20, w: 7, d: 7, h: 3.4, wallColor: 0xb59a72, roofColor: 0x6b4c30, stairSide: "north" });
-  addClimbableBuilding(scene, obstacles, { x: 20, z: -20, w: 7, d: 7, h: 3.4, wallColor: 0xb59a72, roofColor: 0x6b4c30, stairSide: "south" });
-
-  // predio central alto com acesso
-  addClimbableBuilding(scene, obstacles, { x: 0, z: 0, w: 6, d: 6, h: 5.5, wallColor: 0x7d858d, roofColor: 0x40444a, stairSide: "south" });
-
-  // carros como cobertura
-  [[-10, -6], [10, 6], [-6, 10], [6, -10], [0, -14], [0, 14]].forEach(([x, z], i) => {
-    addSolidBox(scene, obstacles, x, z, 3.6, 1.3, 1.7, i % 2 ? 0xd6483f : 0x3f6cd6);
+  const roadMat = makeMaterial(0x30343a, { roughness: 0.94 });
+  [-34,0,34].forEach((x)=>{
+    const road=new THREE.Mesh(new THREE.PlaneGeometry(12,world.half*2),roadMat);road.rotation.x=-Math.PI/2;road.position.set(x,0.02,0);world.root.add(road);
+  });
+  [-34,0,34].forEach((z)=>{
+    const road=new THREE.Mesh(new THREE.PlaneGeometry(world.half*2,12),roadMat);road.rotation.x=-Math.PI/2;road.position.set(0,0.025,z);world.root.add(road);
   });
 
-  // muros baixos / becos estreitos
-  addSolidBox(scene, obstacles, -12, 0, 0.6, 1.6, 10, 0x5a5f66);
-  addSolidBox(scene, obstacles, 12, 0, 0.6, 1.6, 10, 0x5a5f66);
-  addSolidBox(scene, obstacles, 0, -8, 10, 2.4, 0.6, 0x5a5f66);
-  addSolidBox(scene, obstacles, 0, 8, 10, 2.4, 0.6, 0x5a5f66);
+  const buildings=[
+    [-55,-53,12,11,8],[-18,-53,13,11,13],[18,-53,13,11,9],[55,-53,12,11,15],
+    [-55,-18,12,13,12],[55,-18,12,13,10],[-55,18,12,13,9],[55,18,12,13,14],
+    [-55,53,12,11,14],[-18,53,13,11,9],[18,53,13,11,13],[55,53,12,11,10]
+  ];
+  buildings.forEach(([x,z,w,d,h],i)=>addClimbableBuilding(world,{
+    x,z,w,d,h,wallColor:i%3===0?0x89939c:i%3===1?0xa28f78:0x77838d,roofColor:0x353a40,
+    stairSide:i%2?"east":"west",destructiblePrefix:`city-building-${i}`
+  }));
 
-  return obstacles;
+  let lampIndex=0;
+  [-42,-26,-8,8,26,42].forEach((n)=>{
+    addLampPost(world,`city-lamp-${lampIndex++}`,n,-7,0);
+    addLampPost(world,`city-lamp-${lampIndex++}`,n,7,Math.PI);
+    if(Math.abs(n)>10){addLampPost(world,`city-lamp-${lampIndex++}`,-7,n,Math.PI/2);addLampPost(world,`city-lamp-${lampIndex++}`,7,n,-Math.PI/2);}
+  });
+  [[-17,-17],[17,17],[-17,17],[17,-17]].forEach(([x,z])=>addSolidBox(world,x,z,8,2.3,0.7,0x555b62));
+  return world;
 }
 
 function buildFloresta(scene) {
+  const world = createWorld("floresta", scene);
   const meta = MAP_META.floresta;
   scene.background = new THREE.Color(meta.sky);
-  scene.fog = new THREE.Fog(meta.sky, 35, 90);
-  addGround(scene, meta.ground);
+  scene.fog = new THREE.Fog(meta.sky, 72, 205);
+  addGround(world, meta.ground);
+  addBoundary(world, 0x283526);
 
-  const obstacles = [];
-  addBoundaryWalls(scene, obstacles, 0x2c3a28);
+  const mountains=[[-72,-68,20,28],[-35,-79,17,24],[10,-82,19,30],[52,-76,20,27],[77,-48,17,25],[80,5,20,31],[75,55,19,28],[42,79,18,25],[-5,82,20,29],[-52,76,21,31],[-78,45,18,25],[-82,-15,21,30]];
+  mountains.forEach(([x,z,r,h],i)=>addMountain(world,x,z,r,h,i%2?0x596653:0x4b5948));
 
-  const trees = [
-    [-24, -10], [24, 10], [-10, 24], [10, -24], [-16, 16], [16, -16],
-    [-6, -20], [6, 20], [-20, 6], [20, -6]
-  ];
-  trees.forEach(([x, z]) => {
-    addSolidBox(scene, obstacles, x, z, 1.0, 5.5, 1.0, 0x6b4c30);
-    addMesh(scene, new THREE.ConeGeometry(2.6, 4.5, 7), 0x2f6b34, x, 7, z);
-  });
-
-  // pedras e troncos caidos (troncos = plataforma baixa pisavel)
-  [[-8, -4], [8, 4], [-4, 8]].forEach(([x, z]) => {
-    addSolidBox(scene, obstacles, x, z, 2, 1.3, 2, 0x777a72);
-  });
-  [[4, -8, "x"], [-4, 8, "z"]].forEach(([x, z, axis]) => {
-    const w = axis === "x" ? 5 : 1;
-    const d = axis === "z" ? 5 : 1;
-    addMesh(scene, new THREE.BoxGeometry(w, 0.6, d), 0x6b4c30, x, 0.3, z);
-    obstacles.push(box(x - w / 2, x + w / 2, z - d / 2, z + d / 2, 0.6, false));
-  });
-
-  // cabanas com telhado acessivel
-  addClimbableBuilding(scene, obstacles, { x: -18, z: -2, w: 5.5, d: 5.5, h: 3, wallColor: 0x7a5a38, roofColor: 0x4a3620, stairSide: "east" });
-  addClimbableBuilding(scene, obstacles, { x: 18, z: 2, w: 5.5, d: 5.5, h: 3, wallColor: 0x7a5a38, roofColor: 0x4a3620, stairSide: "west" });
-
-  // torres de madeira (perfeitas para sniper)
-  addTower(scene, obstacles, 0, -18, 4, 5.5, 0x5a4128, 0x3c2c18);
-  addTower(scene, obstacles, 0, 18, 4, 5.5, 0x5a4128, 0x3c2c18);
-
-  // pontes pequenas
-  for (let i = 0; i < 5; i++) {
-    const x = -3 + i * 1.5;
-    addMesh(scene, new THREE.BoxGeometry(1.6, 0.25, 2.4), 0x6b4c30, x, 0.15, 0);
-    obstacles.push(box(x - 0.8, x + 0.8, -1.2, 1.2, 0.3, false));
+  const reserved=[[0,0],[-42,12],[42,-10],[0,58]];
+  for(let gx=-70;gx<=70;gx+=14){
+    for(let gz=-65;gz<=65;gz+=13){
+      const x=gx+Math.sin(gz*0.31)*4,z=gz+Math.cos(gx*0.27)*4;
+      if(reserved.some(([rx,rz])=>Math.hypot(x-rx,z-rz)<14))continue;
+      addTree(world,x,z,0.72+((Math.abs(gx+gz)%5)*0.05),false);
+    }
   }
+  addTreeHouse(world,-38,14,0);
+  addTreeHouse(world,38,-12,Math.PI);
+  addTreeHouse(world,3,48,-Math.PI/2);
 
-  return obstacles;
+  [[-18,-8],[18,8],[-10,24],[12,-28],[0,4]].forEach(([x,z],i)=>addSolidBox(world,x,z,3+i%2,1.8,3+i%2,0x6f746e));
+  for(let i=0;i<11;i++)addPlatform(world,-15+i*3,0.2,-2+Math.sin(i)*1.2,3.2,2.1,0x68462a);
+
+  world.tornado = new THREE.Group();
+  for(let i=0;i<9;i++){
+    const ring=new THREE.Mesh(new THREE.TorusGeometry(1.1+i*0.35,0.12,6,20),makeMaterial(0xaab7a7,{transparent:true,opacity:0.35}));
+    ring.rotation.x=Math.PI/2;ring.position.y=i*1.25;world.tornado.add(ring);
+  }
+  world.tornado.visible=false;world.root.add(world.tornado);
+  return world;
 }
 
-const BUILDERS = { praia: buildPraia, cidade: buildCidade, floresta: buildFloresta };
+function updateDestructibles(world, delta) {
+  world.destructibles.forEach((object)=>{
+    if (!object.falling) return;
+    if (object.kind === "lamp") {
+      object.mesh.rotation.z = Math.min(Math.PI / 2, object.mesh.rotation.z + delta * 1.65);
+      if (object.mesh.rotation.z >= Math.PI / 2) object.falling = false;
+      return;
+    }
+    object.velocity.y -= 12 * delta;
+    object.mesh.position.addScaledVector(object.velocity, delta);
+    object.mesh.rotation.x += object.angularVelocity.x * delta;
+    object.mesh.rotation.z += object.angularVelocity.z * delta;
+    if (object.mesh.position.y < -3) {
+      object.mesh.visible = false;
+      object.falling = false;
+    }
+  });
+}
+
+function updateWater(world, elapsed, event) {
+  world.animated.waves.forEach(({mesh,phase},index)=>{
+    mesh.position.y = 0.12 + Math.sin(elapsed*1.8+phase)*0.13;
+    mesh.scale.z = 0.8 + Math.sin(elapsed*1.4+phase)*0.22;
+    mesh.material.opacity = 0.42 + index*0.025;
+  });
+  world.animated.sharks.forEach(({mesh,radius,speed,phase})=>{
+    const a=elapsed*speed+phase;mesh.position.set(Math.cos(a)*radius,-0.25,57+Math.sin(a)*radius*0.58);mesh.rotation.y=-a;
+  });
+  if(!event||event.type!=="tsunami"){
+    world.tsunami.visible=false;world.water.position.y=0.02;return;
+  }
+  const progress=Math.max(0,Math.min(1,event.progress||0));
+  if(event.phase==="warning"){
+    world.tsunami.visible=true;world.tsunami.position.set(0,1+progress*8,world.half-4);world.tsunami.scale.y=1+progress*8;
+  }else if(event.phase==="surge"){
+    world.tsunami.visible=true;world.tsunami.position.z=world.half-(world.half*2-8)*progress;world.tsunami.position.y=7;world.tsunami.scale.y=13;
+  }else if(event.phase==="flooded"){
+    world.tsunami.visible=false;world.water.position.y=1.05;
+  }else if(event.phase==="drain"){
+    world.tsunami.visible=false;world.water.position.y=1.05*(1-progress);
+  }
+}
+
+function updateForest(world, elapsed, event) {
+  world.animated.trees.forEach(({trunk,crown,phase})=>{
+    const strength=event?.type==="tornado"&&event.phase==="active"?0.085:0.012;
+    trunk.rotation.z=Math.sin(elapsed*1.8+phase)*strength;crown.rotation.z=trunk.rotation.z*1.4;
+  });
+  if(!event||event.type!=="tornado"||event.phase!=="active"){world.tornado.visible=false;return;}
+  world.tornado.visible=true;
+  const p=Math.max(0,Math.min(1,event.progress||0));
+  world.tornado.position.set(-70+p*140,0,Math.sin(p*Math.PI*3)*30);
+  world.tornado.rotation.y=elapsed*2.8;
+}
+
+function applyObjectState(world, state) {
+  const object=world.destructibles.get(state?.id);
+  if(!object||object.destroyed)return;
+  if(!state.destroyed&&state.stage<2)return;
+  object.destroyed=Boolean(state.destroyed);
+  if(object.obstacle)object.obstacle.active=false;
+  object.linkedObstacles.forEach((obstacle)=>{obstacle.active=false;});
+  object.linkedMeshes.forEach((mesh)=>{mesh.visible=false;});
+  if(object.kind==="building"){
+    const prefix=object.id.replace(/-core$/,"");
+    world.destructibles.forEach((piece)=>{
+      if(piece.id.startsWith(`${prefix}-panel-`)&&!piece.falling){piece.falling=true;piece.velocity.set((Math.random()-.5)*3,3,(Math.random()-.5)*3);piece.angularVelocity.set(1.2,0,1.4);}
+    });
+  }
+  object.falling=true;
+  object.velocity.set((Math.random()-0.5)*2.5,object.kind==="building-piece"?2.5:0,(Math.random()-0.5)*2.5);
+  object.angularVelocity.set((Math.random()-0.5)*2,0,(Math.random()-0.5)*2);
+}
+
+function updateWorld(world, delta, event = null) {
+  world.animated.elapsed += delta;
+  updateDestructibles(world,delta);
+  if(world.mapId==="praia")updateWater(world,world.animated.elapsed,event);
+  if(world.mapId==="floresta")updateForest(world,world.animated.elapsed,event);
+}
+
+const BUILDERS={praia:buildPraia,cidade:buildCidade,floresta:buildFloresta};
 
 export function buildMap(mapId, scene) {
-  const builder = BUILDERS[mapId] || BUILDERS.praia;
-  return builder(scene);
+  const world=(BUILDERS[mapId]||BUILDERS.praia)(scene);
+  world.update=(delta,event)=>updateWorld(world,delta,event);
+  world.applyObjectState=(state)=>applyObjectState(world,state);
+  world.destructiblesNear=(x,z,radius)=>[...world.destructibles.values()].filter((object)=>{
+    const dx=object.mesh.position.x-x,dz=object.mesh.position.z-z;return !object.destroyed&&Math.hypot(dx,dz)<=radius;
+  });
+  return world;
 }

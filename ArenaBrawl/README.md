@@ -31,7 +31,10 @@ Como e um FPS de navegador (sem login — so um nome de jogador), basta abrir a 
 
 - **Lobby**: nome do jogador, escolha de classe (7), arma secundaria (5), mapa (3), tempo de partida, limite de pontos, modo (todos contra todos / time x time), velocidade de movimento, altura do pulo, granadas on/off, secundaria on/off, max. de jogadores.
 - **Salas**: criar, entrar por codigo ou pela lista de salas abertas, lista de jogadores com classe escolhida, times sorteados automaticamente no modo Time x Time, host inicia a partida.
-- **3 mapas proprios** (geometria 100% original, sem assets externos): Praia, Cidade, Floresta — cada um com obstaculos de cobertura, predios/cabanas/torres com telhado ou topo acessivel via escadas, e pontes.
+- **3 mapas proprios expandidos**: Praia com mar, ondas e tubaroes; Cidade com bairros e destruicao progressiva; Floresta montanhosa com arvores gigantes e casas nas copas.
+- **Veiculos sincronizados**: carros, motos, quadriciclo, jetskis e avioes com vida, dano, explosao e atropelamento. Veiculos terrestres permitem usar a arma secundaria.
+- **Canhao fixo**: dispara bolas de canhao ou lanca o proprio jogador pela arena.
+- **Eventos mundiais**: tsunami nao letal na Praia e tornado ancestral na Floresta, ambos sincronizados para toda a sala.
 - **7 classes** com arma principal e habilidade unica com cooldown: Sniper, Arqueiro, Besteiro, SMG, Fuzil, Metralhadora, Pistoleiro.
 - **5 armas secundarias**: pistola, mini shotgun, revolver, faca (corpo a corpo), pistola automatica fraca.
 - **4 granadas** (2 cargas por vida): explosiva, fumaca, flash, impacto.
@@ -39,13 +42,14 @@ Como e um FPS de navegador (sem login — so um nome de jogador), basta abrir a 
 
 ### Controles
 
-- `WASD` mover · Mouse mirar · Clique esquerdo atirar · `R` recarregar
+- `WASD` mover/dirigir · Mouse mirar · Clique esquerdo atirar · Botao direito usar mira · `R` recarregar
 - `1` / `2` arma principal / secundaria · `G` arremessar granada · `V` trocar tipo de granada · `Q` habilidade da classe
-- `Shift` correr · `Ctrl` agachar · `Espaco` pular
+- `Shift` correr · `Ctrl` agachar/descer aviao · `Espaco` pular/subir aviao
+- `E` entrar ou sair de veiculo · dentro do canhao, `Espaco` lanca o jogador
 
 ## Limitacoes conhecidas (proxima etapa)
 
-- Personagens e armas sao geometria simples (estilo blocky), nao modelos 3D detalhados com animacao esqueletica — dá pra evoluir depois com modelos low-poly proprios (Blender) sem mudar a arquitetura.
+- Personagens ainda usam animacao procedural simples; armas e veiculos usam modelos low-poly proprios construidos com Three.js.
 - Flecha/virote (Arqueiro/Besteiro) e granadas resolvem o acerto no instante do disparo/detonacao no servidor; a trajetoria visual e cosmetica.
 - Sem persistencia (sem XP, ranking, loja ou skins ainda) — os dados de partida existem apenas em memoria, por sala.
 

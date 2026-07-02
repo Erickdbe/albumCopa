@@ -119,6 +119,24 @@ html, body {
 .charge-meter.active { display: block; }
 .charge-fill { width: 0; height: 100%; background: #8bd450; box-shadow: 0 0 8px rgba(139,212,80,0.75); }
 
+.event-alert {
+  position: absolute; left: 50%; top: 9%; z-index: 18; transform: translate(-50%, -18px);
+  width: min(620px, 84vw); padding: 12px 18px; border: 1px solid rgba(255,214,92,0.75);
+  background: rgba(20,25,31,0.9); color: #ffe17a; text-align: center; text-transform: uppercase;
+  font-weight: 800; font-size: 0.9rem; opacity: 0; pointer-events: none;
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+.event-alert.active { opacity: 1; transform: translate(-50%, 0); }
+
+.vehicle-status {
+  position: absolute; left: 22px; bottom: 24px; z-index: 11; width: 190px; padding: 10px 12px;
+  background: rgba(10,13,18,0.78); border-left: 3px solid #ffd23f; display: none;
+}
+.vehicle-status.active { display: block; }
+.vehicle-status strong { display: block; margin-bottom: 6px; font-size: 0.82rem; text-transform: uppercase; }
+.vehicle-health { width: 100%; height: 8px; background: rgba(255,255,255,0.14); overflow: hidden; }
+.vehicle-health div { width: 100%; height: 100%; background: #6fd36f; transition: width 0.15s linear; }
+
 .hud-top-left { top: 20px; left: 20px; display: none; }
 .hud-health { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
 .hud-health-bar { width: 160px; height: 16px; border-radius: 8px; background: rgba(0,0,0,0.5); overflow: hidden; border: 1px solid rgba(255,255,255,0.15); }

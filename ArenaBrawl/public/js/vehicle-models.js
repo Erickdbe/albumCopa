@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { attachMeshyModel } from "./meshy-assets.js";
 
 const materials = {
   dark: new THREE.MeshStandardMaterial({ color: 0x22262b, roughness: 0.65, metalness: 0.45 }),
@@ -117,6 +118,8 @@ export function buildVehicleModel(vehicle) {
   model.traverse((child)=>{if(child.isMesh)child.userData.vehicleId=vehicle.id;});
   model.position.set(vehicle.x,vehicle.y,vehicle.z);
   model.rotation.y=vehicle.yaw||0;
+  if(vehicle.type==="car")attachMeshyModel(model,"car-cruiser",{targetSize:4.25,align:"x-to-z"});
+  else if(vehicle.type==="motorcycle")attachMeshyModel(model,"vehicle-thunder",{targetSize:2.5,align:"x-to-z"});
   return model;
 }
 

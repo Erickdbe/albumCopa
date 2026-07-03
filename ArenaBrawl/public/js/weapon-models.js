@@ -1,4 +1,20 @@
 import * as THREE from "three";
+import { attachMeshyModel } from "./meshy-assets.js";
+
+const MESHY_WEAPONS = {
+  sniper_rifle: { asset: "sniper", targetSize: 2, align: "x-to-z" },
+  bow: { asset: "bow", targetSize: 1.72 },
+  crossbow: { asset: "crossbow", targetSize: 1.55, align: "x-to-z" },
+  smg: { asset: "rifle", targetSize: 1.25, align: "x-to-z" },
+  assault_rifle: { asset: "ak47", targetSize: 1.72, align: "x-to-z" },
+  heavy_mg: { asset: "rifle", targetSize: 1.8, align: "x-to-z" },
+  mini_shotgun: { asset: "shotgun", targetSize: 1.55, align: "x-to-z" },
+  revolver: { asset: "revolver", targetSize: 0.82, align: "x-to-z" },
+  knife: { asset: "knife", targetSize: 0.9, align: "y-to-z" },
+  heavy_pistol: { asset: "pistol", targetSize: 0.78, align: "x-to-z" },
+  auto_pistol_weak: { asset: "pistol", targetSize: 0.72, align: "x-to-z" },
+  pistol_common: { asset: "pistol", targetSize: 0.72, align: "x-to-z" }
+};
 
 const MAT = {
   dark: new THREE.MeshStandardMaterial({ color: 0x171a1f, roughness: 0.55, metalness: 0.5 }),
@@ -223,6 +239,20 @@ export function buildWeaponModel(weaponId, accentColor = "#5c6b48") {
   group.userData.aimPosition = new THREE.Vector3(0, isBow ? -0.03 : -0.12, isBow ? -0.76 : -0.68);
   group.position.copy(group.userData.hipPosition);
   group.rotation.set(isKnife ? -0.18 : 0, isKnife ? -0.2 : 0, isKnife ? 0.2 : 0);
+
+  const meshy = MESHY_WEAPONS[weaponId];
+  if (meshy) {
+    attachMeshyModel(group, meshy.asset, {
+      targetSize: meshy.targetSize,
+      align: meshy.align,
+      anchor: "center",
+      onReady: () => {
+        if (!isBow) return;
+        group.userData.bowString.visible = true;
+        group.userData.chargeParts.forEach((part) => { part.visible = true; });
+      }
+    });
+  }
   return group;
 }
 

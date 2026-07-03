@@ -3,6 +3,8 @@ import { PointerLockControls } from "three/addons/controls/PointerLockControls.j
 import { buildMap } from "./maps.js";
 import { buildWeaponModel, setBowChargeVisual } from "./weapon-models.js";
 import { buildVehicleModel, createCannonProjectile, createExplosion } from "./vehicle-models.js";
+import { attachAnimatedCharacter, setCharacterAnimation } from "./character-model.js";
+import { attachMeshyModel } from "./meshy-assets.js";
 import {
   CLASSES, CLASS_ORDER, SECONDARY_WEAPONS, SECONDARY_ORDER, GRENADES, GRENADE_ORDER, GRENADE_CHARGES_PER_LIFE,
   ARENA_HALF, MAP_HALF_SIZES, VEHICLE_STATS, EYE_HEIGHT, GRAVITY, WALK_SPEED, SPRINT_MUL, CROUCH_MUL, MOVE_SEND_MS,
@@ -231,11 +233,28 @@ function colorFromId(id) {
   for (let i = 0; i < id.length; i++) hash = (hash * 31 + id.charCodeAt(i)) >>> 0;
   return `hsl(${hash % 360}, 65%, 55%)`;
 }
+
+function animationForAvatar(avatar) {
+  if (!avatar.alive) return "death";
+  if (avatar.crouching) return "crouch";
+  if (avatar.sprinting || avatar.jumping) return "run";
+  if (avatar.moving) return "walk";
+  return "idle";
+}
+
 function buildAvatar(p) {
   const teamColor = p.team === "red" ? "#e05555" : p.team === "blue" ? "#4d8fe0" : colorFromId(p.socketId);
   const bodyMat = new THREE.MeshStandardMaterial({ color: teamColor });
   const skinMat = new THREE.MeshStandardMaterial({ color: 0xd8a978 });
   const root = new THREE.Group();
+
+  const teamMarker = new THREE.Mesh(
+    new THREE.RingGeometry(0.42, 0.5, 32),
+    new THREE.MeshBasicMaterial({ color: teamColor, transparent: true, opacity: 0.72, side: THREE.DoubleSide })
+  );
+  teamMarker.rotation.x = -Math.PI / 2;
+  teamMarker.position.y = 0.025;
+  root.add(teamMarker);
 
   const torso = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.85, 0.38), bodyMat);
   torso.position.y = 1.15;
@@ -284,13 +303,23 @@ function buildAvatar(p) {
   root.add(tagSprite);
 
   scene.add(root);
-  return {
-    root, leftArm, rightArm, leftLeg, rightLeg, gun,
+  const avatar = {
+    root, leftArm, rightArm, leftLeg, rightLeg, gun, teamMarker,
     hittable: [torso, head, leftArm, rightArm, leftLeg, rightLeg],
+    fallbackMeshes: [torso, head, leftArm, rightArm, leftLeg, rightLeg],
     headMesh: head,
     walkPhase: Math.random() * 10,
-    username: p.username, classId: p.classId, kills: p.kills || 0, deaths: p.deaths || 0, team: p.team
+    username: p.username, classId: p.classId, kills: p.kills || 0, deaths: p.deaths || 0, team: p.team,
+    alive: p.alive !== false,
+    moving: Boolean(p.moving), sprinting: Boolean(p.sprinting), jumping: Boolean(p.jumping), crouching: Boolean(p.crouching),
+    model: null, mixer: null, actions: null, animationName: null, desiredAnimation: "idle"
   };
+  avatar.setAnimation = (name, immediate = false) => {
+    avatar.desiredAnimation = name;
+    setCharacterAnimation(avatar, name, immediate);
+  };
+  attachAnimatedCharacter(avatar).catch((error) => console.warn("Nao foi possivel carregar o personagem 3D:", error));
+  return avatar;
 }
 function spawnOrUpdateRemote(p) {
   let avatar = remotePlayers.get(p.socketId);
@@ -301,12 +330,19 @@ function spawnOrUpdateRemote(p) {
   avatar.root.position.set(p.x, p.y, p.z);
   avatar.root.rotation.y = p.yaw;
   avatar.root.visible = p.alive;
+  avatar.alive = p.alive !== false;
+  avatar.moving = Boolean(p.moving);
+  avatar.sprinting = Boolean(p.sprinting);
+  avatar.jumping = Boolean(p.jumping);
+  avatar.crouching = Boolean(p.crouching);
+  avatar.setAnimation(animationForAvatar(avatar));
   avatar.kills = p.kills || 0;
   avatar.deaths = p.deaths || 0;
 }
 function removeAvatar(socketId) {
   const avatar = remotePlayers.get(socketId);
   if (!avatar) return;
+  avatar.mixer?.stopAllAction();
   scene.remove(avatar.root);
   remotePlayers.delete(socketId);
 }
@@ -692,9 +728,11 @@ function throwGrenade() {
 
 function simulateGrenadeArc(id, origin, dir, isLocal, fromSocketId) {
   const grenade = GRENADES[id];
-  const mesh = new THREE.Mesh(new THREE.SphereGeometry(0.14, 8, 8), new THREE.MeshStandardMaterial({ color: grenade.color }));
+  const mesh = new THREE.Group();
+  mesh.add(new THREE.Mesh(new THREE.SphereGeometry(0.14, 8, 8), new THREE.MeshStandardMaterial({ color: grenade.color })));
   mesh.position.copy(origin);
   scene.add(mesh);
+  attachMeshyModel(mesh,"grenade",{targetSize:0.32,anchor:"center"});
   const velocity = dir.clone().multiplyScalar(18).add(new THREE.Vector3(0, 6, 0));
   const state = { mesh, velocity, id, isLocal, fromSocketId };
   activeGrenades.push(state);
@@ -912,8 +950,13 @@ function updateGrenadesPhysics(delta) {
 
 function animateAvatars(delta) {
   remotePlayers.forEach((avatar) => {
+    if (avatar.mixer) {
+      avatar.setAnimation(animationForAvatar(avatar));
+      avatar.mixer.update(delta);
+      return;
+    }
     avatar.walkPhase += delta * 6;
-    const swing = Math.sin(avatar.walkPhase) * 0.35;
+    const swing = avatar.moving ? Math.sin(avatar.walkPhase) * 0.35 : 0;
     avatar.leftLeg.rotation.x = swing;
     avatar.rightLeg.rotation.x = -swing;
     avatar.leftArm.rotation.x = -swing * 0.7;
@@ -1070,7 +1113,13 @@ export function attachSocket(activeSocket) {
     if (!avatar) return;
     avatar.root.position.set(p.x, p.y, p.z);
     avatar.root.rotation.y = p.yaw;
-    avatar.root.visible = local.alive || true;
+    avatar.root.visible = true;
+    avatar.alive = true;
+    avatar.moving = Boolean(p.moving);
+    avatar.sprinting = Boolean(p.sprinting);
+    avatar.jumping = Boolean(p.jumping);
+    avatar.crouching = Boolean(p.crouching);
+    avatar.setAnimation(animationForAvatar(avatar));
   });
 
   socket.on("match:shot-fired", ({ socketId }) => {
@@ -1107,7 +1156,12 @@ export function attachSocket(activeSocket) {
       controls.unlock();
     } else {
       const a = remotePlayers.get(victimId);
-      if (a) a.deaths += 1;
+      if (a) {
+        a.deaths += 1;
+        a.alive = false;
+        a.moving = false;
+        a.setAnimation("death", true);
+      }
     }
     updateScoreboard();
   });
@@ -1152,6 +1206,13 @@ export function attachSocket(activeSocket) {
       } else if (a) {
         a.root.visible = true;
         a.root.position.set(x, y, z);
+        a.root.rotation.y = yaw;
+        a.alive = true;
+        a.moving = false;
+        a.sprinting = false;
+        a.jumping = false;
+        a.crouching = false;
+        a.setAnimation("idle", true);
       }
     }
   });

@@ -1,5 +1,23 @@
 import * as THREE from "three";
 import { MAP_HALF_SIZES, MAP_META } from "./config.js";
+import { attachMeshyModel } from "./meshy-assets.js";
+
+const textureLoader = new THREE.TextureLoader();
+const groundTextureCache = new Map();
+
+function getGroundTexture(url, repeat) {
+  const cacheKey = `${url}:${repeat}`;
+  if (groundTextureCache.has(cacheKey)) return groundTextureCache.get(cacheKey);
+
+  const texture = textureLoader.load(url);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.RepeatWrapping;
+  texture.repeat.set(repeat, repeat);
+  texture.anisotropy = 4;
+  groundTextureCache.set(cacheKey, texture);
+  return texture;
+}
 
 function collisionBox(x, z, w, d, topY, solid = true) {
   return {
@@ -70,12 +88,15 @@ function addBoundary(world, color) {
   addSolidBox(world, half, 0, 1, 8, half * 2, color);
 }
 
-function addGround(world, color) {
+function addGround(world, color, textureUrl = null, tileSize = 28) {
+  const material = textureUrl
+    ? { map: getGroundTexture(textureUrl, (world.half * 2) / tileSize) }
+    : undefined;
   const ground = addMesh(
     world,
     new THREE.PlaneGeometry(world.half * 2, world.half * 2),
     color, 0, -0.03, 0,
-    { rotX: -Math.PI / 2, castShadow: false }
+    { rotX: -Math.PI / 2, castShadow: false, material }
   );
   ground.receiveShadow = true;
 }
@@ -172,12 +193,29 @@ function createWorld(mapId, scene) {
   };
 }
 
+function addMeshyLandmark(world, assetName, x, z, options = {}) {
+  const anchor = new THREE.Group();
+  anchor.position.set(x, options.y || 0, z);
+  world.root.add(anchor);
+  attachMeshyModel(anchor, assetName, {
+    targetHeight: options.height,
+    targetSize: options.size,
+    rotation: [0, options.rotation || 0, 0],
+    hideExisting: false
+  });
+  if (options.collision) {
+    const [width, depth, topY = options.height || 4] = options.collision;
+    world.obstacles.push(collisionBox(x, z, width, depth, topY, true));
+  }
+  return anchor;
+}
+
 function buildPraia(scene) {
   const world = createWorld("praia", scene);
   const meta = MAP_META.praia;
   scene.background = new THREE.Color(meta.sky);
   scene.fog = new THREE.Fog(meta.sky, 80, 210);
-  addGround(world, meta.ground);
+  addGround(world, 0xffffff, "./assets/textures/beach-sand.jpg", 32);
   addBoundary(world, 0x89764d);
 
   world.water = addMesh(world, new THREE.PlaneGeometry(world.half * 2 - 2, 62, 28, 10), 0x238fd0, 0, 0.02, 58, {
@@ -217,6 +255,7 @@ function buildPraia(scene) {
   [[-58,-52],[56,-50],[-22,-58],[25,-60]].forEach(([x,z],i)=>{
     addClimbableBuilding(world,{x,z,w:8,d:7,h:4,wallColor:i%2?0xd7e0d0:0xf1d6a2,roofColor:i%2?0x3975a9:0xb34d42,stairSide:i%2?"west":"east"});
   });
+  addMeshyLandmark(world,"house",66,-34,{height:6.4,rotation:-0.45,collision:[8.5,8,6.4]});
   [[-38,14],[38,18],[-62,-2],[62,-5]].forEach(([x,z])=>addSolidBox(world,x,z,3.2,2,3.2,0x888b8c));
   for(let i=0;i<8;i++) addPlatform(world,-12+i*3,0.22,27+i*0.45,3.1,2.2,0x76502f);
   return world;
@@ -247,6 +286,7 @@ function buildCidade(scene) {
     x,z,w,d,h,wallColor:i%3===0?0x89939c:i%3===1?0xa28f78:0x77838d,roofColor:0x353a40,
     stairSide:i%2?"east":"west",destructiblePrefix:`city-building-${i}`
   }));
+  addMeshyLandmark(world,"house",-18,-18,{height:8.5,rotation:0.75,collision:[8,8,8.5]});
 
   let lampIndex=0;
   [-42,-26,-8,8,26,42].forEach((n)=>{
@@ -263,7 +303,7 @@ function buildFloresta(scene) {
   const meta = MAP_META.floresta;
   scene.background = new THREE.Color(meta.sky);
   scene.fog = new THREE.Fog(meta.sky, 72, 205);
-  addGround(world, meta.ground);
+  addGround(world, 0xffffff, "./assets/textures/forest-grass.jpg", 30);
   addBoundary(world, 0x283526);
 
   const mountains=[[-72,-68,20,28],[-35,-79,17,24],[10,-82,19,30],[52,-76,20,27],[77,-48,17,25],[80,5,20,31],[75,55,19,28],[42,79,18,25],[-5,82,20,29],[-52,76,21,31],[-78,45,18,25],[-82,-15,21,30]];
@@ -277,6 +317,13 @@ function buildFloresta(scene) {
       addTree(world,x,z,0.72+((Math.abs(gx+gz)%5)*0.05),false);
     }
   }
+  [
+    [-58,-38,"unknown-a",10.5,0.2],[57,34,"unknown-b",10,-0.5],[-31,-50,"unknown-b",9.2,0.8],
+    [31,50,"unknown-a",11,-0.25],[-64,18,"unknown-a",9.6,0.55],[63,-24,"unknown-b",10.4,-0.8]
+  ].forEach(([x,z,asset,height,rotation])=>{
+    addMeshyLandmark(world,asset,x,z,{height,rotation,collision:[1.5,1.5,height*0.72]});
+  });
+  addMeshyLandmark(world,"unknown-c",0,-54,{height:7.2,rotation:0.18,collision:[7.5,7,7.2]});
   addTreeHouse(world,-38,14,0);
   addTreeHouse(world,38,-12,Math.PI);
   addTreeHouse(world,3,48,-Math.PI/2);

@@ -2,12 +2,23 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
 
-const MODEL_ROOT = "./assets/models/emberbound/";
-const ANIMATION_NAMES = ["walk", "run", "crouch", "death"];
-let characterAssetsPromise = null;
+const MODEL_ROOTS = {
+  emberbound: "./assets/models/emberbound/",
+  scout: "./assets/models/scout/"
+};
+const SHARED_ANIMATIONS = {
+  idle: `${MODEL_ROOTS.emberbound}idle.gltf`,
+  walk: `${MODEL_ROOTS.emberbound}walk.gltf`,
+  run: `${MODEL_ROOTS.emberbound}run.gltf`,
+  crouch: `${MODEL_ROOTS.emberbound}crouch.gltf`,
+  death: `${MODEL_ROOTS.emberbound}death.gltf`,
+  dance: `${MODEL_ROOTS.scout}dance.gltf`
+};
+const characterModelPromises = new Map();
+let sharedClipsPromise = null;
 
-function loadTexture(loader, name) {
-  return loader.loadAsync(`${MODEL_ROOT}${name}`).then((texture) => {
+function loadTexture(loader, root, name) {
+  return loader.loadAsync(`${root}${name}`).then((texture) => {
     texture.flipY = false;
     texture.colorSpace = THREE.NoColorSpace;
     texture.anisotropy = 4;
@@ -15,15 +26,15 @@ function loadTexture(loader, name) {
   });
 }
 
-async function loadCharacterAssets() {
+async function loadCharacterModel(characterId) {
+  const root = MODEL_ROOTS[characterId] || MODEL_ROOTS.emberbound;
   const loader = new GLTFLoader();
   const textureLoader = new THREE.TextureLoader();
-  const [base, normalMap, metalnessMap, roughnessMap, ...animations] = await Promise.all([
-    loader.loadAsync(`${MODEL_ROOT}character.gltf`),
-    loadTexture(textureLoader, "normal.jpg"),
-    loadTexture(textureLoader, "metallic.jpg"),
-    loadTexture(textureLoader, "roughness.jpg"),
-    ...ANIMATION_NAMES.map((name) => loader.loadAsync(`${MODEL_ROOT}${name}.gltf`))
+  const [base, normalMap, metalnessMap, roughnessMap] = await Promise.all([
+    loader.loadAsync(`${root}character.gltf`),
+    loadTexture(textureLoader, root, "normal.jpg"),
+    loadTexture(textureLoader, root, "metallic.jpg"),
+    loadTexture(textureLoader, root, "roughness.jpg")
   ]);
 
   base.scene.traverse((child) => {
@@ -53,35 +64,51 @@ async function loadCharacterAssets() {
   base.scene.position.y = -bounds.min.y * scale;
   base.scene.rotation.y = Math.PI;
 
-  const clips = { idle: base.animations[0] };
-  animations.forEach((asset, index) => {
-    clips[ANIMATION_NAMES[index]] = asset.animations[0];
-  });
-  return { model: base.scene, clips };
+  return base.scene;
 }
 
-function assets() {
-  if (!characterAssetsPromise) characterAssetsPromise = loadCharacterAssets();
-  return characterAssetsPromise;
+function characterModel(characterId) {
+  if (!characterModelPromises.has(characterId)) {
+    characterModelPromises.set(characterId, loadCharacterModel(characterId));
+  }
+  return characterModelPromises.get(characterId);
+}
+
+function sharedClips() {
+  if (!sharedClipsPromise) {
+    const loader = new GLTFLoader();
+    sharedClipsPromise = Promise.all(Object.entries(SHARED_ANIMATIONS).map(async ([name, url]) => {
+      const asset = await loader.loadAsync(url);
+      return [name, asset.animations[0]];
+    })).then((entries) => Object.fromEntries(entries));
+  }
+  return sharedClipsPromise;
 }
 
 export async function attachAnimatedCharacter(avatar) {
-  const loaded = await assets();
+  const [sourceModel, clips] = await Promise.all([
+    characterModel(avatar.characterId || "emberbound"),
+    sharedClips()
+  ]);
   if (!avatar.root.parent) return;
 
-  const model = cloneSkeleton(loaded.model);
-  model.name = "emberbound-character";
+  const model = cloneSkeleton(sourceModel);
+  model.name = `${avatar.characterId || "emberbound"}-character`;
   avatar.root.add(model);
 
   const mixer = new THREE.AnimationMixer(model);
   const actions = {};
-  Object.entries(loaded.clips).forEach(([name, clip]) => {
+  Object.entries(clips).forEach(([name, clip]) => {
     if (!clip) return;
     const action = mixer.clipAction(clip);
     if (name === "death") {
       action.setLoop(THREE.LoopOnce, 1);
       action.clampWhenFinished = true;
       action.timeScale = 2.8;
+    }
+    if (name === "dance") {
+      action.setLoop(THREE.LoopOnce, 1);
+      action.clampWhenFinished = true;
     }
     actions[name] = action;
   });

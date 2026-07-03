@@ -115,6 +115,7 @@ function createRoomsModule(io) {
       vehicleId: null,
       lastWorldForceAt: 0,
       lastEnvironmentHitAt: 0,
+      lastEmoteAt: 0,
       secondaryId: "pistol_common",
       pendingClassId: null,
       pendingSecondaryId: null
@@ -858,6 +859,16 @@ function createRoomsModule(io) {
       if (ability.durationMs > 0) {
         setTimeout(() => { player.abilityActive = false; }, ability.durationMs);
       }
+    });
+
+    socket.on("match:emote", ({ emote } = {}) => {
+      const room = findRoomBySocket(socket.id);
+      const player = room?.players.find((p) => p.socketId === socket.id);
+      if (!room || room.status !== "playing" || !player?.alive || player.vehicleId || emote !== "dance") return;
+      const now = Date.now();
+      if (now - player.lastEmoteAt < 1200) return;
+      player.lastEmoteAt = now;
+      io.to(room.roomId).emit("match:emote", { socketId: socket.id, emote: "dance", durationMs: 5200 });
     });
 
     socket.on("match:grenadeThrow", ({ grenadeId, x, y, z, dirX, dirY, dirZ } = {}) => {

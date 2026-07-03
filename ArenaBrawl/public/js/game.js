@@ -234,8 +234,17 @@ function colorFromId(id) {
   return `hsl(${hash % 360}, 65%, 55%)`;
 }
 
+function characterIdForPlayer(player) {
+  if (player.team === "red") return "emberbound";
+  if (player.team === "blue") return "scout";
+  let hash = 0;
+  for (const char of player.socketId || "") hash = (hash * 33 + char.charCodeAt(0)) >>> 0;
+  return hash % 2 ? "scout" : "emberbound";
+}
+
 function animationForAvatar(avatar) {
   if (!avatar.alive) return "death";
+  if (avatar.emoteUntil > performance.now() && !avatar.moving && !avatar.jumping) return "dance";
   if (avatar.crouching) return "crouch";
   if (avatar.sprinting || avatar.jumping) return "run";
   if (avatar.moving) return "walk";
@@ -312,7 +321,8 @@ function buildAvatar(p) {
     username: p.username, classId: p.classId, kills: p.kills || 0, deaths: p.deaths || 0, team: p.team,
     alive: p.alive !== false,
     moving: Boolean(p.moving), sprinting: Boolean(p.sprinting), jumping: Boolean(p.jumping), crouching: Boolean(p.crouching),
-    model: null, mixer: null, actions: null, animationName: null, desiredAnimation: "idle"
+    model: null, mixer: null, actions: null, animationName: null, desiredAnimation: "idle",
+    characterId: characterIdForPlayer(p), emoteUntil: 0
   };
   avatar.setAnimation = (name, immediate = false) => {
     avatar.desiredAnimation = name;
@@ -837,6 +847,7 @@ function onKeyDown(e) {
   if (e.code === "Digit2") switchSlot("secondary");
   if (e.code === "KeyG") throwGrenade();
   if (e.code === "KeyQ") useAbility();
+  if (e.code === "KeyB" && !local.vehicleId) socket.emit("match:emote", { emote: "dance" });
   if (e.code === "KeyV") {
     const idx = GRENADE_ORDER.indexOf(local.grenadeSelected);
     local.grenadeSelected = GRENADE_ORDER[(idx + 1) % GRENADE_ORDER.length];
@@ -1119,6 +1130,7 @@ export function attachSocket(activeSocket) {
     avatar.sprinting = Boolean(p.sprinting);
     avatar.jumping = Boolean(p.jumping);
     avatar.crouching = Boolean(p.crouching);
+    if (avatar.moving || avatar.jumping) avatar.emoteUntil = 0;
     avatar.setAnimation(animationForAvatar(avatar));
   });
 
@@ -1160,6 +1172,7 @@ export function attachSocket(activeSocket) {
         a.deaths += 1;
         a.alive = false;
         a.moving = false;
+        a.emoteUntil = 0;
         a.setAnimation("death", true);
       }
     }
@@ -1212,6 +1225,7 @@ export function attachSocket(activeSocket) {
         a.sprinting = false;
         a.jumping = false;
         a.crouching = false;
+        a.emoteUntil = 0;
         a.setAnimation("idle", true);
       }
     }
@@ -1223,6 +1237,14 @@ export function attachSocket(activeSocket) {
       local.abilityExpiresAt = performance.now() + durationMs;
       if (durationMs > 0) setTimeout(() => { local.abilityActive = false; }, durationMs);
     }
+  });
+  socket.on("match:emote", ({ socketId, emote, durationMs }) => {
+    if (emote !== "dance") return;
+    const avatar = remotePlayers.get(socketId);
+    if (!avatar?.alive) return;
+    avatar.moving = false;
+    avatar.emoteUntil = performance.now() + Math.max(1000, Number(durationMs) || 5200);
+    avatar.setAnimation("dance", true);
   });
   socket.on("match:ability-state", ({ cooldownUntil }) => {
     local.abilityCooldownUntil = performance.now() + Math.max(0, cooldownUntil - Date.now());

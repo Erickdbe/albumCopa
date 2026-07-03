@@ -2,18 +2,18 @@ import * as THREE from "three";
 import { attachMeshyModel } from "./meshy-assets.js";
 
 const MESHY_WEAPONS = {
-  sniper_rifle: { asset: "sniper", targetSize: 2, align: "x-to-z" },
+  sniper_rifle: { asset: "sniper", targetSize: 2, align: "negative-x-to-z" },
   bow: { asset: "bow", targetSize: 1.72 },
-  crossbow: { asset: "crossbow", targetSize: 1.55, align: "x-to-z" },
-  smg: { asset: "rifle", targetSize: 1.25, align: "x-to-z" },
-  assault_rifle: { asset: "ak47", targetSize: 1.72, align: "x-to-z" },
-  heavy_mg: { asset: "rifle", targetSize: 1.8, align: "x-to-z" },
-  mini_shotgun: { asset: "shotgun", targetSize: 1.55, align: "x-to-z" },
-  revolver: { asset: "revolver", targetSize: 0.82, align: "x-to-z" },
+  crossbow: { asset: "crossbow", targetSize: 1.55, align: "negative-x-to-z" },
+  smg: { asset: "rifle", targetSize: 1.25, align: "negative-x-to-z" },
+  assault_rifle: { asset: "ak47", targetSize: 1.72, align: "negative-x-to-z" },
+  heavy_mg: { asset: "rifle", targetSize: 1.8, align: "negative-x-to-z" },
+  mini_shotgun: { asset: "shotgun", targetSize: 1.55, align: "negative-x-to-z" },
+  revolver: { asset: "revolver", targetSize: 0.82, align: "negative-x-to-z" },
   knife: { asset: "knife", targetSize: 0.9, align: "y-to-z" },
-  heavy_pistol: { asset: "pistol", targetSize: 0.78, align: "x-to-z" },
-  auto_pistol_weak: { asset: "pistol", targetSize: 0.72, align: "x-to-z" },
-  pistol_common: { asset: "pistol", targetSize: 0.72, align: "x-to-z" }
+  heavy_pistol: { asset: "pistol", targetSize: 0.78, align: "negative-x-to-z" },
+  auto_pistol_weak: { asset: "pistol", targetSize: 0.72, align: "negative-x-to-z" },
+  pistol_common: { asset: "pistol", targetSize: 0.72, align: "negative-x-to-z" }
 };
 
 const MAT = {

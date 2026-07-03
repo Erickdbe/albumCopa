@@ -120,6 +120,7 @@ export function buildVehicleModel(vehicle) {
   model.rotation.y=vehicle.yaw||0;
   if(vehicle.type==="car")attachMeshyModel(model,"car-cruiser",{targetSize:4.25,align:"x-to-z"});
   else if(vehicle.type==="motorcycle")attachMeshyModel(model,"vehicle-thunder",{targetSize:2.5,align:"x-to-z"});
+  else if(vehicle.type==="plane")attachMeshyModel(model,"plane",{targetSize:7.2,align:"negative-x-to-z"});
   return model;
 }
 

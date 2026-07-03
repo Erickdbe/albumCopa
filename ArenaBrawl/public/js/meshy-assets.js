@@ -106,6 +106,7 @@ export async function attachMeshyModel(parent, assetName, options = {}) {
     const oriented = new THREE.Group();
     oriented.add(model);
     if (options.align === "x-to-z") oriented.rotation.y = Math.PI / 2;
+    else if (options.align === "negative-x-to-z") oriented.rotation.y = -Math.PI / 2;
     else if (options.align === "y-to-z") oriented.rotation.x = -Math.PI / 2;
 
     const bounds = new THREE.Box3().setFromObject(oriented);

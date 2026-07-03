@@ -448,6 +448,7 @@ function createRoomsModule(io) {
     if (/^city-lamp-\d+$/.test(objectId)) return 55;
     if (/^city-building-\d+-panel-\d+$/.test(objectId)) return 85;
     if (/^city-building-\d+-core$/.test(objectId)) return 280;
+    if (/^city-barrier-\d+$/.test(objectId)) return 95;
     return 0;
   }
 
@@ -786,7 +787,7 @@ function createRoomsModule(io) {
       if (player) player.chargeStartedAt = 0;
     });
 
-    socket.on("match:shoot", ({ slot, targetSocketId, hitZone, pelletHits } = {}) => {
+    socket.on("match:shoot", ({ slot, targetSocketId, hitZone, pelletHits, origin, direction, ballistics } = {}) => {
       const room = findRoomBySocket(socket.id);
       if (!room || room.status !== "playing") return;
       const shooter = room.players.find((p) => p.socketId === socket.id);
@@ -802,7 +803,30 @@ function createRoomsModule(io) {
       if (now - (shooter.lastShotAt[slot] || 0) < fireRate) return;
 
       shooter.lastShotAt[slot] = now;
-      socket.to(room.roomId).volatile.emit("match:shot-fired", { socketId: socket.id, slot, weaponId: weapon.id });
+      const fallbackOrigin = { x: shooter.x, y: shooter.y + 1.45, z: shooter.z };
+      const finite = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
+      let safeOrigin = {
+        x: finite(origin?.x, fallbackOrigin.x),
+        y: finite(origin?.y, fallbackOrigin.y),
+        z: finite(origin?.z, fallbackOrigin.z)
+      };
+      if (distance3(safeOrigin, shooter) > 7) safeOrigin = fallbackOrigin;
+      const safeDirection = {
+        x: finite(direction?.x), y: finite(direction?.y), z: finite(direction?.z, -1)
+      };
+      const directionLength = Math.hypot(safeDirection.x, safeDirection.y, safeDirection.z) || 1;
+      safeDirection.x /= directionLength;
+      safeDirection.y /= directionLength;
+      safeDirection.z /= directionLength;
+      const safeBallistics = {
+        speed: Math.max(30, Math.min(220, finite(ballistics?.speed, weapon.projectileSpeed || 95))),
+        gravity: Math.max(-20, Math.min(0, finite(ballistics?.gravity, -9.8))),
+        range: Math.max(2, Math.min(weapon.range, finite(ballistics?.range, weapon.range)))
+      };
+      socket.to(room.roomId).volatile.emit("match:shot-fired", {
+        socketId: socket.id, slot, weaponId: weapon.id,
+        origin: safeOrigin, direction: safeDirection, ballistics: safeBallistics
+      });
 
       let chargeDamageMultiplier = 1;
       if (weapon.chargeable) {

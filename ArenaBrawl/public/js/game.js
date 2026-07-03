@@ -6,6 +6,10 @@ import { buildVehicleModel, createCannonProjectile, createExplosion } from "./ve
 import { attachAnimatedCharacter, setCharacterAnimation } from "./character-model.js";
 import { attachMeshyModel } from "./meshy-assets.js";
 import {
+  unlockAudio, playWeaponSound, playImpactSound, playExplosionSound, playReloadSound,
+  playFootstep, updateAudioListener, updateVehicleEngine
+} from "./game-audio.js";
+import {
   CLASSES, CLASS_ORDER, SECONDARY_WEAPONS, SECONDARY_ORDER, GRENADES, GRENADE_ORDER, GRENADE_CHARGES_PER_LIFE,
   ARENA_HALF, MAP_HALF_SIZES, VEHICLE_STATS, EYE_HEIGHT, GRAVITY, WALK_SPEED, SPRINT_MUL, CROUCH_MUL, MOVE_SEND_MS,
   HEADSHOT_MULTIPLIER
@@ -30,7 +34,10 @@ const keys = {};
 const remotePlayers = new Map();
 const vehicles = new Map();
 const activeGrenades = [];
+const activeBallistics = [];
 const _readEuler = new THREE.Euler(0, 0, 0, "YXZ");
+let lastFootstepAt = 0;
+let lastMinimapDrawAt = 0;
 
 const local = {
   x: 0, y: 0, z: 0, jumpOffset: 0, verticalVelocity: 0, onGround: true,
@@ -63,7 +70,7 @@ function cacheDom() {
     "hudBottomRight", "hudTopRight", "abilityFill", "abilityName", "grenadeCount", "grenadeName",
     "matchTimer", "endScreen", "endResults", "gameRoot", "scopeOverlay", "chargeMeter", "chargeFill",
     "eventAlert", "vehicleStatus", "vehicleHealthFill", "respawnClassSelect", "respawnSecondarySelect",
-    "respawnLoadoutStatus"
+    "respawnLoadoutStatus", "minimap", "minimapCanvas"
   ].forEach((id) => { dom[id] = document.getElementById(id); });
 }
 
@@ -104,9 +111,9 @@ function ensureScene() {
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
   });
-  window.addEventListener("keydown", (e) => { keys[e.code] = true; onKeyDown(e); });
+  window.addEventListener("keydown", (e) => { unlockAudio(); keys[e.code] = true; onKeyDown(e); });
   window.addEventListener("keyup", (e) => { keys[e.code] = false; });
-  document.addEventListener("mousedown", onMouseDown);
+  document.addEventListener("mousedown", (event) => { unlockAudio(); onMouseDown(event); });
   document.addEventListener("mouseup", onMouseUp);
   dom.gameCanvas.addEventListener("click", () => { if (local.alive) controls.lock(); });
   dom.pauseHint.addEventListener("click", () => { if (local.alive) controls.lock(); });
@@ -136,6 +143,12 @@ function clearSceneObjects() {
   remotePlayers.clear();
   activeGrenades.forEach((g) => scene.remove(g.mesh));
   activeGrenades.length = 0;
+  activeBallistics.forEach((shot) => {
+    scene.remove(shot.mesh);
+    scene.remove(shot.trail);
+  });
+  activeBallistics.length = 0;
+  updateVehicleEngine(false);
   vehicles.clear();
   mapWorld = null;
   activeWorldEvent = null;
@@ -167,6 +180,7 @@ function isBlockedAt(x, z, feetY) {
 function setViewWeapon(color, kind) {
   if (currentWeaponMesh) weaponRig.remove(currentWeaponMesh);
   currentWeaponMesh = buildWeaponModel(kind, color);
+  currentWeaponMesh.traverse((object) => { object.userData.viewModel = true; });
   weaponRig.add(currentWeaponMesh);
   const muzzle = currentWeaponMesh.userData.muzzlePosition || new THREE.Vector3(0, 0, -0.8);
   muzzleFlash.position.copy(currentWeaponMesh.position).add(muzzle);
@@ -526,6 +540,138 @@ function gatherHittable() {
   return hittable;
 }
 
+const BULLET_SPEEDS = {
+  sniper_rifle: 180,
+  assault_rifle: 125,
+  heavy_mg: 112,
+  smg: 92,
+  heavy_pistol: 105,
+  revolver: 98,
+  pistol_common: 88,
+  auto_pistol_weak: 84,
+  mini_shotgun: 74
+};
+const BULLET_GRAVITY = -9.8;
+
+function weaponById(weaponId) {
+  for (const classInfo of Object.values(CLASSES)) {
+    if (classInfo.primary.id === weaponId) return classInfo.primary;
+  }
+  return Object.values(SECONDARY_WEAPONS).find((weapon) => weapon.id === weaponId) || null;
+}
+
+function ballisticForWeapon(weapon, charge = 1) {
+  if (weapon.kind === "projectile") {
+    return {
+      speed: weapon.projectileSpeed * (weapon.chargeable ? 0.45 + charge * 0.55 : 1),
+      gravity: weapon.id === "bow" ? -11.5 : -9.8,
+      kind: "arrow"
+    };
+  }
+  return { speed: BULLET_SPEEDS[weapon.id] || 95, gravity: BULLET_GRAVITY, kind: "bullet" };
+}
+
+function muzzleWorldPosition() {
+  scene.updateMatrixWorld(true);
+  if (!currentWeaponMesh || !currentWeaponMesh.visible) return camera.getWorldPosition(new THREE.Vector3());
+  const muzzle = (currentWeaponMesh.userData.muzzlePosition || new THREE.Vector3(0, 0, -0.8)).clone();
+  return currentWeaponMesh.localToWorld(muzzle);
+}
+
+function traceBallistic(origin, direction, speed, gravity, range, targets = []) {
+  const points = [origin.clone()];
+  const velocity = direction.clone().normalize().multiplyScalar(speed);
+  let position = origin.clone();
+  let traveled = 0;
+  let elapsed = 0;
+  const step = Math.min(1 / 30, 2.2 / speed);
+  const maxTime = Math.max(0.08, range / speed * 1.45);
+
+  while (traveled < range && elapsed < maxTime) {
+    const next = position.clone().addScaledVector(velocity, step);
+    velocity.y += gravity * step;
+    const segment = next.clone().sub(position);
+    const segmentLength = segment.length();
+    raycaster.set(position, segment.normalize());
+    raycaster.far = Math.min(segmentLength, range - traveled);
+    const hits = raycaster.intersectObjects(targets, false);
+    if (hits.length) {
+      points.push(hits[0].point.clone());
+      return { points, hit: hits[0], distance: traveled + hits[0].distance };
+    }
+    position = next;
+    traveled += segmentLength;
+    elapsed += step;
+    points.push(position.clone());
+  }
+  return { points, hit: null, distance: traveled };
+}
+
+function spawnBallisticVisual(trace, speed, kind = "bullet", audibleImpact = false) {
+  if (!trace?.points?.length || trace.points.length < 2) return;
+  const isArrow = kind === "arrow";
+  const mesh = new THREE.Mesh(
+    isArrow ? new THREE.BoxGeometry(0.035, 0.035, 0.52) : new THREE.SphereGeometry(0.045, 6, 6),
+    isArrow
+      ? new THREE.MeshStandardMaterial({ color: 0x765033, roughness: 0.72 })
+      : new THREE.MeshBasicMaterial({ color: 0xffe08a })
+  );
+  mesh.position.copy(trace.points[0]);
+  const trailGeometry = new THREE.BufferGeometry().setFromPoints([trace.points[0], trace.points[0]]);
+  const trail = new THREE.Line(trailGeometry, new THREE.LineBasicMaterial({
+    color: isArrow ? 0xc9aa79 : 0xffcf67, transparent: true, opacity: isArrow ? 0.42 : 0.82
+  }));
+  scene.add(mesh, trail);
+  activeBallistics.push({
+    mesh, trail, points: trace.points, speed, segment: 0, segmentOffset: 0,
+    previous: trace.points[0].clone(), impact: trace.hit?.point?.clone() || null,
+    audibleImpact, kind
+  });
+}
+
+function updateBallistics(delta) {
+  for (let i = activeBallistics.length - 1; i >= 0; i--) {
+    const shot = activeBallistics[i];
+    let movement = shot.speed * delta;
+    shot.previous.copy(shot.mesh.position);
+    while (movement > 0 && shot.segment < shot.points.length - 1) {
+      const start = shot.points[shot.segment];
+      const end = shot.points[shot.segment + 1];
+      const length = start.distanceTo(end);
+      const remaining = length - shot.segmentOffset;
+      if (movement < remaining) {
+        shot.segmentOffset += movement;
+        shot.mesh.position.lerpVectors(start, end, shot.segmentOffset / Math.max(0.001, length));
+        movement = 0;
+      } else {
+        movement -= remaining;
+        shot.segment += 1;
+        shot.segmentOffset = 0;
+        shot.mesh.position.copy(end);
+      }
+    }
+    const nextPoint = shot.points[Math.min(shot.segment + 1, shot.points.length - 1)];
+    if (nextPoint) shot.mesh.lookAt(nextPoint);
+    const tail = shot.trail.geometry.attributes.position;
+    tail.setXYZ(0, shot.previous.x, shot.previous.y, shot.previous.z);
+    tail.setXYZ(1, shot.mesh.position.x, shot.mesh.position.y, shot.mesh.position.z);
+    tail.needsUpdate = true;
+
+    if (shot.segment >= shot.points.length - 1) {
+      scene.remove(shot.mesh, shot.trail);
+      shot.mesh.geometry.dispose();
+      shot.mesh.material.dispose();
+      shot.trail.geometry.dispose();
+      shot.trail.material.dispose();
+      activeBallistics.splice(i, 1);
+      if (shot.impact) {
+        mapWorld?.showImpact?.(shot.impact, shot.kind === "arrow" ? 0.55 : 1);
+        if (shot.audibleImpact) playImpactSound(shot.impact, shot.kind !== "arrow");
+      }
+    }
+  }
+}
+
 function fireHitscan(weapon, slot) {
   scene.updateMatrixWorld(true);
   const hittable = gatherHittable();
@@ -536,16 +682,22 @@ function fireHitscan(weapon, slot) {
   let headshotFor = null;
   const pelletCount = weapon.pellets || 1;
   const spread = weapon.spread * (local.aiming ? 0.35 : 1);
+  const origin = muzzleWorldPosition();
+  const ballistic = ballisticForWeapon(weapon);
+  let broadcastDirection = null;
   for (let i = 0; i < pelletCount; i++) {
     const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
     dir.x += (Math.random() - 0.5) * spread;
     dir.y += (Math.random() - 0.5) * spread;
     dir.normalize();
-    raycaster.set(camera.getWorldPosition(new THREE.Vector3()), dir);
-    raycaster.far = weapon.range;
-    const hits = raycaster.intersectObjects([...hittable, ...vehicleHittable, ...solidMeshesForRaycast], false);
-    if (!hits.length) continue;
-    const hit = hits[0];
+    if (!broadcastDirection) broadcastDirection = dir.clone();
+    const targets = [...hittable, ...vehicleHittable, ...solidMeshesForRaycast];
+    const trace = traceBallistic(origin, dir, ballistic.speed, ballistic.gravity, weapon.range, targets);
+    if (weapon.kind !== "melee" && i < Math.min(3, pelletCount)) {
+      spawnBallisticVisual(trace, ballistic.speed, ballistic.kind, i === 0);
+    }
+    if (!trace.hit) continue;
+    const hit = trace.hit;
     const socketId = hit.object.userData.socketId;
     const vehicleId = hit.object.userData.vehicleId;
     const destructibleId = hit.object.userData.destructibleId;
@@ -562,7 +714,10 @@ function fireHitscan(weapon, slot) {
   pelletHits.forEach((count, id) => { if (count > bestHits) { bestHits = count; targetSocketId = id; } });
   socket.emit("match:shoot", {
     slot, targetSocketId, pelletHits: bestHits || 1,
-    hitZone: targetSocketId && headshotFor === targetSocketId ? "head" : "body"
+    hitZone: targetSocketId && headshotFor === targetSocketId ? "head" : "body",
+    origin: { x: origin.x, y: origin.y, z: origin.z },
+    direction: { x: broadcastDirection?.x || 0, y: broadcastDirection?.y || 0, z: broadcastDirection?.z || -1 },
+    ballistics: { speed: ballistic.speed, gravity: ballistic.gravity, range: weapon.range }
   });
   vehicleHits.forEach((count, vehicleId) => {
     socket.emit("vehicle:hit", { vehicleId, slot, pelletHits: count });
@@ -573,8 +728,6 @@ function fireHitscan(weapon, slot) {
 }
 
 function fireProjectile(weapon, slot, charge = 1) {
-  // Visual: flecha/virote viaja ate o ponto de impacto. O acerto e resolvido de imediato
-  // no servidor (mesma logica de hitscan), a viagem e apenas cosmetica.
   scene.updateMatrixWorld(true);
   const hittable = gatherHittable();
   const vehicleHittable = gatherVehicleHittable();
@@ -583,38 +736,29 @@ function fireProjectile(weapon, slot, charge = 1) {
   dir.x += (Math.random() - 0.5) * spread;
   dir.y += (Math.random() - 0.5) * spread;
   dir.normalize();
-  const origin = camera.getWorldPosition(new THREE.Vector3());
-  raycaster.set(origin, dir);
-  raycaster.far = weapon.range;
-  const hits = raycaster.intersectObjects([...hittable, ...vehicleHittable, ...solidMeshesForRaycast], false);
-  const endPoint = hits.length ? hits[0].point : origin.clone().add(dir.multiplyScalar(weapon.range));
-  const socketId = hits.length ? hits[0].object.userData.socketId : null;
-  const isHead = hits.length ? hits[0].object.userData.isHead : false;
-  const vehicleId = hits.length ? hits[0].object.userData.vehicleId : null;
-  const destructibleId = hits.length ? hits[0].object.userData.destructibleId : null;
-
-  const projMesh = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, 0.6), new THREE.MeshStandardMaterial({ color: 0x6b4c30 }));
-  projMesh.position.copy(origin);
-  projMesh.lookAt(endPoint);
-  scene.add(projMesh);
-  const projectileSpeed = weapon.projectileSpeed * (weapon.chargeable ? 0.45 + charge * 0.55 : 1);
-  const travelMs = Math.min(1200, Math.max(80, origin.distanceTo(endPoint) / projectileSpeed * 1000));
-  const start = performance.now();
-  (function step() {
-    const t = Math.min(1, (performance.now() - start) / travelMs);
-    projMesh.position.lerpVectors(origin, endPoint, t);
-    if (t < 1) requestAnimationFrame(step);
-    else scene.remove(projMesh);
-  })();
+  const origin = muzzleWorldPosition();
+  const ballistic = ballisticForWeapon(weapon, charge);
+  const trace = traceBallistic(origin, dir, ballistic.speed, ballistic.gravity, weapon.range, [
+    ...hittable, ...vehicleHittable, ...solidMeshesForRaycast
+  ]);
+  const hit = trace.hit;
+  const socketId = hit?.object.userData.socketId || null;
+  const isHead = Boolean(hit?.object.userData.isHead);
+  const vehicleId = hit?.object.userData.vehicleId || null;
+  const destructibleId = hit?.object.userData.destructibleId || null;
+  spawnBallisticVisual(trace, ballistic.speed, ballistic.kind, true);
 
   socket.emit("match:shoot", {
     slot, targetSocketId: socketId, pelletHits: 1,
     hitZone: socketId && isHead ? "head" : "body",
-    charge
+    charge,
+    origin: { x: origin.x, y: origin.y, z: origin.z },
+    direction: { x: dir.x, y: dir.y, z: dir.z },
+    ballistics: { speed: ballistic.speed, gravity: ballistic.gravity, range: weapon.range }
   });
   if (vehicleId) socket.emit("vehicle:hit", { vehicleId, slot, pelletHits: 1 });
-  if (destructibleId && hits[0]) {
-    socket.emit("world:hit", { id: destructibleId, damage: weapon.damage, x: hits[0].point.x, z: hits[0].point.z });
+  if (destructibleId && hit) {
+    socket.emit("world:hit", { id: destructibleId, damage: weapon.damage, x: hit.point.x, z: hit.point.z });
   }
 }
 
@@ -646,9 +790,14 @@ function renderVehicleFire({ type, origin, direction }) {
   const start = new THREE.Vector3(Number(origin?.x) || 0, Number(origin?.y) || 0, Number(origin?.z) || 0);
   const dir = new THREE.Vector3(Number(direction?.x) || 0, Number(direction?.y) || 0, Number(direction?.z) || -1).normalize();
   if (type === "cannon") {
-    createCannonProjectile(scene, start, dir, (point) => createExplosion(scene, point, 0xffa13d));
+    playWeaponSound("sniper_rifle", start);
+    createCannonProjectile(scene, start, dir, (point) => {
+      createExplosion(scene, point, 0xffa13d);
+      playExplosionSound(point);
+    });
     return;
   }
+  playWeaponSound("heavy_mg", start);
   const end = start.clone().addScaledVector(dir, 70);
   const geometry = new THREE.BufferGeometry().setFromPoints([start, end]);
   const tracer = new THREE.Line(geometry, new THREE.LineBasicMaterial({ color: 0xffe36e, transparent: true, opacity: 0.9 }));
@@ -667,6 +816,7 @@ function shoot(charge = 1) {
 
   local.lastShotAt[slot] = now;
   if (weapon.kind === "hitscan") playMuzzleFlash();
+  playWeaponSound(weapon.id);
   recoilKick();
 
   if (weapon.kind === "projectile") fireProjectile(weapon, slot, charge);
@@ -704,6 +854,7 @@ function reload() {
   if (!local.alive) return;
   const weapon = currentWeapon(local.slot);
   if (weapon.kind === "melee") return;
+  playReloadSound();
   local.reloadUntil[local.slot] = performance.now() + weapon.reloadMs;
   socket.emit("match:reload", { slot: local.slot });
   setTimeout(() => { local.ammo[local.slot] = weapon.magSize; updateAmmoHud(); }, weapon.reloadMs);
@@ -934,9 +1085,14 @@ function updateMovement(delta) {
   }
   camera.position.y = EYE_HEIGHT + local.jumpOffset - (crouching ? 0.35 : 0);
 
+  const now = performance.now();
+  if (moving && local.onGround && now - lastFootstepAt > (sprinting ? 260 : 390)) {
+    lastFootstepAt = now;
+    playFootstep(null, sprinting);
+  }
+
   if (local.mouseDown && weapon.auto) shoot();
 
-  const now = performance.now();
   if (now - lastMoveSent > MOVE_SEND_MS) {
     lastMoveSent = now;
     _readEuler.setFromQuaternion(camera.quaternion);
@@ -975,16 +1131,105 @@ function animateAvatars(delta) {
   });
 }
 
+function drawMinimap() {
+  const canvas = dom.minimapCanvas;
+  if (!canvas || !room) return;
+  const ctx = canvas.getContext("2d");
+  const size = canvas.width;
+  const half = MAP_HALF_SIZES[room.settings.mapId] || ARENA_HALF;
+  const point = (x, z) => ({ x: (x / half * 0.5 + 0.5) * size, y: (z / half * 0.5 + 0.5) * size });
+  const mapColors = { praia: "#d7bd68", cidade: "#555d64", floresta: "#375c36" };
+  ctx.clearRect(0, 0, size, size);
+  ctx.fillStyle = mapColors[room.settings.mapId] || "#3d4d46";
+  ctx.fillRect(0, 0, size, size);
+
+  if (room.settings.mapId === "cidade") {
+    ctx.fillStyle = "#272d32";
+    [-34, 0, 34].forEach((coordinate) => {
+      const vertical = point(coordinate - 6, 0).x;
+      const horizontal = point(0, coordinate - 6).y;
+      const width = 12 / (half * 2) * size;
+      ctx.fillRect(vertical, 0, width, size);
+      ctx.fillRect(0, horizontal, size, width);
+    });
+  } else if (room.settings.mapId === "praia") {
+    const waterStart = point(0, 27).y;
+    ctx.fillStyle = "#267ca8";
+    ctx.fillRect(0, waterStart, size, size - waterStart);
+    ctx.strokeStyle = "rgba(225,247,255,0.62)";
+    ctx.beginPath(); ctx.moveTo(0, waterStart); ctx.lineTo(size, waterStart); ctx.stroke();
+  } else {
+    ctx.strokeStyle = "rgba(171,193,153,0.24)";
+    ctx.lineWidth = 11;
+    ctx.strokeRect(5.5, 5.5, size - 11, size - 11);
+  }
+
+  if (activeWorldEvent?.type === "tsunami" && activeWorldEvent.phase === "surge") {
+    const z = half - (half * 2 - 8) * Math.max(0, Math.min(1, activeWorldEvent.progress || 0));
+    const wave = point(0, z).y;
+    ctx.strokeStyle = "#8de4ff"; ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.moveTo(0, wave); ctx.lineTo(size, wave); ctx.stroke();
+  }
+  if (activeWorldEvent?.type === "tornado" && activeWorldEvent.phase === "active") {
+    const progress = Math.max(0, Math.min(1, activeWorldEvent.progress || 0));
+    const marker = point(-70 + progress * 140, Math.sin(progress * Math.PI * 3) * 30);
+    ctx.strokeStyle = "#f2e7a5"; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(marker.x, marker.y, 6, 0, Math.PI * 2); ctx.stroke();
+  }
+
+  vehicles.forEach((entry) => {
+    if (entry.target.destroyed) return;
+    const marker = point(entry.target.x, entry.target.z);
+    ctx.fillStyle = entry.target.driverId ? "#ffd75d" : "rgba(245,245,245,0.7)";
+    ctx.fillRect(marker.x - 2.5, marker.y - 2.5, 5, 5);
+  });
+
+  const now = performance.now();
+  remotePlayers.forEach((avatar) => {
+    if (!avatar.alive || !avatar.root.visible) return;
+    const distance = Math.hypot(avatar.root.position.x - camera.position.x, avatar.root.position.z - camera.position.z);
+    const ally = room.settings.mode === "teams" && avatar.team === local.team;
+    if (!ally && distance > 24 && now > (avatar.revealedUntil || 0)) return;
+    const marker = point(avatar.root.position.x, avatar.root.position.z);
+    ctx.fillStyle = ally ? "#71a9ff" : "#ff6565";
+    ctx.beginPath(); ctx.arc(marker.x, marker.y, 3.5, 0, Math.PI * 2); ctx.fill();
+  });
+
+  const self = point(camera.position.x, camera.position.z);
+  _readEuler.setFromQuaternion(camera.quaternion);
+  const yaw = _readEuler.y;
+  ctx.save();
+  ctx.translate(self.x, self.y);
+  ctx.rotate(-yaw);
+  ctx.fillStyle = "#ffffff";
+  ctx.strokeStyle = "rgba(0,0,0,0.7)";
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(0, -7); ctx.lineTo(5, 5); ctx.lineTo(0, 3); ctx.lineTo(-5, 5); ctx.closePath();
+  ctx.fill(); ctx.stroke(); ctx.restore();
+
+  ctx.strokeStyle = "rgba(255,255,255,0.34)";
+  ctx.lineWidth = 2;
+  ctx.strokeRect(1, 1, size - 2, size - 2);
+}
+
 function render() {
   const delta = Math.min(clock.getDelta(), 0.05);
   if (room && room.status === "playing") {
     updateVehiclePresentation(delta);
     updateMovement(delta);
     updateGrenadesPhysics(delta);
+    updateBallistics(delta);
     animateAvatars(delta);
     mapWorld?.update(delta, activeWorldEvent);
     updateAbilityHud();
     updateWeaponPresentation(delta);
+    updateAudioListener(camera);
+    const drivenVehicle = vehicles.get(local.vehicleId)?.target;
+    updateVehicleEngine(Boolean(drivenVehicle), drivenVehicle?.speed || 0);
+    if (performance.now() - lastMinimapDrawAt > 80) {
+      lastMinimapDrawAt = performance.now();
+      drawMinimap();
+    }
   }
   renderer.render(scene, camera);
   requestAnimationFrame(render);
@@ -1062,6 +1307,7 @@ export function attachSocket(activeSocket) {
     dom.hudTopLeft.style.display = "block";
     dom.hudBottomRight.style.display = "block";
     dom.hudTopRight.style.display = "block";
+    dom.minimap.style.display = "block";
     dom.endScreen.hidden = true;
     dom.vehicleStatus.classList.remove("active");
     dom.eventAlert.classList.remove("active");
@@ -1104,6 +1350,7 @@ export function attachSocket(activeSocket) {
     const entry = vehicles.get(vehicleId);
     if (entry) entry.target.destroyed = true;
     createExplosion(scene, new THREE.Vector3(x, y + 1, z));
+    playExplosionSound({ x, y: y + 1, z });
   });
 
   socket.on("vehicle:fired", renderVehicleFire);
@@ -1134,12 +1381,24 @@ export function attachSocket(activeSocket) {
     avatar.setAnimation(animationForAvatar(avatar));
   });
 
-  socket.on("match:shot-fired", ({ socketId }) => {
+  socket.on("match:shot-fired", ({ socketId, weaponId, origin, direction, ballistics }) => {
     const avatar = remotePlayers.get(socketId);
     if (!avatar) return;
+    avatar.revealedUntil = performance.now() + 1800;
     const flash = new THREE.PointLight(0xffddaa, 5, 4);
     avatar.gun.add(flash);
     setTimeout(() => avatar.gun.remove(flash), 60);
+    const weapon = weaponById(weaponId);
+    const shotOrigin = new THREE.Vector3(Number(origin?.x) || avatar.root.position.x, Number(origin?.y) || avatar.root.position.y + 1.3, Number(origin?.z) || avatar.root.position.z);
+    playWeaponSound(weaponId, shotOrigin);
+    if (!weapon || weapon.kind === "melee") return;
+    const dir = new THREE.Vector3(Number(direction?.x) || 0, Number(direction?.y) || 0, Number(direction?.z) || -1).normalize();
+    const profile = ballisticForWeapon(weapon);
+    const speed = THREE.MathUtils.clamp(Number(ballistics?.speed) || profile.speed, 30, 220);
+    const gravity = THREE.MathUtils.clamp(Number(ballistics?.gravity) || profile.gravity, -20, 0);
+    const range = Math.min(weapon.range, Number(ballistics?.range) || weapon.range);
+    const trace = traceBallistic(shotOrigin, dir, speed, gravity, range, solidMeshesForRaycast);
+    spawnBallisticVisual(trace, speed, profile.kind, true);
   });
 
   socket.on("match:damage", ({ targetSocketId, health }) => {
@@ -1262,6 +1521,8 @@ export function attachSocket(activeSocket) {
 
   socket.on("match:grenadeDetonate", ({ grenadeId, x, z }) => {
     renderGrenadeExplosionVisual(grenadeId, x, z);
+    if (grenadeId === "explosive" || grenadeId === "impact") playExplosionSound({ x, y: 1, z });
+    else playImpactSound({ x, y: 1, z }, false);
   });
 
   socket.on("match:blinded", ({ durationMs }) => {

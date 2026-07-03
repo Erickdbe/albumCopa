@@ -44,8 +44,16 @@ function addMesh(world, geometry, color, x, y, z, options = {}) {
 function registerDestructible(world, id, mesh, kind, obstacle = null) {
   mesh.userData.destructibleId = id;
   mesh.traverse((child) => { child.userData.destructibleId = id; });
+  const materials = [];
+  mesh.traverse((child) => {
+    const childMaterials = Array.isArray(child.material) ? child.material : [child.material];
+    childMaterials.filter(Boolean).forEach((material) => {
+      if (material.color) materials.push({ material, color: material.color.clone() });
+    });
+  });
   world.destructibles.set(id, {
     id, mesh, kind, obstacle, destroyed: false, falling: false,
+    damageStage: 0, materials,
     velocity: new THREE.Vector3(), angularVelocity: new THREE.Vector3(),
     linkedMeshes: [], linkedObstacles: []
   });
@@ -294,7 +302,9 @@ function buildCidade(scene) {
     addLampPost(world,`city-lamp-${lampIndex++}`,n,7,Math.PI);
     if(Math.abs(n)>10){addLampPost(world,`city-lamp-${lampIndex++}`,-7,n,Math.PI/2);addLampPost(world,`city-lamp-${lampIndex++}`,7,n,-Math.PI/2);}
   });
-  [[-17,-17],[17,17],[-17,17],[17,-17]].forEach(([x,z])=>addSolidBox(world,x,z,8,2.3,0.7,0x555b62));
+  [[-17,-17],[17,17],[-17,17],[17,-17]].forEach(([x,z],index)=>addSolidBox(
+    world,x,z,8,2.3,0.7,0x555b62,0,{id:`city-barrier-${index}`,kind:"barrier"}
+  ));
   return world;
 }
 
@@ -340,6 +350,36 @@ function buildFloresta(scene) {
   return world;
 }
 
+function spawnDebris(world, position, count = 6, strength = 1, color = 0x777777) {
+  for (let i = 0; i < count; i++) {
+    const size = 0.08 + Math.random() * 0.18 * strength;
+    const mesh = new THREE.Mesh(
+      new THREE.BoxGeometry(size, size * (0.65 + Math.random()), size),
+      new THREE.MeshStandardMaterial({ color, roughness: 0.9, transparent: true })
+    );
+    mesh.position.copy(position).add(new THREE.Vector3(
+      (Math.random() - 0.5) * 0.8,
+      (Math.random() - 0.2) * 0.7,
+      (Math.random() - 0.5) * 0.8
+    ));
+    world.root.add(mesh);
+    world.animated.debris.push({
+      mesh,
+      velocity: new THREE.Vector3((Math.random() - 0.5) * 4, 1.5 + Math.random() * 4 * strength, (Math.random() - 0.5) * 4),
+      spin: new THREE.Vector3(Math.random() * 5, Math.random() * 5, Math.random() * 5),
+      life: 0.75 + Math.random() * 1.15
+    });
+  }
+}
+
+function objectImpactPosition(object) {
+  const bounds = new THREE.Box3().setFromObject(object.mesh);
+  if (bounds.isEmpty()) return object.mesh.getWorldPosition(new THREE.Vector3());
+  const center = bounds.getCenter(new THREE.Vector3());
+  center.y = Math.min(bounds.max.y, Math.max(0.35, center.y));
+  return center;
+}
+
 function updateDestructibles(world, delta) {
   world.destructibles.forEach((object)=>{
     if (!object.falling) return;
@@ -357,6 +397,28 @@ function updateDestructibles(world, delta) {
       object.falling = false;
     }
   });
+  for (let i = world.animated.debris.length - 1; i >= 0; i--) {
+    const debris = world.animated.debris[i];
+    debris.life -= delta;
+    debris.velocity.y -= 13 * delta;
+    debris.mesh.position.addScaledVector(debris.velocity, delta);
+    debris.mesh.rotation.x += debris.spin.x * delta;
+    debris.mesh.rotation.y += debris.spin.y * delta;
+    debris.mesh.rotation.z += debris.spin.z * delta;
+    if (debris.mesh.position.y < 0.04) {
+      debris.mesh.position.y = 0.04;
+      debris.velocity.y = Math.abs(debris.velocity.y) * 0.22;
+      debris.velocity.x *= 0.68;
+      debris.velocity.z *= 0.68;
+    }
+    debris.mesh.material.opacity = Math.min(1, Math.max(0, debris.life * 1.7));
+    if (debris.life <= 0) {
+      world.root.remove(debris.mesh);
+      debris.mesh.geometry.dispose();
+      debris.mesh.material.dispose();
+      world.animated.debris.splice(i, 1);
+    }
+  }
 }
 
 function updateWater(world, elapsed, event) {
@@ -398,8 +460,21 @@ function updateForest(world, elapsed, event) {
 function applyObjectState(world, state) {
   const object=world.destructibles.get(state?.id);
   if(!object||object.destroyed)return;
-  if(!state.destroyed&&state.stage<2)return;
-  object.destroyed=Boolean(state.destroyed);
+  const nextStage=Math.max(0,Math.min(3,Number(state.stage)||0));
+  if(nextStage<=object.damageStage&&!state.destroyed)return;
+  object.damageStage=nextStage;
+  const tint=nextStage===1?0.24:nextStage===2?0.48:0.68;
+  object.materials.forEach(({material,color})=>{
+    material.color.copy(color).lerp(new THREE.Color(0x252a2d),tint);
+    material.roughness=Math.min(1,(material.roughness||0.7)+nextStage*0.07);
+  });
+  const impactPosition=objectImpactPosition(object);
+  const debrisColor=object.materials[0]?.color?.getHex()||0x74787b;
+  spawnDebris(world,impactPosition,nextStage>=2?10:5,nextStage>=2?1.25:0.75,debrisColor);
+  if(object.kind==="lamp"&&nextStage<3)object.mesh.rotation.z=nextStage===1?0.08:0.24;
+  if(!state.destroyed&&nextStage<3)return;
+
+  object.destroyed=true;
   if(object.obstacle)object.obstacle.active=false;
   object.linkedObstacles.forEach((obstacle)=>{obstacle.active=false;});
   object.linkedMeshes.forEach((mesh)=>{mesh.visible=false;});
@@ -427,6 +502,7 @@ export function buildMap(mapId, scene) {
   const world=(BUILDERS[mapId]||BUILDERS.praia)(scene);
   world.update=(delta,event)=>updateWorld(world,delta,event);
   world.applyObjectState=(state)=>applyObjectState(world,state);
+  world.showImpact=(point,strength=1)=>spawnDebris(world,point,Math.max(2,Math.round(4*strength)),strength,0x9a927f);
   world.destructiblesNear=(x,z,radius)=>[...world.destructibles.values()].filter((object)=>{
     const dx=object.mesh.position.x-x,dz=object.mesh.position.z-z;return !object.destroyed&&Math.hypot(dx,dz)<=radius;
   });

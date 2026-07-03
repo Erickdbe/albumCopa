@@ -105,6 +105,20 @@
         <h2>Sala <span id="roomCodeLabel"></span></h2>
         <p id="roomSettingsLabel" class="room-settings"></p>
         <div id="roomPlayerList" class="room-player-list"></div>
+        <section class="room-customization" aria-label="Equipamento e mapa">
+          <div>
+            <h3>Classe</h3>
+            <div id="roomClassGrid" class="room-choice-grid"></div>
+          </div>
+          <div>
+            <h3>Arma secundaria</h3>
+            <div id="roomSecondaryGrid" class="room-choice-grid compact"></div>
+          </div>
+          <div>
+            <h3>Votacao de mapa</h3>
+            <div id="roomMapVoteGrid" class="room-choice-grid maps"></div>
+          </div>
+        </section>
         <div class="room-buttons">
           <button id="startMatchBtn" class="big-btn">Iniciar partida</button>
           <button id="leaveRoomBtn" class="link-btn">Sair da sala</button>
@@ -159,10 +173,17 @@
     <section class="hud hud-killfeed" id="killFeed"></section>
 
     <div id="deathScreen" class="death-screen" hidden>
-      <div>
+      <div class="death-card">
         <h2>Voce morreu</h2>
         <p id="deathBy"></p>
         <p class="respawn-note">Respawn em breve...</p>
+        <div class="respawn-loadout">
+          <label for="respawnClassSelect">Classe no proximo respawn</label>
+          <select id="respawnClassSelect"></select>
+          <label for="respawnSecondarySelect">Arma secundaria</label>
+          <select id="respawnSecondarySelect"></select>
+          <small id="respawnLoadoutStatus"></small>
+        </div>
       </div>
     </div>
 

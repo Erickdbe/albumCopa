@@ -29,7 +29,8 @@ const state = {
     mapId: "praia", durationMin: 10, scoreLimit: 50, mode: "ffa",
     moveSpeedMul: 1, jumpHeightMul: 1, grenadesEnabled: true, secondaryEnabled: true, maxPlayers: 16
   },
-  currentRoom: null
+  currentRoom: null,
+  currentRoomState: null
 };
 
 socket.on("connect_error", () => {
@@ -185,12 +186,14 @@ socket.on("room:error", (message) => { el("setupError").textContent = message ||
 
 socket.on("room:joined", (roomState) => {
   state.currentRoom = roomState.roomId;
+  state.currentRoomState = roomState;
   renderRoomScreen(roomState);
   showScreen("room");
 });
 
 socket.on("room:update", (roomState) => {
   if (roomState.roomId !== state.currentRoom) return;
+  state.currentRoomState = roomState;
   if (roomState.status === "waiting") renderRoomScreen(roomState);
 });
 
@@ -200,16 +203,64 @@ socket.on("room:player-left", () => {
 
 function renderRoomScreen(roomState) {
   const isHost = roomState.hostSocketId === socket.id;
+  const me = roomState.players.find((player) => player.socketId === socket.id);
+  if (me) {
+    state.classId = me.classId;
+    state.secondaryId = me.secondaryId || state.secondaryId;
+  }
+  const voteCounts = roomState.mapVotes || {};
+  const mostVotedMap = MAP_ORDER.reduce((best, mapId) => (
+    Number(voteCounts[mapId] || 0) > Number(voteCounts[best] || 0) ? mapId : best
+  ), roomState.settings.mapId);
   el("roomCodeLabel").textContent = roomState.roomId;
   el("roomSettingsLabel").textContent =
-    `${MAP_META[roomState.settings.mapId]?.name || roomState.settings.mapId} · ${roomState.settings.durationMin} min · ${roomState.settings.scoreLimit} pts · ${roomState.settings.mode === "teams" ? "Time x Time" : "Todos contra todos"}`;
+    `Mais votado: ${MAP_META[mostVotedMap]?.name || mostVotedMap} · ${roomState.settings.durationMin} min · ${roomState.settings.scoreLimit} pts · ${roomState.settings.mode === "teams" ? "Time x Time" : "Todos contra todos"}`;
   el("roomPlayerList").innerHTML = roomState.players.map((p) =>
     `<div class="room-player-row">
       <span>${p.username}${p.socketId === roomState.hostSocketId ? " (host)" : ""}</span>
       <span class="tag" style="color:${CLASSES[p.classId]?.color || "#fff"}">${CLASSES[p.classId]?.name || p.classId}</span>
+      <span class="tag">${SECONDARY_WEAPONS[p.secondaryId]?.name || "Pistola"}</span>
       ${p.team ? `<span class="tag team-${p.team}">${p.team === "red" ? "Vermelho" : "Azul"}</span>` : ""}
     </div>`
   ).join("");
+
+  el("roomClassGrid").innerHTML = CLASS_ORDER.map((classId) => {
+    const playerClass = CLASSES[classId];
+    return `<button class="room-choice${state.classId === classId ? " selected" : ""}" style="--choice-color:${playerClass.color}" data-room-class="${classId}">
+      <strong>${playerClass.name}</strong><small>${playerClass.primary.name}</small>
+    </button>`;
+  }).join("");
+  el("roomClassGrid").querySelectorAll("[data-room-class]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.classId = button.dataset.roomClass;
+      socket.emit("room:setClass", { classId: state.classId, secondaryId: state.secondaryId });
+    });
+  });
+
+  el("roomSecondaryGrid").innerHTML = SECONDARY_ORDER.map((weaponId) => {
+    const weapon = SECONDARY_WEAPONS[weaponId];
+    return `<button class="room-choice${state.secondaryId === weaponId ? " selected" : ""}" data-room-secondary="${weaponId}">
+      <strong>${weapon.name}</strong><small>${weapon.damage} dano</small>
+    </button>`;
+  }).join("");
+  el("roomSecondaryGrid").querySelectorAll("[data-room-secondary]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.secondaryId = button.dataset.roomSecondary;
+      socket.emit("room:setClass", { classId: state.classId, secondaryId: state.secondaryId });
+    });
+  });
+
+  const myVote = roomState.playerVotes?.[socket.id] || roomState.settings.mapId;
+  el("roomMapVoteGrid").innerHTML = MAP_ORDER.map((mapId) => {
+    const map = MAP_META[mapId];
+    return `<button class="room-choice${myVote === mapId ? " selected" : ""}" style="--choice-color:#${map.ground.toString(16).padStart(6, "0")}" data-map-vote="${mapId}">
+      <strong>${map.name}</strong><small>${Number(voteCounts[mapId] || 0)} voto(s)</small>
+    </button>`;
+  }).join("");
+  el("roomMapVoteGrid").querySelectorAll("[data-map-vote]").forEach((button) => {
+    button.addEventListener("click", () => socket.emit("room:voteMap", { mapId: button.dataset.mapVote }));
+  });
+
   el("startMatchBtn").hidden = !isHost;
   el("startMatchBtn").disabled = roomState.players.length < 2;
 }
@@ -218,6 +269,7 @@ el("startMatchBtn").addEventListener("click", () => socket.emit("room:start"));
 el("leaveRoomBtn").addEventListener("click", () => {
   socket.emit("room:leave");
   state.currentRoom = null;
+  state.currentRoomState = null;
   showScreen("setup");
 });
 

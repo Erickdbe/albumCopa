@@ -4,7 +4,7 @@ import { buildMap } from "./maps.js";
 import { buildWeaponModel, setBowChargeVisual } from "./weapon-models.js";
 import { buildVehicleModel, createCannonProjectile, createExplosion } from "./vehicle-models.js";
 import {
-  CLASSES, SECONDARY_WEAPONS, GRENADES, GRENADE_ORDER, GRENADE_CHARGES_PER_LIFE,
+  CLASSES, CLASS_ORDER, SECONDARY_WEAPONS, SECONDARY_ORDER, GRENADES, GRENADE_ORDER, GRENADE_CHARGES_PER_LIFE,
   ARENA_HALF, MAP_HALF_SIZES, VEHICLE_STATS, EYE_HEIGHT, GRAVITY, WALK_SPEED, SPRINT_MUL, CROUCH_MUL, MOVE_SEND_MS,
   HEADSHOT_MULTIPLIER
 } from "./config.js";
@@ -60,7 +60,8 @@ function cacheDom() {
     "scoreboardList", "killFeed", "deathScreen", "deathBy", "pauseHint", "hudTopLeft",
     "hudBottomRight", "hudTopRight", "abilityFill", "abilityName", "grenadeCount", "grenadeName",
     "matchTimer", "endScreen", "endResults", "gameRoot", "scopeOverlay", "chargeMeter", "chargeFill",
-    "eventAlert", "vehicleStatus", "vehicleHealthFill"
+    "eventAlert", "vehicleStatus", "vehicleHealthFill", "respawnClassSelect", "respawnSecondarySelect",
+    "respawnLoadoutStatus"
   ].forEach((id) => { dom[id] = document.getElementById(id); });
 }
 
@@ -106,12 +107,14 @@ function ensureScene() {
   document.addEventListener("mousedown", onMouseDown);
   document.addEventListener("mouseup", onMouseUp);
   dom.gameCanvas.addEventListener("click", () => { if (local.alive) controls.lock(); });
+  dom.pauseHint.addEventListener("click", () => { if (local.alive) controls.lock(); });
   controls.addEventListener("lock", () => { dom.pauseHint.hidden = true; });
   controls.addEventListener("unlock", () => {
     setAiming(false);
     cancelCharge();
     if (local.alive) dom.pauseHint.hidden = false;
   });
+  setupRespawnLoadoutControls();
 
   requestAnimationFrame(render);
 }
@@ -286,7 +289,7 @@ function buildAvatar(p) {
     hittable: [torso, head, leftArm, rightArm, leftLeg, rightLeg],
     headMesh: head,
     walkPhase: Math.random() * 10,
-    username: p.username, kills: p.kills || 0, deaths: p.deaths || 0, team: p.team
+    username: p.username, classId: p.classId, kills: p.kills || 0, deaths: p.deaths || 0, team: p.team
   };
 }
 function spawnOrUpdateRemote(p) {
@@ -440,6 +443,31 @@ function pushKillFeed(text) {
   row.textContent = text;
   dom.killFeed.appendChild(row);
   setTimeout(() => row.remove(), 4200);
+}
+
+function setupRespawnLoadoutControls() {
+  dom.respawnClassSelect.innerHTML = CLASS_ORDER.map((classId) => (
+    `<option value="${classId}">${CLASSES[classId].name} - ${CLASSES[classId].primary.name}</option>`
+  )).join("");
+  dom.respawnSecondarySelect.innerHTML = SECONDARY_ORDER.map((weaponId) => (
+    `<option value="${weaponId}">${SECONDARY_WEAPONS[weaponId].name}</option>`
+  )).join("");
+  const sendLoadout = () => {
+    if (local.alive || !socket) return;
+    socket.emit("player:setLoadout", {
+      classId: dom.respawnClassSelect.value,
+      secondaryId: dom.respawnSecondarySelect.value
+    });
+    dom.respawnLoadoutStatus.textContent = "Alteracao preparada";
+  };
+  dom.respawnClassSelect.addEventListener("change", sendLoadout);
+  dom.respawnSecondarySelect.addEventListener("change", sendLoadout);
+}
+
+function showRespawnLoadout() {
+  dom.respawnClassSelect.value = local.classId;
+  dom.respawnSecondarySelect.value = local.secondaryId;
+  dom.respawnLoadoutStatus.textContent = "";
 }
 
 /* ── Tiro ───────────────────────────────────────────────────────────── */
@@ -1063,11 +1091,19 @@ export function attachSocket(activeSocket) {
     else { const a = remotePlayers.get(killerId); if (a) { a.kills += 1; a.score = (a.score || 0) + 1; } }
     if (victimId === selfId) {
       local.alive = false; local.health = 0;
+      local.vehicleId = null;
+      local.mouseDown = false;
+      local.externalVelocity.set(0, 0, 0);
+      local.pendingFallDamage = 0;
+      weaponRig.visible = true;
+      dom.vehicleStatus.classList.remove("active");
       setAiming(false);
       cancelCharge();
       updateHealthHud();
       dom.deathBy.textContent = killerName ? `Eliminado por ${killerName}` : "";
+      showRespawnLoadout();
       dom.deathScreen.hidden = false;
+      dom.pauseHint.hidden = true;
       controls.unlock();
     } else {
       const a = remotePlayers.get(victimId);
@@ -1076,20 +1112,47 @@ export function attachSocket(activeSocket) {
     updateScoreboard();
   });
 
-  socket.on("match:respawn", ({ socketId, x, y, z, yaw, health }) => {
+  socket.on("player:loadoutPending", ({ classId, secondaryId }) => {
+    if (classId) dom.respawnClassSelect.value = classId;
+    if (secondaryId) dom.respawnSecondarySelect.value = secondaryId;
+    dom.respawnLoadoutStatus.textContent = "Equipamento confirmado";
+  });
+
+  socket.on("match:respawn", ({ socketId, x, y, z, yaw, health, classId, secondaryId, team }) => {
     if (socketId === selfId) {
       local.alive = true; local.health = health;
+      local.vehicleId = null;
+      local.mouseDown = false;
+      local.externalVelocity.set(0, 0, 0);
+      local.pendingFallDamage = 0;
+      local.classId = classId || local.classId;
+      local.secondaryId = secondaryId || local.secondaryId;
+      local.team = team || local.team;
+      local.slot = "primary";
       local.jumpOffset = y; local.verticalVelocity = 0;
+      local.onGround = true;
       camera.position.set(x, EYE_HEIGHT + y, z);
       camera.quaternion.setFromEuler(new THREE.Euler(0, yaw, 0, "YXZ"));
       local.ammo.primary = CLASSES[local.classId].primary.magSize;
       local.ammo.secondary = SECONDARY_WEAPONS[local.secondaryId].magSize;
       local.grenadeCharges = Object.fromEntries(GRENADE_ORDER.map((id) => [id, GRENADE_CHARGES_PER_LIFE]));
+      weaponRig.visible = true;
+      setViewWeapon("#4c5a3a", CLASSES[local.classId].primary.id);
+      dom.vehicleStatus.classList.remove("active");
       updateHealthHud(); updateAmmoHud(); updateGrenadeHud();
       dom.deathScreen.hidden = true;
+      dom.pauseHint.textContent = "Clique para voltar a partida";
+      dom.pauseHint.hidden = false;
     } else {
       const a = remotePlayers.get(socketId);
-      if (a) { a.root.visible = true; a.root.position.set(x, y, z); }
+      if (a && classId && a.classId !== classId) {
+        const username = a.username;
+        removeAvatar(socketId);
+        spawnOrUpdateRemote({ socketId, username, classId, secondaryId, team, x, y, z, yaw, alive: true });
+      } else if (a) {
+        a.root.visible = true;
+        a.root.position.set(x, y, z);
+      }
     }
   });
 

@@ -114,13 +114,16 @@ function createRoomsModule(io) {
       chargeStartedAt: 0,
       vehicleId: null,
       lastWorldForceAt: 0,
-      lastEnvironmentHitAt: 0
+      lastEnvironmentHitAt: 0,
+      secondaryId: "pistol_common",
+      pendingClassId: null,
+      pendingSecondaryId: null
     };
   }
 
   function publicPlayer(p) {
     return {
-      socketId: p.socketId, username: p.username, classId: p.classId, team: p.team,
+      socketId: p.socketId, username: p.username, classId: p.classId, secondaryId: p.secondaryId, team: p.team,
       x: p.x, y: p.y, z: p.z, yaw: p.yaw, pitch: p.pitch,
       moving: p.moving, sprinting: p.sprinting, jumping: p.jumping, crouching: p.crouching,
       health: p.health, alive: p.alive, kills: p.kills, deaths: p.deaths, score: p.score,
@@ -129,12 +132,20 @@ function createRoomsModule(io) {
   }
 
   function serializeRoom(room) {
+    const mapVotes = Object.fromEntries(MAP_IDS.map((mapId) => [mapId, 0]));
+    const playerVotes = {};
+    room.mapVotes?.forEach((mapId, socketId) => {
+      if (MAP_IDS.includes(mapId)) mapVotes[mapId] += 1;
+      playerVotes[socketId] = mapId;
+    });
     return {
       roomId: room.roomId,
       status: room.status,
       settings: room.settings,
       hostSocketId: room.players[0]?.socketId || null,
       players: room.players.map(publicPlayer),
+      mapVotes,
+      playerVotes,
       vehicles: (room.vehicles || []).map(publicVehicle),
       worldEvent: room.worldEvent || null,
       endsAt: room.endsAt || null
@@ -150,20 +161,38 @@ function createRoomsModule(io) {
     shuffled.forEach((p, i) => { p.team = i % 2 === 0 ? "red" : "blue"; });
   }
 
-  function respawnPlayer(room, player) {
+  function selectVotedMap(room) {
+    const counts = Object.fromEntries(MAP_IDS.map((mapId) => [mapId, 0]));
+    room.mapVotes?.forEach((mapId) => {
+      if (MAP_IDS.includes(mapId)) counts[mapId] += 1;
+    });
+    const highest = Math.max(...Object.values(counts));
+    if (highest <= 0) return room.settings.mapId;
+    const tied = MAP_IDS.filter((mapId) => counts[mapId] === highest);
+    const hostVote = room.mapVotes?.get(room.players[0]?.socketId);
+    return tied.includes(hostVote) ? hostVote : tied[0];
+  }
+
+  function respawnPlayer(room, player, emit = true) {
     if (player.vehicleId) {
-      const vehicle = room.vehicles?.find((item) => item.id === player.vehicleId);
-      if (vehicle?.driverId === player.socketId) vehicle.driverId = null;
-      player.vehicleId = null;
+      releaseVehicle(room, player, "respawn");
     }
+    if (player.pendingClassId) player.classId = player.pendingClassId;
+    if (player.pendingSecondaryId) player.secondaryId = player.pendingSecondaryId;
+    player.pendingClassId = null;
+    player.pendingSecondaryId = null;
     const spawn = pickSpawn(room.settings.mapId, room.settings.mode, player.team);
     player.x = spawn.x; player.y = spawn.y; player.z = spawn.z; player.yaw = spawn.yaw; player.pitch = 0;
     player.health = 100;
     player.alive = true;
     player.grenadeCharges = Object.fromEntries(Object.keys(GRENADES).map((id) => [id, GRENADE_CHARGES_PER_LIFE]));
-    io.to(room.roomId).emit("match:respawn", {
-      socketId: player.socketId, x: player.x, y: player.y, z: player.z, yaw: player.yaw, health: player.health
-    });
+    if (emit) {
+      io.to(room.roomId).emit("match:respawn", {
+        socketId: player.socketId, x: player.x, y: player.y, z: player.z, yaw: player.yaw, health: player.health,
+        classId: player.classId, secondaryId: player.secondaryId, team: player.team
+      });
+      emitRoomUpdate(room);
+    }
   }
 
   function endMatch(room, reason) {
@@ -211,6 +240,7 @@ function createRoomsModule(io) {
     if (target.health <= 0) {
       target.alive = false;
       target.deaths += 1;
+      if (target.vehicleId) releaseVehicle(room, target, "death");
       if (shooter && shooter.socketId !== target.socketId) {
         shooter.kills += 1;
         const friendlyFire = room.settings.mode === "teams" && shooter.team === target.team;
@@ -458,6 +488,7 @@ function createRoomsModule(io) {
     if (liveSocket) liveSocket.leave(room.roomId);
 
     room.players = room.players.filter((p) => p.socketId !== socketId);
+    room.mapVotes?.delete(socketId);
     io.to(room.roomId).emit("room:player-left", { socketId, reason });
 
     if (!room.players.length) {
@@ -490,6 +521,7 @@ function createRoomsModule(io) {
         status: "waiting",
         settings: normalizeSettings(settings),
         players: [],
+        mapVotes: new Map(),
         vehicles: [],
         worldObjects: new Map(),
         worldEvent: null,
@@ -500,6 +532,7 @@ function createRoomsModule(io) {
       const player = makePlayer(socket, classId);
       player.secondaryId = SECONDARY_WEAPONS[secondaryId] ? secondaryId : "pistol_common";
       room.players.push(player);
+      room.mapVotes.set(socket.id, room.settings.mapId);
       rooms.set(room.roomId, room);
       socket.join(room.roomId);
 
@@ -531,6 +564,7 @@ function createRoomsModule(io) {
       const player = makePlayer(socket, classId);
       player.secondaryId = SECONDARY_WEAPONS[secondaryId] ? secondaryId : "pistol_common";
       room.players.push(player);
+      room.mapVotes.set(socket.id, room.settings.mapId);
       socket.join(room.roomId);
 
       socket.emit("room:joined", serializeRoom(room));
@@ -548,6 +582,25 @@ function createRoomsModule(io) {
       emitRoomUpdate(room);
     });
 
+    socket.on("room:voteMap", ({ mapId } = {}) => {
+      const room = findRoomBySocket(socket.id);
+      if (!room || room.status !== "waiting" || !MAP_IDS.includes(mapId)) return;
+      room.mapVotes.set(socket.id, mapId);
+      emitRoomUpdate(room);
+    });
+
+    socket.on("player:setLoadout", ({ classId, secondaryId } = {}) => {
+      const room = findRoomBySocket(socket.id);
+      const player = room?.players.find((item) => item.socketId === socket.id);
+      if (!room || room.status !== "playing" || !player || player.alive) return;
+      if (classId) player.pendingClassId = normalizeClassId(classId);
+      if (secondaryId && SECONDARY_WEAPONS[secondaryId]) player.pendingSecondaryId = secondaryId;
+      socket.emit("player:loadoutPending", {
+        classId: player.pendingClassId || player.classId,
+        secondaryId: player.pendingSecondaryId || player.secondaryId
+      });
+    });
+
     socket.on("room:setSettings", ({ settings } = {}) => {
       const room = findRoomBySocket(socket.id);
       if (!room || room.status !== "waiting" || room.players[0]?.socketId !== socket.id) return;
@@ -559,11 +612,12 @@ function createRoomsModule(io) {
     socket.on("room:start", () => {
       const room = findRoomBySocket(socket.id);
       if (!room || room.status !== "waiting" || room.players[0]?.socketId !== socket.id) return;
+      room.settings.mapId = selectVotedMap(room);
       if (!MAP_IDS.includes(room.settings.mapId)) room.settings.mapId = "praia";
       if (room.settings.mode === "teams") assignTeams(room);
       room.players.forEach((p) => {
         p.kills = 0; p.deaths = 0; p.score = 0;
-        respawnPlayer(room, p);
+        respawnPlayer(room, p, false);
       });
       room.status = "playing";
       room.endsAt = Date.now() + room.settings.durationMin * 60000;

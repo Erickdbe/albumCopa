@@ -74,15 +74,34 @@ html, body {
 .mini-btn { background: #ffd23f; border: none; border-radius: 6px; padding: 2px 8px; cursor: pointer; font-weight: 700; margin-left: 6px; }
 
 /* ── Sala de espera ─────────────────────────────────────────────────── */
-.room-card { width: min(520px, 92vw); background: rgba(15,18,26,0.9); border: 1px solid rgba(120,160,255,0.25); border-radius: 16px; padding: 26px 28px; }
+.screen-room { align-items: flex-start; }
+.room-card { width: min(920px, 94vw); max-height: calc(100vh - 48px); overflow-y: auto; background: rgba(15,18,26,0.9); border: 1px solid rgba(120,160,255,0.25); border-radius: 8px; padding: 24px 26px; }
 .room-card h2 { margin: 0 0 4px; color: #ffd23f; }
 .room-card h2 span { color: #fff; }
 .room-settings { color: #9aa8c2; font-size: 0.85rem; margin-bottom: 16px; }
 .room-player-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 18px; max-height: 260px; overflow-y: auto; }
-.room-player-row { display: flex; justify-content: space-between; background: rgba(255,255,255,0.05); border-radius: 8px; padding: 8px 10px; font-size: 0.85rem; }
+.room-player-row { display: grid; grid-template-columns: minmax(110px, 1fr) repeat(3, auto); align-items: center; gap: 8px; background: rgba(255,255,255,0.05); border-radius: 8px; padding: 8px 10px; font-size: 0.85rem; }
 .tag { font-size: 0.72rem; padding: 2px 6px; border-radius: 6px; background: rgba(255,255,255,0.08); }
 .team-red { color: #ff8080; } .team-blue { color: #80b0ff; }
 .room-buttons { display: flex; flex-direction: column; gap: 8px; }
+.room-customization { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; margin: 4px 0 20px; }
+.room-customization h3 { margin: 0 0 8px; color: #9fb8de; font-size: 0.78rem; text-transform: uppercase; }
+.room-choice-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.room-choice-grid.compact, .room-choice-grid.maps { grid-template-columns: 1fr; }
+.room-choice {
+  min-height: 38px; padding: 7px 8px; border: 1px solid rgba(255,255,255,0.12); border-radius: 6px;
+  background: rgba(255,255,255,0.05); color: #e8edf5; cursor: pointer; text-align: left;
+}
+.room-choice:hover { background: rgba(255,255,255,0.1); }
+.room-choice.selected { border-color: var(--choice-color, #ffd23f); background: rgba(255,255,255,0.14); }
+.room-choice strong { display: block; font-size: 0.78rem; }
+.room-choice small { display: block; margin-top: 2px; color: #9aa8c2; font-size: 0.66rem; }
+
+@media (max-width: 760px) {
+  .room-customization { grid-template-columns: 1fr; }
+  .room-choice-grid, .room-choice-grid.compact, .room-choice-grid.maps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .room-player-row { grid-template-columns: minmax(100px, 1fr) auto; }
+}
 
 /* ── Jogo (HUD) ─────────────────────────────────────────────────────── */
 #gameCanvas { display: block; width: 100vw; height: 100vh; }
@@ -166,6 +185,11 @@ html, body {
 .death-screen { position: absolute; inset: 0; background: rgba(80,0,0,0.35); display: flex; align-items: center; justify-content: center; text-align: center; z-index: 15; }
 .death-screen h2 { margin: 0 0 6px; font-size: 2.2rem; color: #ff6b6b; }
 .respawn-note { color: #d8c7c7; font-size: 0.85rem; }
+.death-card { width: min(390px, 90vw); padding: 22px; background: rgba(15,18,25,0.92); border: 1px solid rgba(255,107,107,0.45); border-radius: 8px; }
+.respawn-loadout { display: grid; gap: 6px; margin-top: 18px; text-align: left; }
+.respawn-loadout label { color: #bac6d8; font-size: 0.72rem; text-transform: uppercase; }
+.respawn-loadout select { width: 100%; padding: 8px 10px; border: 1px solid rgba(255,255,255,0.18); border-radius: 5px; background: #202631; color: #fff; }
+.respawn-loadout small { min-height: 1em; color: #8bd450; text-align: center; }
 
 .end-screen { position: absolute; inset: 0; background: rgba(6,8,14,0.85); display: flex; align-items: center; justify-content: center; z-index: 20; }
 .end-card { width: min(480px, 90vw); background: rgba(15,18,26,0.95); border-radius: 16px; padding: 24px 28px; text-align: center; }

@@ -18,6 +18,11 @@ const RESPAWN_MS = 3500;
 const RANGE_TOLERANCE = 1.15;
 const WORLD_TICK_MS = 50;
 const WORLD_EVENT_TIME_SCALE = Math.max(0.02, Number(process.env.ARENA_EVENT_TIME_SCALE) || 1);
+const EMOTES = {
+  dance: { animation: "dance", speed: 1, durationMs: 6200 },
+  dance_fast: { animation: "dance", speed: 1.35, durationMs: 4800 },
+  dance_slow: { animation: "dance", speed: 0.72, durationMs: 7600 }
+};
 
 function normalizeClassId(value) {
   return CLASS_IDS.includes(value) ? value : "rifle";
@@ -116,6 +121,7 @@ function createRoomsModule(io) {
       lastWorldForceAt: 0,
       lastEnvironmentHitAt: 0,
       lastEmoteAt: 0,
+      emoteId: null,
       secondaryId: "pistol_common",
       pendingClassId: null,
       pendingSecondaryId: null
@@ -255,7 +261,13 @@ function createRoomsModule(io) {
       setTimeout(() => { if (rooms.has(room.roomId) && !target.disconnected) respawnPlayer(room, target); }, RESPAWN_MS);
       checkScoreLimit(room);
     } else {
-      io.to(room.roomId).emit("match:damage", { targetSocketId: target.socketId, health: target.health, byId: shooter?.socketId || null });
+      io.to(room.roomId).emit("match:damage", {
+        targetSocketId: target.socketId,
+        health: target.health,
+        byId: shooter?.socketId || null,
+        damage,
+        headshot: Boolean(isHeadshot)
+      });
     }
   }
 
@@ -268,6 +280,12 @@ function createRoomsModule(io) {
       player.x = vehicle.x + Math.cos(vehicle.yaw) * 2.2;
       player.y = Math.max(0, vehicle.y);
       player.z = vehicle.z - Math.sin(vehicle.yaw) * 2.2;
+      io.to(room.roomId).emit("vehicle:occupied", { vehicleId: vehicle.id, driverId: null });
+      io.to(room.roomId).volatile.emit("match:player-move", {
+        socketId: player.socketId, x: player.x, y: player.y, z: player.z,
+        yaw: player.yaw, pitch: player.pitch,
+        moving: false, sprinting: false, jumping: false, crouching: false
+      });
     }
     io.to(player.socketId).emit("vehicle:exited", { reason, x: player.x, y: player.y, z: player.z });
     return vehicle;
@@ -642,7 +660,12 @@ function createRoomsModule(io) {
       vehicle.driverId = socket.id;
       vehicle.input = { throttle: 0, steer: 0, lift: 0 };
       player.vehicleId = vehicle.id;
+      if (player.emoteId) {
+        player.emoteId = null;
+        io.to(room.roomId).emit("match:emote-stop", { socketId: socket.id });
+      }
       player.x = vehicle.x; player.y = vehicle.y; player.z = vehicle.z;
+      player.moving = false; player.sprinting = false; player.jumping = false; player.crouching = false;
       io.to(room.roomId).emit("vehicle:occupied", { vehicleId: vehicle.id, driverId: socket.id });
       socket.emit("vehicle:entered", publicVehicle(vehicle));
     });
@@ -766,6 +789,10 @@ function createRoomsModule(io) {
       player.sprinting = Boolean(state.sprinting);
       player.jumping = Boolean(state.jumping);
       player.crouching = Boolean(state.crouching);
+      if ((player.moving || player.jumping) && player.emoteId) {
+        player.emoteId = null;
+        io.to(room.roomId).emit("match:emote-stop", { socketId: socket.id });
+      }
       socket.to(room.roomId).volatile.emit("match:player-move", {
         socketId: socket.id, x: player.x, y: player.y, z: player.z, yaw: player.yaw, pitch: player.pitch,
         moving: player.moving, sprinting: player.sprinting, jumping: player.jumping, crouching: player.crouching
@@ -800,7 +827,7 @@ function createRoomsModule(io) {
       const isAbilityFireRate = shooter.abilityActive && now < shooter.abilityExpiresAt && CLASSES[shooter.classId].ability.id === abilityFireRateBoost(shooter.classId);
       const fireRate = isAbilityFireRate ? weapon.fireRateMs * 0.5 : weapon.fireRateMs;
       if (now < (shooter.reloadUntil[slot] || 0)) return;
-      if (now - (shooter.lastShotAt[slot] || 0) < fireRate) return;
+      if (now - (shooter.lastShotAt[slot] || 0) < fireRate * 0.88) return;
 
       shooter.lastShotAt[slot] = now;
       const fallbackOrigin = { x: shooter.x, y: shooter.y + 1.45, z: shooter.z };
@@ -888,11 +915,26 @@ function createRoomsModule(io) {
     socket.on("match:emote", ({ emote } = {}) => {
       const room = findRoomBySocket(socket.id);
       const player = room?.players.find((p) => p.socketId === socket.id);
-      if (!room || room.status !== "playing" || !player?.alive || player.vehicleId || emote !== "dance") return;
+      const profile = EMOTES[emote];
+      if (!room || room.status !== "playing" || !player?.alive || player.vehicleId || !profile) return;
       const now = Date.now();
       if (now - player.lastEmoteAt < 1200) return;
       player.lastEmoteAt = now;
-      io.to(room.roomId).emit("match:emote", { socketId: socket.id, emote: "dance", durationMs: 5200 });
+      player.emoteId = emote;
+      io.to(room.roomId).emit("match:emote", { socketId: socket.id, emote, ...profile });
+      setTimeout(() => {
+        if (player.emoteId !== emote) return;
+        player.emoteId = null;
+        io.to(room.roomId).emit("match:emote-stop", { socketId: socket.id });
+      }, profile.durationMs);
+    });
+
+    socket.on("match:emote-stop", () => {
+      const room = findRoomBySocket(socket.id);
+      const player = room?.players.find((p) => p.socketId === socket.id);
+      if (!room || !player?.emoteId) return;
+      player.emoteId = null;
+      io.to(room.roomId).emit("match:emote-stop", { socketId: socket.id });
     });
 
     socket.on("match:grenadeThrow", ({ grenadeId, x, y, z, dirX, dirY, dirZ } = {}) => {

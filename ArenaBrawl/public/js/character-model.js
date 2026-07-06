@@ -129,9 +129,15 @@ export async function attachAnimatedCharacter(avatar) {
   avatar.setAnimation(avatar.desiredAnimation || "idle", true);
 }
 
-export function setCharacterAnimation(avatar, name, immediate = false) {
+export function setCharacterAnimation(avatar, name, immediate = false, speed = null) {
   const next = avatar.actions?.[name] || avatar.actions?.idle;
-  if (!next || avatar.animationName === name) return;
+  if (!next) return;
+  const effectiveSpeed = Number.isFinite(Number(speed)) ? Number(speed) : (name === "death" ? 2.8 : 1);
+  next.setEffectiveTimeScale(effectiveSpeed);
+  if (avatar.animationName === name) {
+    if (!next.isRunning()) next.reset().play();
+    return;
+  }
   const previous = avatar.actions?.[avatar.animationName];
   if (immediate) {
     if (previous && previous !== next) previous.stop();

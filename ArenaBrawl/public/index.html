@@ -131,6 +131,7 @@
   <div id="gameRoot" style="display:none">
     <canvas id="gameCanvas"></canvas>
     <div class="crosshair" id="crosshair" aria-hidden="true"></div>
+    <div class="hit-marker" id="hitMarker" aria-hidden="true"></div>
     <div class="scope-overlay" id="scopeOverlay" aria-hidden="true">
       <div class="scope-ring"></div>
     </div>
@@ -176,6 +177,14 @@
     </section>
 
     <section class="hud hud-killfeed" id="killFeed"></section>
+
+    <div id="danceHub" class="dance-hub" hidden>
+      <div class="dance-panel" role="dialog" aria-modal="true" aria-label="Dancas">
+        <button id="closeDanceHub" class="dance-close" type="button" aria-label="Fechar">x</button>
+        <h2>Dancas</h2>
+        <div id="danceGrid" class="dance-grid"></div>
+      </div>
+    </div>
 
     <div id="deathScreen" class="death-screen" hidden>
       <div class="death-card">

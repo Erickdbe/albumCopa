@@ -18,6 +18,12 @@ import {
 const STEP_TOLERANCE = 0.65;
 const JUMP_HEIGHT_BASE = 1.5; // altura de pulo de referencia (multiplicada por jumpHeightMul)
 const DEFAULT_FOV = 78;
+const LADDER_SPEED = 4.8;
+const DANCE_OPTIONS = {
+  dance: { label: "Passinho", speed: 1 },
+  dance_fast: { label: "Energia", speed: 1.35 },
+  dance_slow: { label: "Flow", speed: 0.72 }
+};
 
 let scene, camera, renderer, controls, clock, raycaster;
 let obstacles = [];
@@ -38,10 +44,13 @@ const activeBallistics = [];
 const _readEuler = new THREE.Euler(0, 0, 0, "YXZ");
 let lastFootstepAt = 0;
 let lastMinimapDrawAt = 0;
+let danceHubOpen = false;
+let hitMarkerTimer = null;
 
 const local = {
   x: 0, y: 0, z: 0, jumpOffset: 0, verticalVelocity: 0, onGround: true,
   health: 100, alive: true, classId: "rifle", secondaryId: "pistol_common",
+  kills: 0, deaths: 0, score: 0, team: null,
   slot: "primary",
   ammo: { primary: 0, secondary: 0 },
   reloadUntil: { primary: 0, secondary: 0 },
@@ -58,7 +67,9 @@ const local = {
   vehicleId: null,
   externalVelocity: new THREE.Vector3(),
   pendingFallDamage: 0,
-  lastVehicleShotAt: 0
+  lastVehicleShotAt: 0,
+  emoteActive: false,
+  climbing: false
 };
 
 /* ── DOM ────────────────────────────────────────────────────────────── */
@@ -70,7 +81,7 @@ function cacheDom() {
     "hudBottomRight", "hudTopRight", "abilityFill", "abilityName", "grenadeCount", "grenadeName",
     "matchTimer", "endScreen", "endResults", "gameRoot", "scopeOverlay", "chargeMeter", "chargeFill",
     "eventAlert", "vehicleStatus", "vehicleHealthFill", "respawnClassSelect", "respawnSecondarySelect",
-    "respawnLoadoutStatus", "minimap", "minimapCanvas"
+    "respawnLoadoutStatus", "minimap", "minimapCanvas", "hitMarker", "danceHub", "danceGrid", "closeDanceHub"
   ].forEach((id) => { dom[id] = document.getElementById(id); });
 }
 
@@ -115,15 +126,16 @@ function ensureScene() {
   window.addEventListener("keyup", (e) => { keys[e.code] = false; });
   document.addEventListener("mousedown", (event) => { unlockAudio(); onMouseDown(event); });
   document.addEventListener("mouseup", onMouseUp);
-  dom.gameCanvas.addEventListener("click", () => { if (local.alive) controls.lock(); });
-  dom.pauseHint.addEventListener("click", () => { if (local.alive) controls.lock(); });
+  dom.gameCanvas.addEventListener("click", () => { if (local.alive && !danceHubOpen) controls.lock(); });
+  dom.pauseHint.addEventListener("click", () => { if (local.alive && !danceHubOpen) controls.lock(); });
   controls.addEventListener("lock", () => { dom.pauseHint.hidden = true; });
   controls.addEventListener("unlock", () => {
     setAiming(false);
     cancelCharge();
-    if (local.alive) dom.pauseHint.hidden = false;
+    if (local.alive && !danceHubOpen) dom.pauseHint.hidden = false;
   });
   setupRespawnLoadoutControls();
+  setupDanceHub();
 
   requestAnimationFrame(render);
 }
@@ -174,6 +186,16 @@ function isBlockedAt(x, z, feetY) {
     }
   }
   return false;
+}
+
+function findLadderAt(x, z, feetY) {
+  const ladders = mapWorld?.ladders || [];
+  return ladders.find((ladder) => (
+    x >= ladder.minX && x <= ladder.maxX &&
+    z >= ladder.minZ && z <= ladder.maxZ &&
+    feetY >= ladder.bottomY - 0.35 &&
+    feetY <= ladder.topY + 0.5
+  )) || null;
 }
 
 /* ── Armas em 1a pessoa (view model) ───────────────────────────────── */
@@ -258,6 +280,7 @@ function characterIdForPlayer(player) {
 
 function animationForAvatar(avatar) {
   if (!avatar.alive) return "death";
+  if (avatar.inVehicle) return "crouch";
   if (avatar.emoteUntil > performance.now() && !avatar.moving && !avatar.jumping) return "dance";
   if (avatar.crouching) return "crouch";
   if (avatar.sprinting || avatar.jumping) return "run";
@@ -285,6 +308,21 @@ function buildAvatar(p) {
   const head = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.42, 0.42), skinMat);
   head.position.y = 1.78;
   root.add(head);
+
+  // Dedicated gameplay volumes stay stable even while the detailed model animates.
+  const hitboxMaterial = new THREE.MeshBasicMaterial({
+    transparent: true, opacity: 0, depthWrite: false, colorWrite: false
+  });
+  const bodyHitbox = new THREE.Mesh(new THREE.BoxGeometry(0.95, 1.18, 0.72), hitboxMaterial);
+  bodyHitbox.position.y = 1.05;
+  root.add(bodyHitbox);
+  const lowerHitbox = new THREE.Mesh(new THREE.BoxGeometry(0.82, 0.82, 0.66), hitboxMaterial.clone());
+  lowerHitbox.position.y = 0.37;
+  root.add(lowerHitbox);
+  const headHitbox = new THREE.Mesh(new THREE.SphereGeometry(0.38, 12, 10), hitboxMaterial.clone());
+  headHitbox.position.y = 1.72;
+  headHitbox.userData.isHead = true;
+  root.add(headHitbox);
 
   const armGeo = new THREE.BoxGeometry(0.2, 0.65, 0.2);
   const leftArm = new THREE.Mesh(armGeo, bodyMat);
@@ -328,19 +366,19 @@ function buildAvatar(p) {
   scene.add(root);
   const avatar = {
     root, leftArm, rightArm, leftLeg, rightLeg, gun, teamMarker,
-    hittable: [torso, head, leftArm, rightArm, leftLeg, rightLeg],
+    hittable: [bodyHitbox, lowerHitbox, headHitbox],
     fallbackMeshes: [torso, head, leftArm, rightArm, leftLeg, rightLeg],
-    headMesh: head,
+    headMesh: headHitbox,
     walkPhase: Math.random() * 10,
     username: p.username, classId: p.classId, kills: p.kills || 0, deaths: p.deaths || 0, team: p.team,
     alive: p.alive !== false,
     moving: Boolean(p.moving), sprinting: Boolean(p.sprinting), jumping: Boolean(p.jumping), crouching: Boolean(p.crouching),
     model: null, mixer: null, actions: null, animationName: null, desiredAnimation: "idle",
-    characterId: characterIdForPlayer(p), emoteUntil: 0
+    characterId: characterIdForPlayer(p), emoteUntil: 0, emoteSpeed: 1, inVehicle: Boolean(p.vehicleId)
   };
-  avatar.setAnimation = (name, immediate = false) => {
+  avatar.setAnimation = (name, immediate = false, speed = null) => {
     avatar.desiredAnimation = name;
-    setCharacterAnimation(avatar, name, immediate);
+    setCharacterAnimation(avatar, name, immediate, speed);
   };
   attachAnimatedCharacter(avatar).catch((error) => console.warn("Nao foi possivel carregar o personagem 3D:", error));
   return avatar;
@@ -362,6 +400,8 @@ function spawnOrUpdateRemote(p) {
   avatar.setAnimation(animationForAvatar(avatar));
   avatar.kills = p.kills || 0;
   avatar.deaths = p.deaths || 0;
+  avatar.score = p.score || avatar.kills || 0;
+  avatar.inVehicle = Boolean(p.vehicleId);
 }
 function removeAvatar(socketId) {
   const avatar = remotePlayers.get(socketId);
@@ -427,6 +467,7 @@ function updateVehicleHud() {
 }
 
 function updateVehiclePresentation(delta) {
+  remotePlayers.forEach((avatar) => { avatar.inVehicle = false; });
   vehicles.forEach((entry) => {
     const t = Math.min(1, delta * 12);
     entry.state.x = THREE.MathUtils.lerp(entry.state.x, entry.target.x, t);
@@ -438,6 +479,28 @@ function updateVehiclePresentation(delta) {
     entry.state.yaw += yawDelta * t;
     entry.model.position.set(entry.state.x, entry.state.y, entry.state.z);
     entry.model.rotation.y = entry.state.yaw;
+
+    const driverAvatar = remotePlayers.get(entry.target.driverId);
+    if (driverAvatar?.alive && !entry.target.destroyed) {
+      const seatOffsets = {
+        car: new THREE.Vector3(0, 0.58, 0.05),
+        motorcycle: new THREE.Vector3(0, 0.62, -0.05),
+        quad: new THREE.Vector3(0, 0.66, 0),
+        jetski: new THREE.Vector3(0, 0.68, 0.05),
+        plane: new THREE.Vector3(0, 0.92, 0.1),
+        cannon: new THREE.Vector3(0, 0.72, 0.25)
+      };
+      const seat = (seatOffsets[entry.target.type] || seatOffsets.car)
+        .clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), entry.state.yaw);
+      driverAvatar.root.position.copy(entry.model.position).add(seat);
+      driverAvatar.root.rotation.y = entry.state.yaw;
+      driverAvatar.root.visible = true;
+      driverAvatar.inVehicle = true;
+      driverAvatar.moving = false;
+      driverAvatar.jumping = false;
+      driverAvatar.emoteUntil = 0;
+      driverAvatar.setAnimation("crouch");
+    }
 
     if (entry.target.destroyed && !entry.destroyedStyled) {
       entry.destroyedStyled = true;
@@ -473,8 +536,8 @@ function updateHealthHud() {
 }
 function updateAmmoHud() {
   const w = currentWeapon();
-  dom.ammoCount.textContent = w.kind === "melee" ? "-" : local.ammo[local.slot];
-  dom.weaponName.textContent = w.name;
+  dom.ammoCount.textContent = w.kind === "melee" ? "-" : `${local.ammo[local.slot]} / ${w.magSize}`;
+  dom.weaponName.textContent = `${local.slot === "primary" ? "Primaria" : "Secundaria"} - ${w.name}`;
 }
 function updateGrenadeHud() {
   const g = GRENADES[local.grenadeSelected];
@@ -487,14 +550,25 @@ function updateAbilityHud() {
   const remain = Math.max(0, local.abilityCooldownUntil - now);
   const pct = ability.cooldownMs ? 100 - Math.min(100, (remain / ability.cooldownMs) * 100) : 100;
   dom.abilityFill.style.width = `${pct}%`;
-  dom.abilityName.textContent = ability.name;
+  dom.abilityName.textContent = remain > 0 ? `Q - ${ability.name} ${Math.ceil(remain / 1000)}s` : `Q - ${ability.name}`;
+}
+function escapeHtml(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (char) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+  }[char]));
 }
 function updateScoreboard() {
-  const rows = [{ id: selfId, name: "Voce", kills: local.kills || 0, score: local.score || 0, self: true, team: local.team }];
-  remotePlayers.forEach((a, id) => rows.push({ id, name: a.username, kills: a.kills, score: a.score || a.kills, self: false, team: a.team }));
+  const rows = [{
+    id: selfId, name: "Voce", kills: local.kills || 0, deaths: local.deaths || 0,
+    score: local.score || 0, self: true, team: local.team
+  }];
+  remotePlayers.forEach((a, id) => rows.push({
+    id, name: a.username, kills: a.kills || 0, deaths: a.deaths || 0,
+    score: a.score || a.kills || 0, self: false, team: a.team
+  }));
   rows.sort((a, b) => b.score - a.score);
   dom.scoreboardList.innerHTML = rows.slice(0, 10).map((r) =>
-    `<div class="scoreboard-row${r.self ? " self" : ""}" style="${r.team ? `border-left:3px solid ${r.team === "red" ? "#e05555" : "#4d8fe0"}` : ""}"><span>${r.self ? "Voce" : r.name}</span><span>${r.score}</span></div>`
+    `<div class="scoreboard-row${r.self ? " self" : ""}" style="${r.team ? `border-left:3px solid ${r.team === "red" ? "#e05555" : "#4d8fe0"}` : ""}"><span class="scoreboard-name">${escapeHtml(r.self ? "Voce" : r.name)}</span><span class="scoreboard-stats">${r.score} pts <small>${r.kills}K/${r.deaths}D</small></span></div>`
   ).join("");
 }
 function pushKillFeed(text) {
@@ -503,6 +577,19 @@ function pushKillFeed(text) {
   row.textContent = text;
   dom.killFeed.appendChild(row);
   setTimeout(() => row.remove(), 4200);
+}
+
+function showHitMarker({ headshot = false, kill = false } = {}) {
+  if (!dom.hitMarker) return;
+  clearTimeout(hitMarkerTimer);
+  dom.hitMarker.classList.remove("active", "headshot", "kill");
+  void dom.hitMarker.offsetWidth;
+  if (headshot) dom.hitMarker.classList.add("headshot");
+  if (kill) dom.hitMarker.classList.add("kill");
+  dom.hitMarker.classList.add("active");
+  hitMarkerTimer = setTimeout(() => {
+    dom.hitMarker.classList.remove("active", "headshot", "kill");
+  }, kill ? 260 : 150);
 }
 
 function setupRespawnLoadoutControls() {
@@ -528,6 +615,58 @@ function showRespawnLoadout() {
   dom.respawnClassSelect.value = local.classId;
   dom.respawnSecondarySelect.value = local.secondaryId;
   dom.respawnLoadoutStatus.textContent = "";
+}
+
+function setupDanceHub() {
+  if (!dom.danceHub || !dom.danceGrid) return;
+  dom.danceGrid.innerHTML = Object.entries(DANCE_OPTIONS).map(([id, option]) => (
+    `<button class="dance-option" type="button" data-dance="${id}">
+      <strong>${option.label}</strong>
+      <span>${option.speed > 1 ? "Rapida" : option.speed < 1 ? "Lenta" : "Padrao"}</span>
+    </button>`
+  )).join("");
+  dom.danceGrid.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-dance]");
+    if (!button) return;
+    event.preventDefault();
+    selectDance(button.dataset.dance);
+  });
+  dom.closeDanceHub?.addEventListener("click", () => closeDanceHub({ relock: true }));
+  dom.danceHub.addEventListener("click", (event) => {
+    if (event.target === dom.danceHub) closeDanceHub({ relock: true });
+  });
+}
+
+function openDanceHub() {
+  if (!local.alive || local.vehicleId || room?.status !== "playing") return;
+  danceHubOpen = true;
+  cancelCharge();
+  setAiming(false);
+  controls.unlock();
+  dom.pauseHint.hidden = true;
+  dom.danceHub.hidden = false;
+}
+
+function closeDanceHub({ relock = false } = {}) {
+  if (!dom.danceHub) return;
+  danceHubOpen = false;
+  dom.danceHub.hidden = true;
+  if (local.alive && room?.status === "playing") {
+    dom.pauseHint.hidden = false;
+    if (relock) controls.lock();
+  }
+}
+
+function selectDance(emote) {
+  if (!DANCE_OPTIONS[emote] || !socket || !local.alive || local.vehicleId) return;
+  socket.emit("match:emote", { emote });
+  closeDanceHub({ relock: true });
+}
+
+function stopLocalEmote() {
+  if (!local.emoteActive || !socket) return;
+  local.emoteActive = false;
+  socket.emit("match:emote-stop");
 }
 
 /* ── Tiro ───────────────────────────────────────────────────────────── */
@@ -950,6 +1089,7 @@ function useAbility() {
 /* ── Input ──────────────────────────────────────────────────────────── */
 function onMouseDown(e) {
   if (!controls.isLocked) return;
+  stopLocalEmote();
   if (e.button === 0) {
     const vehicle = vehicles.get(local.vehicleId);
     if (vehicle && VEHICLE_STATS[vehicle.target.type]?.builtInWeapon) {
@@ -981,6 +1121,15 @@ document.addEventListener("contextmenu", (e) => { if (controls?.isLocked) e.prev
 
 function onKeyDown(e) {
   if (!room || !local.alive) return;
+  if (e.code === "Escape" && danceHubOpen) {
+    closeDanceHub({ relock: false });
+    return;
+  }
+  if (e.code === "KeyB" && !local.vehicleId) {
+    if (danceHubOpen) closeDanceHub({ relock: true });
+    else openDanceHub();
+    return;
+  }
   if (e.code === "KeyE") {
     if (local.vehicleId) socket.emit("vehicle:exit");
     else {
@@ -993,12 +1142,12 @@ function onKeyDown(e) {
     socket.emit("vehicle:launch-self", { vehicleId: local.vehicleId });
     return;
   }
+  if (["KeyR", "Digit1", "Digit2", "KeyG", "KeyQ"].includes(e.code)) stopLocalEmote();
   if (e.code === "KeyR") reload();
   if (e.code === "Digit1") switchSlot("primary");
   if (e.code === "Digit2") switchSlot("secondary");
   if (e.code === "KeyG") throwGrenade();
   if (e.code === "KeyQ") useAbility();
-  if (e.code === "KeyB" && !local.vehicleId) socket.emit("match:emote", { emote: "dance" });
   if (e.code === "KeyV") {
     const idx = GRENADE_ORDER.indexOf(local.grenadeSelected);
     local.grenadeSelected = GRENADE_ORDER[(idx + 1) % GRENADE_ORDER.length];
@@ -1039,9 +1188,14 @@ function updateMovement(delta) {
 
   const forward = Number(Boolean(keys.KeyW)) - Number(Boolean(keys.KeyS));
   const strafe = Number(Boolean(keys.KeyD)) - Number(Boolean(keys.KeyA));
-  const moveVec = new THREE.Vector3(strafe, 0, -forward);
-  const moving = moveVec.lengthSq() > 0;
+  const ladder = findLadderAt(camera.position.x, camera.position.z, local.jumpOffset);
+  const climbing = Boolean(ladder && forward !== 0 && !keys.Space);
+  local.climbing = climbing;
+
+  const moveVec = new THREE.Vector3(strafe, 0, climbing ? 0 : -forward);
+  let moving = moveVec.lengthSq() > 0 || climbing;
   if (moving) moveVec.normalize().multiplyScalar(speed * delta);
+  if (moving) stopLocalEmote();
 
   const prevX = camera.position.x, prevZ = camera.position.z;
   controls.moveRight(moveVec.x);
@@ -1056,7 +1210,7 @@ function updateMovement(delta) {
     camera.position.z = prevZ;
   }
 
-  if (local.externalVelocity.lengthSq() > 0.01) {
+  if (!climbing && local.externalVelocity.lengthSq() > 0.01) {
     camera.position.x += local.externalVelocity.x * delta;
     camera.position.z += local.externalVelocity.z * delta;
     local.verticalVelocity = Math.max(local.verticalVelocity, local.externalVelocity.y);
@@ -1067,20 +1221,42 @@ function updateMovement(delta) {
 
   const groundY = groundHeightAt(camera.position.x, camera.position.z, feetY);
   const jumpHeight = JUMP_HEIGHT_BASE * room.settings.jumpHeightMul;
-  if (keys.Space && local.onGround) {
-    local.verticalVelocity = Math.sqrt(2 * Math.abs(GRAVITY) * jumpHeight);
-    local.onGround = false;
-  }
-  local.verticalVelocity += GRAVITY * delta;
-  local.jumpOffset += local.verticalVelocity * delta;
-  if (local.jumpOffset <= groundY) {
-    const landed = !local.onGround;
-    local.jumpOffset = groundY;
+  if (climbing) {
+    local.externalVelocity.set(0, 0, 0);
     local.verticalVelocity = 0;
-    local.onGround = true;
-    if (landed && local.pendingFallDamage > 0) {
-      socket.emit("world:fall-damage", { damage: local.pendingFallDamage });
-      local.pendingFallDamage = 0;
+    local.onGround = false;
+    local.jumpOffset = THREE.MathUtils.clamp(
+      local.jumpOffset + forward * LADDER_SPEED * delta,
+      ladder.bottomY,
+      ladder.topY
+    );
+    if (ladder.alongX) camera.position.z = THREE.MathUtils.lerp(camera.position.z, ladder.centerZ, Math.min(1, delta * 10));
+    else camera.position.x = THREE.MathUtils.lerp(camera.position.x, ladder.centerX, Math.min(1, delta * 10));
+    if (local.jumpOffset >= ladder.topY - 0.04 && forward > 0) {
+      local.jumpOffset = ladder.topY;
+      local.onGround = true;
+      camera.position.x += ladder.dismountX;
+      camera.position.z += ladder.dismountZ;
+    } else if (local.jumpOffset <= ladder.bottomY + 0.02 && forward < 0) {
+      local.jumpOffset = ladder.bottomY;
+      local.onGround = true;
+    }
+  } else {
+    if (keys.Space && local.onGround) {
+      local.verticalVelocity = Math.sqrt(2 * Math.abs(GRAVITY) * jumpHeight);
+      local.onGround = false;
+    }
+    local.verticalVelocity += GRAVITY * delta;
+    local.jumpOffset += local.verticalVelocity * delta;
+    if (local.jumpOffset <= groundY) {
+      const landed = !local.onGround;
+      local.jumpOffset = groundY;
+      local.verticalVelocity = 0;
+      local.onGround = true;
+      if (landed && local.pendingFallDamage > 0) {
+        socket.emit("world:fall-damage", { damage: local.pendingFallDamage });
+        local.pendingFallDamage = 0;
+      }
     }
   }
   camera.position.y = EYE_HEIGHT + local.jumpOffset - (crouching ? 0.35 : 0);
@@ -1099,7 +1275,7 @@ function updateMovement(delta) {
     socket.emit("match:move", {
       x: camera.position.x, y: Math.max(0, local.jumpOffset), z: camera.position.z,
       yaw: _readEuler.y, pitch: _readEuler.x,
-      moving, sprinting, jumping: !local.onGround, crouching
+      moving, sprinting, jumping: !local.onGround || climbing, crouching
     });
   }
 }
@@ -1118,7 +1294,8 @@ function updateGrenadesPhysics(delta) {
 function animateAvatars(delta) {
   remotePlayers.forEach((avatar) => {
     if (avatar.mixer) {
-      avatar.setAnimation(animationForAvatar(avatar));
+      const animation = animationForAvatar(avatar);
+      avatar.setAnimation(animation, false, animation === "dance" ? avatar.emoteSpeed : null);
       avatar.mixer.update(delta);
       return;
     }
@@ -1282,6 +1459,7 @@ export function attachSocket(activeSocket) {
     local.health = 100;
     local.alive = true;
     local.kills = 0;
+    local.deaths = 0;
     local.score = 0;
     local.jumpOffset = me?.y || 0;
     local.grenadeCharges = Object.fromEntries(GRENADE_ORDER.map((id) => [id, GRENADE_CHARGES_PER_LIFE]));
@@ -1292,6 +1470,8 @@ export function attachSocket(activeSocket) {
     local.charging = false;
     local.chargeStartedAt = 0;
     local.vehicleId = null;
+    local.emoteActive = false;
+    local.climbing = false;
     local.externalVelocity.set(0, 0, 0);
     local.pendingFallDamage = 0;
 
@@ -1309,6 +1489,7 @@ export function attachSocket(activeSocket) {
     dom.hudTopRight.style.display = "block";
     dom.minimap.style.display = "block";
     dom.endScreen.hidden = true;
+    closeDanceHub({ relock: false });
     dom.vehicleStatus.classList.remove("active");
     dom.eventAlert.classList.remove("active");
     updateHealthHud(); updateAmmoHud(); updateGrenadeHud(); updateScoreboard();
@@ -1319,8 +1500,15 @@ export function attachSocket(activeSocket) {
 
   socket.on("vehicle:state", (states) => syncVehicles(states));
 
+  socket.on("vehicle:occupied", ({ vehicleId, driverId }) => {
+    const entry = vehicles.get(vehicleId);
+    if (entry) entry.target.driverId = driverId || null;
+  });
+
   socket.on("vehicle:entered", (vehicle) => {
     local.vehicleId = vehicle.id;
+    local.emoteActive = false;
+    closeDanceHub({ relock: false });
     local.lastVehicleShotAt = 0;
     syncVehicles([...(Array.from(vehicles.values()).map((entry) => entry.target).filter((item) => item.id !== vehicle.id)), vehicle]);
     if (!VEHICLE_STATS[vehicle.type]?.builtInWeapon) switchSlot("secondary");
@@ -1331,6 +1519,7 @@ export function attachSocket(activeSocket) {
   socket.on("vehicle:exited", ({ x, y, z }) => {
     local.vehicleId = null;
     local.mouseDown = false;
+    local.climbing = false;
     weaponRig.visible = true;
     camera.position.set(Number(x) || camera.position.x, EYE_HEIGHT + (Number(y) || 0), Number(z) || camera.position.z);
     local.jumpOffset = Number(y) || 0;
@@ -1377,8 +1566,12 @@ export function attachSocket(activeSocket) {
     avatar.sprinting = Boolean(p.sprinting);
     avatar.jumping = Boolean(p.jumping);
     avatar.crouching = Boolean(p.crouching);
-    if (avatar.moving || avatar.jumping) avatar.emoteUntil = 0;
-    avatar.setAnimation(animationForAvatar(avatar));
+    if (avatar.moving || avatar.jumping) {
+      avatar.emoteUntil = 0;
+      avatar.emoteSpeed = 1;
+    }
+    const animation = animationForAvatar(avatar);
+    avatar.setAnimation(animation, false, animation === "dance" ? avatar.emoteSpeed : null);
   });
 
   socket.on("match:shot-fired", ({ socketId, weaponId, origin, direction, ballistics }) => {
@@ -1401,18 +1594,22 @@ export function attachSocket(activeSocket) {
     spawnBallisticVisual(trace, speed, profile.kind, true);
   });
 
-  socket.on("match:damage", ({ targetSocketId, health }) => {
+  socket.on("match:damage", ({ targetSocketId, health, byId, headshot }) => {
+    if (byId === selfId && targetSocketId !== selfId) showHitMarker({ headshot: Boolean(headshot) });
     if (targetSocketId === selfId) { local.health = health; updateHealthHud(); }
   });
 
   socket.on("match:kill", ({ killerId, killerName, victimId, victimName, headshot }) => {
     pushKillFeed(`${killerName} eliminou ${victimName}${headshot ? " (na cabeca)" : ""}`);
-    if (killerId === selfId) { local.kills += 1; local.score += 1; }
+    if (killerId === selfId) { local.kills += 1; local.score += 1; showHitMarker({ headshot: Boolean(headshot), kill: true }); }
     else { const a = remotePlayers.get(killerId); if (a) { a.kills += 1; a.score = (a.score || 0) + 1; } }
     if (victimId === selfId) {
       local.alive = false; local.health = 0;
+      local.deaths += 1;
       local.vehicleId = null;
       local.mouseDown = false;
+      local.emoteActive = false;
+      closeDanceHub({ relock: false });
       local.externalVelocity.set(0, 0, 0);
       local.pendingFallDamage = 0;
       weaponRig.visible = true;
@@ -1432,6 +1629,7 @@ export function attachSocket(activeSocket) {
         a.alive = false;
         a.moving = false;
         a.emoteUntil = 0;
+        a.emoteSpeed = 1;
         a.setAnimation("death", true);
       }
     }
@@ -1449,6 +1647,8 @@ export function attachSocket(activeSocket) {
       local.alive = true; local.health = health;
       local.vehicleId = null;
       local.mouseDown = false;
+      local.emoteActive = false;
+      local.climbing = false;
       local.externalVelocity.set(0, 0, 0);
       local.pendingFallDamage = 0;
       local.classId = classId || local.classId;
@@ -1497,13 +1697,30 @@ export function attachSocket(activeSocket) {
       if (durationMs > 0) setTimeout(() => { local.abilityActive = false; }, durationMs);
     }
   });
-  socket.on("match:emote", ({ socketId, emote, durationMs }) => {
-    if (emote !== "dance") return;
+  socket.on("match:emote", ({ socketId, emote, animation, speed, durationMs }) => {
+    if (!DANCE_OPTIONS[emote]) return;
+    if (socketId === selfId) {
+      local.emoteActive = true;
+      return;
+    }
     const avatar = remotePlayers.get(socketId);
     if (!avatar?.alive) return;
     avatar.moving = false;
     avatar.emoteUntil = performance.now() + Math.max(1000, Number(durationMs) || 5200);
-    avatar.setAnimation("dance", true);
+    avatar.emoteSpeed = Number(speed) || 1;
+    avatar.setAnimation(animation || "dance", true, avatar.emoteSpeed);
+  });
+
+  socket.on("match:emote-stop", ({ socketId }) => {
+    if (socketId === selfId) {
+      local.emoteActive = false;
+      return;
+    }
+    const avatar = remotePlayers.get(socketId);
+    if (!avatar) return;
+    avatar.emoteUntil = 0;
+    avatar.emoteSpeed = 1;
+    avatar.setAnimation(animationForAvatar(avatar), true);
   });
   socket.on("match:ability-state", ({ cooldownUntil }) => {
     local.abilityCooldownUntil = performance.now() + Math.max(0, cooldownUntil - Date.now());

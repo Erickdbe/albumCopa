@@ -112,6 +112,20 @@ html, body {
 .crosshair::after { top: 8px; left: 0; width: 18px; height: 2px; }
 .crosshair { transition: transform 0.12s ease, opacity 0.12s ease; }
 .crosshair.aiming { transform: scale(0.62); }
+.hit-marker {
+  position: absolute; top: 50%; left: 50%; z-index: 11; width: 28px; height: 28px;
+  margin: -14px 0 0 -14px; opacity: 0; transform: scale(0.72); pointer-events: none;
+  transition: opacity 0.06s linear, transform 0.12s ease;
+}
+.hit-marker::before, .hit-marker::after {
+  content: ""; position: absolute; left: 50%; top: 50%; width: 2px; height: 26px;
+  background: #f5f7ff; box-shadow: 0 0 6px rgba(0,0,0,0.85);
+}
+.hit-marker::before { transform: translate(-50%, -50%) rotate(45deg); }
+.hit-marker::after { transform: translate(-50%, -50%) rotate(-45deg); }
+.hit-marker.active { opacity: 1; transform: scale(1); }
+.hit-marker.headshot::before, .hit-marker.headshot::after { background: #ffd23f; }
+.hit-marker.kill::before, .hit-marker.kill::after { background: #ff6262; height: 32px; }
 
 .scope-overlay {
   position: absolute; inset: 0; z-index: 9; display: none; pointer-events: none;
@@ -183,15 +197,43 @@ html, body {
 .hud-ammo strong { font-size: 2rem; }
 .hud-grenade span, .hud-ammo span { font-size: 0.75rem; color: #c7d0e6; }
 
-.hud-top-right { top: 20px; right: 20px; width: 210px; display: none; background: rgba(10,12,18,0.6); border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; padding: 10px 12px; }
+.hud-top-right { top: 20px; right: 20px; width: 250px; display: none; background: rgba(10,12,18,0.6); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 10px 12px; }
 .scoreboard-title { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 1px; color: #ffd23f; margin-bottom: 6px; }
 .scoreboard-list { display: flex; flex-direction: column; gap: 4px; font-size: 0.85rem; }
-.scoreboard-row { display: flex; justify-content: space-between; color: #dbe2f2; padding-left: 6px; }
+.scoreboard-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: center; color: #dbe2f2; padding-left: 6px; }
 .scoreboard-row.self { color: #ffd23f; font-weight: 700; }
+.scoreboard-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.scoreboard-stats { text-align: right; white-space: nowrap; }
+.scoreboard-stats small { color: #9eacc2; margin-left: 5px; font-size: 0.72rem; }
 
 .hud-killfeed { top: 20px; left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; gap: 4px; align-items: center; min-width: 280px; }
 .killfeed-row { background: rgba(10,12,18,0.65); padding: 4px 12px; border-radius: 6px; font-size: 0.82rem; animation: fadeOut 4.2s forwards; }
 @keyframes fadeOut { 0% { opacity: 1; } 75% { opacity: 1; } 100% { opacity: 0; } }
+
+.dance-hub {
+  position: absolute; inset: 0; z-index: 18; display: flex; align-items: center; justify-content: center;
+  background: rgba(3,6,10,0.52); pointer-events: auto;
+}
+.dance-hub[hidden] { display: none; }
+.dance-panel {
+  position: relative; width: min(360px, 88vw); padding: 18px;
+  background: rgba(15,18,25,0.94); border: 1px solid rgba(255,255,255,0.16); border-radius: 8px;
+  box-shadow: 0 18px 50px rgba(0,0,0,0.42);
+}
+.dance-panel h2 { margin: 0 36px 12px 0; font-size: 1.2rem; color: #ffd23f; }
+.dance-close {
+  position: absolute; top: 10px; right: 10px; width: 30px; height: 30px; border: 0; border-radius: 6px;
+  background: rgba(255,255,255,0.1); color: #fff; cursor: pointer; font-weight: 800;
+}
+.dance-grid { display: grid; gap: 8px; }
+.dance-option {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: center; min-height: 48px;
+  padding: 10px 12px; border: 1px solid rgba(255,255,255,0.14); border-radius: 7px;
+  background: rgba(255,255,255,0.06); color: #fff; cursor: pointer; text-align: left;
+}
+.dance-option:hover, .dance-option:focus-visible { border-color: #ffd23f; background: rgba(255,210,63,0.12); outline: 0; }
+.dance-option strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dance-option span { color: #aebbd1; font-size: 0.78rem; }
 
 .death-screen { position: absolute; inset: 0; background: rgba(80,0,0,0.35); display: flex; align-items: center; justify-content: center; text-align: center; z-index: 15; }
 .death-screen h2 { margin: 0 0 6px; font-size: 2.2rem; color: #ff6b6b; }
@@ -215,4 +257,5 @@ html, body {
   .minimap canvas { width: 132px; height: 132px; }
   .hud-top-left { left: 12px; }
   .hud-top-right { right: 12px; width: 174px; }
+  .scoreboard-stats small { display: block; margin-left: 0; }
 }

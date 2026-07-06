@@ -88,6 +88,51 @@ function addRamp(world, x, z, length, width, height, axis, color, baseY = 0) {
   }
 }
 
+function addLadder(world, options) {
+  const { x, z, w, d, height, side = "south", baseY = 0, color = 0x7a6245 } = options;
+  const outward = {
+    south: { x: 0, z: 1 }, north: { x: 0, z: -1 },
+    east: { x: 1, z: 0 }, west: { x: -1, z: 0 }
+  }[side] || { x: 0, z: 1 };
+  const alongX = outward.z !== 0;
+  const faceDistance = alongX ? d / 2 + 0.24 : w / 2 + 0.24;
+  const centerX = x + outward.x * faceDistance;
+  const centerZ = z + outward.z * faceDistance;
+  const ladderWidth = 1.25;
+  const railOffset = ladderWidth * 0.46;
+  const railGeometry = new THREE.CylinderGeometry(0.065, 0.065, height + 0.35, 8);
+
+  for (const offset of [-railOffset, railOffset]) {
+    addMesh(
+      world, railGeometry.clone(), color,
+      centerX + (alongX ? offset : 0), baseY + height / 2,
+      centerZ + (alongX ? 0 : offset), { castShadow: false }
+    );
+  }
+  const rungCount = Math.max(5, Math.floor(height / 0.42));
+  for (let i = 0; i <= rungCount; i++) {
+    const y = baseY + 0.22 + (height - 0.25) * (i / rungCount);
+    const geometry = new THREE.BoxGeometry(alongX ? ladderWidth : 0.1, 0.075, alongX ? 0.1 : ladderWidth);
+    addMesh(world, geometry, color, centerX, y, centerZ, { castShadow: false });
+  }
+
+  const halfWidth = ladderWidth * 0.72;
+  const reach = 0.95;
+  world.ladders.push({
+    centerX,
+    centerZ,
+    alongX,
+    minX: centerX - (alongX ? halfWidth : reach),
+    maxX: centerX + (alongX ? halfWidth : reach),
+    minZ: centerZ - (alongX ? reach : halfWidth),
+    maxZ: centerZ + (alongX ? reach : halfWidth),
+    bottomY: baseY,
+    topY: baseY + height + 0.2,
+    dismountX: -outward.x * 0.9,
+    dismountZ: -outward.z * 0.9
+  });
+}
+
 function addBoundary(world, color) {
   const half = world.half;
   addSolidBox(world, 0, -half, half * 2, 8, 1, color);
@@ -121,17 +166,7 @@ function addClimbableBuilding(world, options) {
     core.linkedObstacles.push(roof.obstacle);
   }
 
-  const steps = Math.max(6, Math.round(h / 0.55));
-  for (let i = 0; i < steps; i++) {
-    const stepY = (h / steps) * i;
-    const offset = d / 2 + 0.7 + i * 0.55;
-    let sx = x, sz = z;
-    if (stairSide === "south") sz += offset;
-    else if (stairSide === "north") sz -= offset;
-    else if (stairSide === "east") sx += offset;
-    else sx -= offset;
-    addPlatform(world, sx, stepY + 0.18, sz, 1.5, 1.05, wallColor);
-  }
+  addLadder(world, { x, z, w, d, height: h, side: stairSide, color: 0x66533f });
 
   if (destructiblePrefix) {
     const pieces = [
@@ -162,7 +197,11 @@ function addTreeHouse(world, x, z, rotation = 0) {
   addSolidBox(world, x, z, 5.5, 3.3, 4.5, 0x91623a, level, null);
   addMesh(world, new THREE.ConeGeometry(4.4, 2.5, 4), 0x3f2a1a, x, level + 4.5, z, { rotY: Math.PI / 4 });
   addPlatform(world, x + Math.cos(rotation) * 5.5, level + 0.1, z + Math.sin(rotation) * 5.5, 5.5, 1.4, 0x76502f);
-  addRamp(world, x - 5.2, z + 4.5, 10, 1.7, level, "z", 0x76502f);
+  const bridgeSide = Math.abs(Math.cos(rotation)) > Math.abs(Math.sin(rotation))
+    ? (Math.cos(rotation) >= 0 ? "east" : "west")
+    : (Math.sin(rotation) >= 0 ? "south" : "north");
+  const ladderSide = { east: "west", west: "east", north: "south", south: "north" }[bridgeSide];
+  addLadder(world, { x, z, w: 8.5, d: 7.5, height: level, side: ladderSide, color: 0x6c4a2d });
 }
 
 function addMountain(world, x, z, radius, height, color = 0x53604d) {
@@ -195,7 +234,7 @@ function createWorld(mapId, scene) {
   root.name = `world-${mapId}`;
   scene.add(root);
   return {
-    mapId, scene, root, half: MAP_HALF_SIZES[mapId], obstacles: [], destructibles: new Map(),
+    mapId, scene, root, half: MAP_HALF_SIZES[mapId], obstacles: [], ladders: [], destructibles: new Map(),
     animated: { trees: [], waves: [], sharks: [], debris: [], elapsed: 0 },
     water: null, tsunami: null, tornado: null, event: null
   };

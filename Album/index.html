@@ -5803,6 +5803,10 @@
             <span>Arena Brawl</span>
             <small>FPS arcade multiplayer</small>
           </button>
+          <button class="adventure-side-button" type="button" onclick="window.location.href='/RetroArena/'">
+            <span>Retro Arena</span>
+            <small>FPS retro online para 4 jogadores</small>
+          </button>
           <button class="cs16-side-button" type="button" onclick="openCs16Picker()">
             <span>Counter-Strike 1.6</span>
             <small>FPS no navegador</small>
@@ -5932,6 +5936,7 @@
         <button class="mp-btn horse-open-btn" type="button" onclick="createHorseRoom()">🏇 Corrida</button>
         <button class="mp-btn fps-open-btn" type="button" onclick="window.location.href='/FPSArena/'">Arena FPS</button>
         <button class="mp-btn fps-open-btn" type="button" onclick="window.location.href='/ArenaBrawl/'">Arena Brawl</button>
+        <button class="mp-btn fps-open-btn" type="button" onclick="window.location.href='/RetroArena/'">Retro Arena</button>
       </div>
       <small class="lobby-limit-note">Máx. 50 (2 jogadores) / 20 (3+)</small>
 
@@ -6120,6 +6125,15 @@
     <div class="challenge-toast-btns">
       <button class="btn-accept" onclick="acceptArenaBrawlInvite()">Entrar</button>
       <button class="btn-reject" onclick="rejectArenaBrawlInvite()">Agora nao</button>
+    </div>
+  </div>
+
+  <div class="challenge-toast hidden" id="retroArenaInviteToast">
+    <h4>Retro Arena</h4>
+    <p id="retroArenaInviteMsg"></p>
+    <div class="challenge-toast-btns">
+      <button class="btn-accept" onclick="acceptRetroArenaInvite()">Entrar</button>
+      <button class="btn-reject" onclick="rejectRetroArenaInvite()">Agora nao</button>
     </div>
   </div>
 
@@ -8869,6 +8883,7 @@
       pirateLastInputAt: 0,
       adventureInviteRoomId: null,
       arenaBrawlInviteRoomId: null,
+      retroArenaInviteRoomId: null,
       cs16InviteChallengeId: null,
       cs16PendingChallengeId: null,
       cardWarsInviteRoomId: null,
@@ -9559,6 +9574,14 @@
         document.getElementById("arenaBrawlInviteMsg").textContent =
           `${fromUsername} abriu uma sala. Entre para jogar com todo mundo.`;
         document.getElementById("arenaBrawlInviteToast").classList.remove("hidden");
+      });
+
+      mp.socket.on("retro-arena:invite", ({ roomId, fromUsername }) => {
+        if (!roomId) return;
+        mp.retroArenaInviteRoomId = roomId;
+        document.getElementById("retroArenaInviteMsg").textContent =
+          `${fromUsername} abriu uma sala de Retro Arena para ate 4 jogadores.`;
+        document.getElementById("retroArenaInviteToast").classList.remove("hidden");
       });
 
       mp.socket.on("cs16:sent", ({ challengeId, toUsername }) => {
@@ -13150,6 +13173,19 @@
     function rejectArenaBrawlInvite() {
       mp.arenaBrawlInviteRoomId = null;
       document.getElementById("arenaBrawlInviteToast").classList.add("hidden");
+    }
+
+    function acceptRetroArenaInvite() {
+      if (!mp.retroArenaInviteRoomId) return;
+      const roomId = mp.retroArenaInviteRoomId;
+      mp.retroArenaInviteRoomId = null;
+      document.getElementById("retroArenaInviteToast").classList.add("hidden");
+      window.location.href = `/RetroArena/?room=${encodeURIComponent(roomId)}`;
+    }
+
+    function rejectRetroArenaInvite() {
+      mp.retroArenaInviteRoomId = null;
+      document.getElementById("retroArenaInviteToast").classList.add("hidden");
     }
 
     function clearCardWarsLobbyState() {

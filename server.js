@@ -17,6 +17,7 @@ const { setupCardWarsApiRoutes } = require("./cardwars-api");
 const { setupAdventurePvp } = require("./adventure-pvp-api");
 const { setupFpsShooter } = require("./fps-shooter-api");
 const { createRoomsModule: createArenaBrawlRoomsModule } = require("./ArenaBrawl/server/rooms");
+const { createRetroArenaModule } = require("./retro-arena-server");
 
 function loadLocalEnv() {
   const envFile = path.join(__dirname, ".env");
@@ -876,6 +877,7 @@ app.use(
   express.static(path.join(__dirname, "node_modules", "three"))
 );
 app.use("/ArenaBrawl", express.static(path.join(__dirname, "ArenaBrawl", "public")));
+app.use("/RetroArena", express.static(path.join(__dirname, "RetroArena", "public")));
 app.use(express.static(path.join(__dirname)));
 
 // Rota raiz → abre o álbum
@@ -1440,6 +1442,7 @@ const CS16_RECONNECT_GRACE_MS = 45000;
 let adventurePvp         = null;
 let fpsShooter            = null;
 let arenaBrawl            = null;
+let retroArena            = null;
 
 function ensureSpectators(room) {
   if (!room.spectators) room.spectators = new Set();
@@ -5765,6 +5768,7 @@ fpsShooter = setupFpsShooter({
 });
 
 arenaBrawl = createArenaBrawlRoomsModule(io);
+retroArena = createRetroArenaModule(io);
 
 function resolveCs16ServerUrl(socket) {
   if (CS16_WS_URL) return CS16_WS_URL;
@@ -5978,6 +5982,7 @@ io.on("connection", (socket) => {
   adventurePvp?.bindSocket(socket);
   fpsShooter?.bindSocket(socket);
   arenaBrawl?.bindSocket(socket);
+  retroArena?.bindSocket(socket);
 
   socket.on("cs16:challenge", ({ toSocketId }) => {
     const challenger = onlinePlayers.get(socket.id);

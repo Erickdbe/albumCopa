@@ -5803,6 +5803,10 @@
             <span>Arena Brawl</span>
             <small>FPS arcade multiplayer</small>
           </button>
+          <button class="adventure-side-button" type="button" onclick="window.location.href='/DeckHeroes/'">
+            <span>Deck Heroes</span>
+            <small>Arena 3D com deck</small>
+          </button>
           <button class="adventure-side-button" type="button" onclick="window.location.href='/RetroArena/'">
             <span>Retro Arena</span>
             <small>FPS retro online para 4 jogadores</small>
@@ -6125,6 +6129,15 @@
     <div class="challenge-toast-btns">
       <button class="btn-accept" onclick="acceptArenaBrawlInvite()">Entrar</button>
       <button class="btn-reject" onclick="rejectArenaBrawlInvite()">Agora nao</button>
+    </div>
+  </div>
+
+  <div class="challenge-toast hidden" id="deckHeroesInviteToast">
+    <h4>Deck Heroes</h4>
+    <p id="deckHeroesInviteMsg"></p>
+    <div class="challenge-toast-btns">
+      <button class="btn-accept" onclick="acceptDeckHeroesInvite()">Entrar</button>
+      <button class="btn-reject" onclick="rejectDeckHeroesInvite()">Agora nao</button>
     </div>
   </div>
 
@@ -9574,6 +9587,14 @@
         document.getElementById("arenaBrawlInviteMsg").textContent =
           `${fromUsername} abriu uma sala. Entre para jogar com todo mundo.`;
         document.getElementById("arenaBrawlInviteToast").classList.remove("hidden");
+      });
+
+      mp.socket.on("deck-heroes:invite", ({ roomId, fromUsername }) => {
+        if (!roomId) return;
+        mp.deckHeroesInviteRoomId = roomId;
+        document.getElementById("deckHeroesInviteMsg").textContent =
+          `${fromUsername} abriu uma arena Deck Heroes. Entre para fechar times em par.`;
+        document.getElementById("deckHeroesInviteToast").classList.remove("hidden");
       });
 
       mp.socket.on("retro-arena:invite", ({ roomId, fromUsername }) => {
@@ -13173,6 +13194,19 @@
     function rejectArenaBrawlInvite() {
       mp.arenaBrawlInviteRoomId = null;
       document.getElementById("arenaBrawlInviteToast").classList.add("hidden");
+    }
+
+    function acceptDeckHeroesInvite() {
+      if (!mp.deckHeroesInviteRoomId) return;
+      const roomId = mp.deckHeroesInviteRoomId;
+      mp.deckHeroesInviteRoomId = null;
+      document.getElementById("deckHeroesInviteToast").classList.add("hidden");
+      window.location.href = `/DeckHeroes/?room=${encodeURIComponent(roomId)}`;
+    }
+
+    function rejectDeckHeroesInvite() {
+      mp.deckHeroesInviteRoomId = null;
+      document.getElementById("deckHeroesInviteToast").classList.add("hidden");
     }
 
     function acceptRetroArenaInvite() {

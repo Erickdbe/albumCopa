@@ -18,6 +18,7 @@ const { setupAdventurePvp } = require("./adventure-pvp-api");
 const { setupFpsShooter } = require("./fps-shooter-api");
 const { createRoomsModule: createArenaBrawlRoomsModule } = require("./ArenaBrawl/server/rooms");
 const { createRetroArenaModule } = require("./retro-arena-server");
+const { createDeckHeroesModule } = require("./DeckHeroes/server/rooms");
 
 function loadLocalEnv() {
   const envFile = path.join(__dirname, ".env");
@@ -876,7 +877,12 @@ app.use(
   "/ArenaBrawl/vendor/three",
   express.static(path.join(__dirname, "node_modules", "three"))
 );
+app.use(
+  "/DeckHeroes/vendor/three",
+  express.static(path.join(__dirname, "node_modules", "three"))
+);
 app.use("/ArenaBrawl", express.static(path.join(__dirname, "ArenaBrawl", "public")));
+app.use("/DeckHeroes", express.static(path.join(__dirname, "DeckHeroes", "public")));
 app.use("/RetroArena", express.static(path.join(__dirname, "RetroArena", "public")));
 app.use(express.static(path.join(__dirname)));
 
@@ -1443,6 +1449,7 @@ let adventurePvp         = null;
 let fpsShooter            = null;
 let arenaBrawl            = null;
 let retroArena            = null;
+let deckHeroes            = null;
 
 function ensureSpectators(room) {
   if (!room.spectators) room.spectators = new Set();
@@ -5769,6 +5776,10 @@ fpsShooter = setupFpsShooter({
 
 arenaBrawl = createArenaBrawlRoomsModule(io);
 retroArena = createRetroArenaModule(io);
+deckHeroes = createDeckHeroesModule(io, {
+  onlinePlayers,
+  broadcastOnlineList
+});
 
 function resolveCs16ServerUrl(socket) {
   if (CS16_WS_URL) return CS16_WS_URL;
@@ -5983,6 +5994,7 @@ io.on("connection", (socket) => {
   fpsShooter?.bindSocket(socket);
   arenaBrawl?.bindSocket(socket);
   retroArena?.bindSocket(socket);
+  deckHeroes?.bindSocket(socket);
 
   socket.on("cs16:challenge", ({ toSocketId }) => {
     const challenger = onlinePlayers.get(socket.id);

@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Deck Heroes</title>
+  <link rel="stylesheet" href="./styles.css">
+  <script src="/socket.io/socket.io.js"></script>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "/DeckHeroes/vendor/three/build/three.module.js",
+        "three/addons/": "/DeckHeroes/vendor/three/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <main id="app">
+    <section id="setupScreen" class="screen setup-screen">
+      <div class="setup-main">
+        <header class="brand">
+          <span>Deck Heroes</span>
+          <strong>Arena em terceira pessoa</strong>
+        </header>
+
+        <section class="panel deck-panel">
+          <div class="panel-head">
+            <h1>Monte seu deck</h1>
+            <span id="deckCount">8/8</span>
+          </div>
+          <div id="heroCatalog" class="hero-catalog"></div>
+        </section>
+
+        <section class="panel lobby-panel">
+          <div class="panel-head">
+            <h2>Sala</h2>
+            <span id="roomCode">Offline</span>
+          </div>
+          <div id="playerList" class="player-list"></div>
+          <div class="lobby-actions">
+            <button id="openRoomBtn" class="primary-btn" type="button">Abrir sala</button>
+            <button id="readyBtn" type="button">Pronto</button>
+            <button id="startBtn" type="button">Iniciar</button>
+            <button id="leaveBtn" type="button">Sair</button>
+          </div>
+          <p id="statusText"></p>
+        </section>
+      </div>
+    </section>
+
+    <section id="gameScreen" class="game-screen" hidden>
+      <canvas id="gameCanvas"></canvas>
+      <div class="crosshair"></div>
+      <section class="hud top-left">
+        <strong id="heroName">Heroi</strong>
+        <div class="health"><div id="healthFill"></div></div>
+        <span id="healthText">100</span>
+      </section>
+      <section class="hud top-center">
+        <strong id="scoreLabel">Azul x Vermelho</strong>
+        <span id="timerLabel">06:00</span>
+      </section>
+      <section class="hud top-right">
+        <div id="towerList" class="tower-list"></div>
+      </section>
+      <section class="deck-bar" id="deckBar"></section>
+      <section class="ability-bar">
+        <button id="abilityBtn" type="button">Q</button>
+        <button id="supportBtn" type="button">E</button>
+        <select id="supportSelect"></select>
+      </section>
+      <div id="pauseHint" class="pause-hint">Clique para controlar</div>
+      <div id="endOverlay" class="end-overlay" hidden>
+        <div>
+          <h2 id="endTitle">Fim</h2>
+          <button id="backToLobbyBtn" class="primary-btn" type="button">Voltar ao lobby</button>
+        </div>
+      </div>
+    </section>
+  </main>
+  <script type="module" src="./js/game.js"></script>
+</body>
+</html>

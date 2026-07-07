@@ -112,6 +112,7 @@ function createDeckHeroesModule(io, { onlinePlayers = new Map(), broadcastOnline
       abilityCooldownUntil: 0,
       supportCooldownUntil: 0,
       lastAttackAt: 0,
+      lastMoveAt: Date.now(),
       kills: 0,
       deaths: 0
     };
@@ -205,6 +206,7 @@ function createDeckHeroesModule(io, { onlinePlayers = new Map(), broadcastOnline
     player.yaw = player.team === "blue" ? Math.PI : 0;
     player.alive = true;
     player.hp = HEROES[player.heroId]?.hp || HEROES.archer.hp;
+    player.lastMoveAt = Date.now();
     if (emit) emitRoom(room);
   }
 
@@ -432,10 +434,13 @@ function createDeckHeroesModule(io, { onlinePlayers = new Map(), broadcastOnline
     const player = room?.players.find((item) => item.socketId === socket.id);
     if (!room || room.status !== "playing" || !player?.alive) return;
     const hero = HEROES[player.heroId] || HEROES.archer;
-    const maxStep = MOVE_SPEED * hero.speed * 0.25;
+    const now = Date.now();
+    const elapsed = Math.max(0.06, Math.min(0.55, (now - (player.lastMoveAt || now)) / 1000));
+    player.lastMoveAt = now;
+    const maxStep = MOVE_SPEED * hero.speed * (elapsed + 0.16) + 1.2;
     const nextX = clamp(state.x, -ARENA_HALF + 2, ARENA_HALF - 2);
     const nextZ = clamp(state.z, -ARENA_HALF + 2, ARENA_HALF - 2);
-    if (Math.hypot(nextX - player.x, nextZ - player.z) <= maxStep + 0.7) {
+    if (Math.hypot(nextX - player.x, nextZ - player.z) <= maxStep) {
       player.x = nextX;
       player.z = nextZ;
     }

@@ -398,6 +398,7 @@ function buildSketchbook(scene) {
 
   addGround(world, meta.ground, null, 36);
   const half = world.half;
+  world.obstacles.push(collisionBox(0, 0, half * 2 - 4, half * 2 - 4, 5.35, false));
   [
     collisionBox(0, -half, half * 2, 1.6, 7, true),
     collisionBox(0, half, half * 2, 1.6, 7, true),

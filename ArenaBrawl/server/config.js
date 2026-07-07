@@ -77,10 +77,10 @@ const MAP_HALF_SIZES = { sketchbook: 190, praia: 90, cidade: 78, floresta: 92 };
 
 const VEHICLE_SPAWNS = {
   sketchbook: [
-    { id: "sketch-car-left", type: "car", x: -46, y: 0, z: -18, yaw: Math.PI },
-    { id: "sketch-car-right", type: "car", x: 48, y: 0, z: 24, yaw: -Math.PI / 2 },
-    { id: "sketch-plane", type: "plane", x: 0, y: 5, z: 112, yaw: Math.PI },
-    { id: "sketch-heli", type: "helicopter", x: -74, y: 4, z: 72, yaw: Math.PI / 2 }
+    { id: "sketch-car-left", type: "car", x: -48, y: 5.35, z: -28, yaw: Math.PI },
+    { id: "sketch-car-right", type: "car", x: 48, y: 5.35, z: 28, yaw: -Math.PI / 2 },
+    { id: "sketch-plane", type: "plane", x: 0, y: 18, z: 92, yaw: Math.PI },
+    { id: "sketch-heli", type: "helicopter", x: -74, y: 10, z: 72, yaw: Math.PI / 2 }
   ],
   cidade: [
     { id: "city-car-red", type: "car", x: -24, y: 0, z: -4, yaw: Math.PI / 2 },
@@ -116,14 +116,14 @@ const ARENA_HALF = 92;
 const MAP_SPAWNS = {
   sketchbook: {
     ffa: [
-      { x: -42, y: 0, z: -54, yaw: 0.4 }, { x: 42, y: 0, z: -54, yaw: -0.4 },
-      { x: -56, y: 0, z: 18, yaw: Math.PI / 2 }, { x: 56, y: 0, z: 18, yaw: -Math.PI / 2 },
-      { x: -32, y: 0, z: 72, yaw: 2.7 }, { x: 32, y: 0, z: 72, yaw: -2.7 },
-      { x: 0, y: 0, z: -82, yaw: 0 }, { x: 0, y: 0, z: 92, yaw: Math.PI }
+      { x: -56, y: 5.35, z: 18, yaw: Math.PI / 2 }, { x: 56, y: 5.35, z: 18, yaw: -Math.PI / 2 },
+      { x: -32, y: 5.35, z: 72, yaw: 2.7 }, { x: 32, y: 5.35, z: 72, yaw: -2.7 },
+      { x: 0, y: 5.35, z: -82, yaw: 0 }, { x: 38, y: 5.35, z: -70, yaw: -0.55 },
+      { x: -48, y: 5.35, z: -28, yaw: 1.05 }, { x: 48, y: 5.35, z: 28, yaw: -2.1 }
     ],
     teams: {
-      red: [{ x: -58, y: 0, z: -54, yaw: 0.75 }, { x: -48, y: 0, z: -28, yaw: 1.05 }, { x: -64, y: 0, z: 18, yaw: Math.PI / 2 }, { x: -38, y: 0, z: 70, yaw: 2.55 }],
-      blue: [{ x: 58, y: 0, z: 54, yaw: -2.35 }, { x: 48, y: 0, z: 28, yaw: -2.1 }, { x: 64, y: 0, z: -18, yaw: -Math.PI / 2 }, { x: 38, y: 0, z: -70, yaw: -0.55 }]
+      red: [{ x: -56, y: 5.35, z: 18, yaw: Math.PI / 2 }, { x: -48, y: 5.35, z: -28, yaw: 1.05 }, { x: -32, y: 5.35, z: 72, yaw: 2.55 }, { x: 0, y: 5.35, z: -82, yaw: 0 }],
+      blue: [{ x: 56, y: 5.35, z: 18, yaw: -Math.PI / 2 }, { x: 48, y: 5.35, z: 28, yaw: -2.1 }, { x: 32, y: 5.35, z: 72, yaw: -2.7 }, { x: 38, y: 5.35, z: -70, yaw: -0.55 }]
     }
   },
   praia: {

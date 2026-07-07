@@ -34,6 +34,8 @@ let weaponRig, currentWeaponMesh, muzzleFlash;
 let mapWorld = null;
 let activeWorldEvent = null;
 let activeWorldTime = null;
+let cameraMode = localStorage.getItem("arenaBrawlCameraMode") === "third" ? "third" : "first";
+let localViewAvatar = null;
 let socket = null;
 let room = null;
 let selfId = null;
@@ -72,7 +74,11 @@ const local = {
   pendingFallDamage: 0,
   lastVehicleShotAt: 0,
   emoteActive: false,
-  climbing: false
+  climbing: false,
+  moving: false,
+  sprinting: false,
+  crouching: false,
+  jumping: false
 };
 
 /* ── DOM ────────────────────────────────────────────────────────────── */
@@ -84,7 +90,8 @@ function cacheDom() {
     "hudBottomRight", "hudTopRight", "abilityFill", "abilityName", "grenadeCount", "grenadeName",
     "matchTimer", "endScreen", "endResults", "gameRoot", "scopeOverlay", "chargeMeter", "chargeFill",
     "eventAlert", "vehicleStatus", "vehicleHealthFill", "respawnClassSelect", "respawnSecondarySelect",
-    "respawnLoadoutStatus", "minimap", "minimapCanvas", "hitMarker", "danceHub", "danceGrid", "closeDanceHub"
+    "respawnLoadoutStatus", "minimap", "minimapCanvas", "hitMarker", "danceHub", "danceGrid", "closeDanceHub",
+    "cameraToggle"
   ].forEach((id) => { dom[id] = document.getElementById(id); });
 }
 
@@ -136,6 +143,7 @@ function ensureScene() {
   document.addEventListener("mouseup", onMouseUp);
   dom.gameCanvas.addEventListener("click", () => { if (local.alive && !danceHubOpen) controls.lock(); });
   dom.pauseHint.addEventListener("click", () => { if (local.alive && !danceHubOpen) controls.lock(); });
+  dom.cameraToggle?.addEventListener("click", toggleCameraMode);
   controls.addEventListener("lock", () => { dom.pauseHint.hidden = true; });
   controls.addEventListener("unlock", () => {
     setAiming(false);
@@ -144,6 +152,7 @@ function ensureScene() {
   });
   setupRespawnLoadoutControls();
   setupDanceHub();
+  updateCameraToggle();
 
   requestAnimationFrame(render);
 }
@@ -225,8 +234,26 @@ function clearSceneObjects() {
   activeBallistics.length = 0;
   updateVehicleEngine(false);
   vehicles.clear();
+  if (localViewAvatar) {
+    localViewAvatar.mixer?.stopAllAction();
+    scene.remove(localViewAvatar.root);
+    localViewAvatar = null;
+  }
   mapWorld = null;
   activeWorldEvent = null;
+}
+
+function updateCameraToggle() {
+  if (!dom.cameraToggle) return;
+  dom.cameraToggle.textContent = cameraMode === "third" ? "3a pessoa" : "1a pessoa";
+  dom.cameraToggle.classList.toggle("third", cameraMode === "third");
+}
+
+function toggleCameraMode() {
+  cameraMode = cameraMode === "third" ? "first" : "third";
+  localStorage.setItem("arenaBrawlCameraMode", cameraMode);
+  updateCameraToggle();
+  if (cameraMode === "first" && !local.vehicleId) weaponRig.visible = true;
 }
 
 /* ── Terreno (piso + colisao generalizada) ─────────────────────────── */
@@ -443,6 +470,46 @@ function buildAvatar(p) {
   attachAnimatedCharacter(avatar).catch((error) => console.warn("Nao foi possivel carregar o personagem 3D:", error));
   return avatar;
 }
+
+function createLocalViewAvatar(player) {
+  if (localViewAvatar) {
+    localViewAvatar.mixer?.stopAllAction();
+    scene.remove(localViewAvatar.root);
+  }
+  localViewAvatar = buildAvatar({
+    ...player,
+    socketId: selfId || player.socketId || "local",
+    username: "Voce",
+    alive: true
+  });
+  localViewAvatar.root.visible = false;
+  localViewAvatar.root.traverse((child) => {
+    if (child.isSprite) child.visible = false;
+  });
+}
+
+function updateLocalViewAvatar(delta) {
+  if (!localViewAvatar || !local.alive || local.vehicleId) {
+    if (localViewAvatar) localViewAvatar.root.visible = false;
+    return;
+  }
+  const yaw = new THREE.Euler().setFromQuaternion(camera.quaternion, "YXZ").y;
+  localViewAvatar.root.visible = cameraMode === "third";
+  localViewAvatar.root.position.set(camera.position.x, local.jumpOffset, camera.position.z);
+  localViewAvatar.root.rotation.set(0, yaw, 0);
+  localViewAvatar.alive = local.alive;
+  localViewAvatar.moving = local.moving;
+  localViewAvatar.sprinting = local.sprinting;
+  localViewAvatar.jumping = local.jumping;
+  localViewAvatar.crouching = local.crouching;
+  localViewAvatar.inVehicle = false;
+  if (localViewAvatar.mixer) {
+    const animation = animationForAvatar(localViewAvatar);
+    localViewAvatar.setAnimation(animation);
+    localViewAvatar.mixer.update(delta);
+  }
+}
+
 function spawnOrUpdateRemote(p) {
   let avatar = remotePlayers.get(p.socketId);
   if (!avatar) {
@@ -577,7 +644,7 @@ function updateVehiclePresentation(delta) {
       driverAvatar.moving = false;
       driverAvatar.jumping = false;
       driverAvatar.emoteUntil = 0;
-      driverAvatar.setAnimation("crouch");
+      driverAvatar.setAnimation("drive");
     }
 
     if (entry.target.destroyed && !entry.destroyedStyled) {
@@ -1226,6 +1293,10 @@ function onKeyDown(e) {
     socket.emit("vehicle:launch-self", { vehicleId: local.vehicleId });
     return;
   }
+  if (e.code === "KeyC") {
+    toggleCameraMode();
+    return;
+  }
   if (["KeyR", "Digit1", "Digit2", "KeyG", "KeyQ"].includes(e.code)) stopLocalEmote();
   if (e.code === "KeyR") reload();
   if (e.code === "Digit1") switchSlot("primary");
@@ -1287,6 +1358,10 @@ function updateMovement(delta) {
   const moveVec = new THREE.Vector3(strafe, 0, climbing ? 0 : -forward);
   let moving = moveVec.lengthSq() > 0 || climbing;
   if (moving) moveVec.normalize().multiplyScalar(speed * delta);
+  local.moving = moving;
+  local.sprinting = sprinting;
+  local.crouching = crouching;
+  local.jumping = !local.onGround || climbing;
   if (moving) stopLocalEmote();
 
   const prevX = camera.position.x, prevZ = camera.position.z;
@@ -1352,6 +1427,7 @@ function updateMovement(delta) {
     }
   }
   camera.position.y = EYE_HEIGHT + local.jumpOffset - (crouching ? 0.35 : 0);
+  local.jumping = !local.onGround || climbing;
 
   const now = performance.now();
   if (moving && local.onGround && now - lastFootstepAt > (sprinting ? 260 : 390)) {
@@ -1400,6 +1476,48 @@ function animateAvatars(delta) {
   });
 }
 
+function drawFrame(delta) {
+  if (composer) composer.render(delta);
+  else renderer.render(scene, camera);
+}
+
+function renderWithCameraMode(delta) {
+  updateLocalViewAvatar(delta);
+  const useThirdPerson = cameraMode === "third" && room?.status === "playing" && local.alive && !local.vehicleId;
+  if (!useThirdPerson) {
+    if (localViewAvatar) localViewAvatar.root.visible = false;
+    drawFrame(delta);
+    return;
+  }
+
+  const eyePosition = camera.position.clone();
+  const eyeQuaternion = camera.quaternion.clone();
+  const viewEuler = new THREE.Euler().setFromQuaternion(camera.quaternion, "YXZ");
+  const yawOnly = new THREE.Euler(0, viewEuler.y, 0, "YXZ");
+  const offset = new THREE.Vector3(0, 1.05, 5.4).applyEuler(yawOnly);
+  const desired = eyePosition.clone().add(offset);
+  const direction = desired.clone().sub(eyePosition);
+  const distance = direction.length();
+
+  if (distance > 0.01) {
+    direction.normalize();
+    raycaster.set(eyePosition, direction);
+    raycaster.far = distance;
+    const hit = raycaster.intersectObjects(solidMeshesForRaycast, false)
+      .find((item) => item.object.visible !== false && item.distance > 0.45);
+    if (hit) desired.copy(eyePosition).addScaledVector(direction, Math.max(0.65, hit.distance - 0.35));
+  }
+
+  const previousWeaponVisible = weaponRig.visible;
+  weaponRig.visible = false;
+  camera.position.copy(desired);
+  camera.lookAt(eyePosition.x, eyePosition.y - 0.18, eyePosition.z);
+  drawFrame(delta);
+  camera.position.copy(eyePosition);
+  camera.quaternion.copy(eyeQuaternion);
+  weaponRig.visible = cameraMode === "first" ? previousWeaponVisible : false;
+}
+
 function drawMinimap() {
   const canvas = dom.minimapCanvas;
   if (!canvas || !room) return;
@@ -1407,7 +1525,7 @@ function drawMinimap() {
   const size = canvas.width;
   const half = MAP_HALF_SIZES[room.settings.mapId] || ARENA_HALF;
   const point = (x, z) => ({ x: (x / half * 0.5 + 0.5) * size, y: (z / half * 0.5 + 0.5) * size });
-  const mapColors = { praia: "#d7bd68", cidade: "#555d64", floresta: "#375c36" };
+  const mapColors = { sketchbook: "#b8b2a5", praia: "#d7bd68", cidade: "#555d64", floresta: "#375c36" };
   ctx.clearRect(0, 0, size, size);
   ctx.fillStyle = mapColors[room.settings.mapId] || "#3d4d46";
   ctx.fillRect(0, 0, size, size);
@@ -1501,8 +1619,7 @@ function render() {
       drawMinimap();
     }
   }
-  if (composer) composer.render(delta);
-  else renderer.render(scene, camera);
+  renderWithCameraMode(delta);
   requestAnimationFrame(render);
 }
 
@@ -1571,6 +1688,10 @@ export function attachSocket(activeSocket) {
     local.vehicleId = null;
     local.emoteActive = false;
     local.climbing = false;
+    local.moving = false;
+    local.sprinting = false;
+    local.crouching = false;
+    local.jumping = false;
     local.externalVelocity.set(0, 0, 0);
     local.pendingFallDamage = 0;
 
@@ -1578,6 +1699,7 @@ export function attachSocket(activeSocket) {
     camera.quaternion.setFromEuler(new THREE.Euler(0, me?.yaw || 0, 0, "YXZ"));
 
     setViewWeapon("#4c5a3a", CLASSES[local.classId].primary.id);
+    if (me) createLocalViewAvatar(me);
     room.players.forEach((p) => { if (p.socketId !== selfId) spawnOrUpdateRemote(p); });
 
     document.getElementById("lobbyRoot").style.display = "none";
@@ -1587,6 +1709,7 @@ export function attachSocket(activeSocket) {
     dom.hudBottomRight.style.display = "block";
     dom.hudTopRight.style.display = "block";
     dom.minimap.style.display = "block";
+    if (dom.cameraToggle) dom.cameraToggle.style.display = "block";
     dom.endScreen.hidden = true;
     closeDanceHub({ relock: false });
     dom.vehicleStatus.classList.remove("active");
@@ -1607,6 +1730,10 @@ export function attachSocket(activeSocket) {
   socket.on("vehicle:entered", (vehicle) => {
     local.vehicleId = vehicle.id;
     local.emoteActive = false;
+    local.moving = false;
+    local.sprinting = false;
+    local.crouching = false;
+    local.jumping = false;
     closeDanceHub({ relock: false });
     local.lastVehicleShotAt = 0;
     syncVehicles([...(Array.from(vehicles.values()).map((entry) => entry.target).filter((item) => item.id !== vehicle.id)), vehicle]);
@@ -1619,6 +1746,10 @@ export function attachSocket(activeSocket) {
     local.vehicleId = null;
     local.mouseDown = false;
     local.climbing = false;
+    local.moving = false;
+    local.sprinting = false;
+    local.crouching = false;
+    local.jumping = false;
     weaponRig.visible = true;
     camera.position.set(Number(x) || camera.position.x, EYE_HEIGHT + (Number(y) || 0), Number(z) || camera.position.z);
     local.jumpOffset = Number(y) || 0;
@@ -1710,6 +1841,10 @@ export function attachSocket(activeSocket) {
       local.vehicleId = null;
       local.mouseDown = false;
       local.emoteActive = false;
+      local.moving = false;
+      local.sprinting = false;
+      local.crouching = false;
+      local.jumping = false;
       closeDanceHub({ relock: false });
       local.externalVelocity.set(0, 0, 0);
       local.pendingFallDamage = 0;
@@ -1750,6 +1885,10 @@ export function attachSocket(activeSocket) {
       local.mouseDown = false;
       local.emoteActive = false;
       local.climbing = false;
+      local.moving = false;
+      local.sprinting = false;
+      local.crouching = false;
+      local.jumping = false;
       local.externalVelocity.set(0, 0, 0);
       local.pendingFallDamage = 0;
       local.classId = classId || local.classId;
@@ -1866,6 +2005,7 @@ export function attachSocket(activeSocket) {
     setTimeout(() => {
       dom.endScreen.hidden = true;
       dom.gameRoot.style.display = "none";
+      if (dom.cameraToggle) dom.cameraToggle.style.display = "none";
       document.getElementById("lobbyRoot").style.display = "flex";
       if (onEndCallback) onEndCallback();
     }, 5500);

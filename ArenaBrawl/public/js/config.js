@@ -71,10 +71,10 @@ export const MAP_HALF_SIZES = { sketchbook: 190, praia: 90, cidade: 78, floresta
 
 export const VEHICLE_SPAWNS = {
   sketchbook: [
-    { id: "sketch-car-left", type: "car", x: -46, y: 0, z: -18, yaw: Math.PI },
-    { id: "sketch-car-right", type: "car", x: 48, y: 0, z: 24, yaw: -Math.PI / 2 },
-    { id: "sketch-plane", type: "plane", x: 0, y: 5, z: 112, yaw: Math.PI },
-    { id: "sketch-heli", type: "helicopter", x: -74, y: 4, z: 72, yaw: Math.PI / 2 }
+    { id: "sketch-car-left", type: "car", x: -48, y: 5.35, z: -28, yaw: Math.PI },
+    { id: "sketch-car-right", type: "car", x: 48, y: 5.35, z: 28, yaw: -Math.PI / 2 },
+    { id: "sketch-plane", type: "plane", x: 0, y: 18, z: 92, yaw: Math.PI },
+    { id: "sketch-heli", type: "helicopter", x: -74, y: 10, z: 72, yaw: Math.PI / 2 }
   ],
   cidade: [
     { id: "city-car-red", type: "car", x: -24, y: 0, z: -4, yaw: Math.PI / 2 },

@@ -161,6 +161,14 @@ html, body {
 }
 .event-alert.active { opacity: 1; transform: translate(-50%, 0); }
 
+.camera-toggle {
+  position: absolute; top: 20px; left: 50%; z-index: 12; transform: translateX(-50%);
+  display: none; border: 1px solid rgba(255,255,255,0.16); border-radius: 8px;
+  background: rgba(10,12,18,0.62); color: #f2f5ff; font-weight: 800; font-size: 0.75rem;
+  padding: 7px 12px; cursor: pointer;
+}
+.camera-toggle.third { border-color: rgba(255,210,63,0.55); color: #ffd23f; }
+
 .vehicle-status {
   position: absolute; left: 22px; bottom: 24px; z-index: 11; width: 190px; padding: 10px 12px;
   background: rgba(10,13,18,0.78); border-left: 3px solid #ffd23f; display: none;

@@ -133,7 +133,7 @@ export function attachSketchbookWorld(world, options = {}) {
       const box = new THREE.Box3().setFromObject(child);
       if (isPhysics) {
         child.visible = false;
-        addCollisionFromBox(world, box, true);
+        if (options.usePhysicsCollisions) addCollisionFromBox(world, box, true);
         return;
       }
       world.raycastMeshes.push(child);

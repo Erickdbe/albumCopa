@@ -63,6 +63,10 @@ const towers = new Map();
 const supports = new Map();
 const modelPromises = new Map();
 const transient = [];
+const MODEL_FORWARD_OFFSET = Math.PI;
+const WATER_HALF_WIDTH = 2.35;
+const BRIDGE_HALF_WIDTH = 6.35;
+const BRIDGE_CENTERS = [-14, 14];
 
 function escapeHtml(value) {
   return String(value ?? "").replace(/[&<>"']/g, (char) => ({
@@ -86,6 +90,41 @@ function sampleForHero(heroId) {
   return `./assets/kaykit/samples/${map[heroId] || "knight.png"}`;
 }
 
+function heroArt(heroId, compact = false) {
+  const hero = HEROES[heroId] || HEROES.archer;
+  const color = hero.color || "#ffe082";
+  const icons = {
+    archer: `<path d="M32 18c18 14 18 46 0 60" fill="none" stroke="#f4e7c2" stroke-width="6"/><path d="M33 24l33 26-33 26" fill="none" stroke="#1b2421" stroke-width="5"/><path d="M31 50h50" stroke="${color}" stroke-width="7" stroke-linecap="round"/>`,
+    knight: `<path d="M50 16l28 12v22c0 18-11 31-28 38-17-7-28-20-28-38V28z" fill="${color}"/><path d="M50 23v54" stroke="#fff4ca" stroke-width="6"/><path d="M31 44h38" stroke="#1b2421" stroke-width="6"/>`,
+    mage: `<circle cx="50" cy="46" r="17" fill="${color}"/><path d="M29 76l42-52" stroke="#f8e4a1" stroke-width="8" stroke-linecap="round"/><circle cx="74" cy="21" r="8" fill="#fff4ca"/>`,
+    barbarian: `<path d="M31 73l40-45" stroke="#d7dde0" stroke-width="10" stroke-linecap="round"/><path d="M64 22l16 16-17 8-8-8z" fill="${color}"/><circle cx="37" cy="70" r="11" fill="#7a4a2f"/>`,
+    rogue: `<path d="M52 17l21 23-32 44-14-15z" fill="${color}"/><path d="M58 27l15-12 12 12-15 12" fill="#e7edf0"/><circle cx="42" cy="66" r="10" fill="#253029"/>`,
+    giant: `<circle cx="50" cy="37" r="22" fill="${color}"/><rect x="24" y="47" width="52" height="34" rx="12" fill="#8f5640"/><path d="M31 55h38" stroke="#f5d083" stroke-width="7"/>`,
+    balloon: `<ellipse cx="50" cy="33" rx="25" ry="29" fill="${color}"/><path d="M31 58h38l-8 13H39z" fill="#f5d083"/><rect x="36" y="69" width="28" height="15" rx="4" fill="#7a5132"/>`,
+    bomber: `<circle cx="48" cy="55" r="22" fill="#2f3435"/><path d="M58 36c5-10 13-12 20-7" stroke="#f6cf57" stroke-width="6" fill="none"/><circle cx="43" cy="49" r="6" fill="${color}"/>`,
+    healer: `<circle cx="50" cy="50" r="28" fill="${color}"/><path d="M50 31v38M31 50h38" stroke="#fff" stroke-width="10" stroke-linecap="round"/>`,
+    lancer: `<path d="M25 77l51-51" stroke="${color}" stroke-width="8" stroke-linecap="round"/><path d="M68 16l18-4-4 18z" fill="#e7edf0"/><path d="M39 61l-12-12" stroke="#f5d083" stroke-width="7"/>`,
+    skeleton: `<circle cx="50" cy="31" r="17" fill="#e7edf0"/><circle cx="43" cy="29" r="4" fill="#27332e"/><circle cx="57" cy="29" r="4" fill="#27332e"/><rect x="39" y="48" width="22" height="28" rx="5" fill="#d8dee2"/><path d="M28 61h44M35 80l30-30" stroke="${color}" stroke-width="7" stroke-linecap="round"/>`,
+    skeletonArcher: `<circle cx="45" cy="32" r="15" fill="#e7edf0"/><circle cx="40" cy="30" r="3.5" fill="#27332e"/><circle cx="50" cy="30" r="3.5" fill="#27332e"/><path d="M63 20c16 13 16 47 0 60" fill="none" stroke="${color}" stroke-width="6"/><path d="M63 27v46" stroke="#f4e7c2" stroke-width="4"/><path d="M29 56h48" stroke="#d8dee2" stroke-width="6" stroke-linecap="round"/>`,
+    witch: `<path d="M50 13l27 32H23z" fill="${color}"/><path d="M28 46h44l-7 37H35z" fill="#39254f"/><circle cx="50" cy="44" r="12" fill="#e8c79a"/><circle cx="75" cy="25" r="8" fill="#b6ffef"/><path d="M73 32L55 78" stroke="#d8c2ff" stroke-width="7" stroke-linecap="round"/>`
+  };
+  const body = icons[heroId] || icons.knight;
+  const sizeClass = compact ? "hero-thumb compact" : "hero-thumb";
+  return `<span class="${sizeClass}" aria-hidden="true">
+    <svg viewBox="0 0 100 100" focusable="false">
+      <defs>
+        <linearGradient id="g-${heroId}" x1="0" x2="1" y1="0" y2="1">
+          <stop offset="0" stop-color="#27332e"/>
+          <stop offset="1" stop-color="#111815"/>
+        </linearGradient>
+      </defs>
+      <rect width="100" height="100" rx="12" fill="url(#g-${heroId})"/>
+      <circle cx="82" cy="20" r="18" fill="${color}" opacity="0.22"/>
+      ${body}
+    </svg>
+  </span>`;
+}
+
 function renderHeroCatalog() {
   const indexes = new Map(state.deck.map((id, index) => [id, index + 1]));
   dom.deckCount.textContent = `${state.deck.length}/8`;
@@ -94,7 +133,7 @@ function renderHeroCatalog() {
     const selected = indexes.has(id);
     return `<button class="hero-card${selected ? " selected" : ""}" style="--hero-color:${hero.color}" data-hero="${id}" type="button">
       ${selected ? `<em>${indexes.get(id)}</em>` : ""}
-      <img src="${sampleForHero(id)}" alt="">
+      ${heroArt(id)}
       <span class="meta">
         <strong>${hero.name}</strong>
         <small>${hero.role} · ${hero.damage} dano</small>
@@ -126,6 +165,43 @@ function me() {
 
 function enemyTeam(team) {
   return team === "blue" ? "red" : "blue";
+}
+
+function isOnBridge(x, z) {
+  return Math.abs(z) <= WATER_HALF_WIDTH + 0.85
+    && BRIDGE_CENTERS.some((center) => Math.abs(x - center) <= BRIDGE_HALF_WIDTH);
+}
+
+function canStandAt(heroId, x, z) {
+  if (HEROES[heroId]?.canCrossWater) return true;
+  return Math.abs(z) > WATER_HALF_WIDTH || isOnBridge(x, z);
+}
+
+function legalLocalPosition(heroId, previous, next) {
+  if (canStandAt(heroId, next.x, next.z)) return next;
+  const safeSide = previous.z < 0 ? -1 : 1;
+  return new THREE.Vector3(previous.x, 0, safeSide * (WATER_HALF_WIDTH + 0.18));
+}
+
+function aimDirection(includePitch = true) {
+  const pitch = includePitch ? state.pitch : 0;
+  const flat = Math.cos(pitch);
+  return new THREE.Vector3(
+    -Math.sin(state.yaw) * flat,
+    Math.sin(pitch),
+    -Math.cos(state.yaw) * flat
+  ).normalize();
+}
+
+function unitHeight(heroId) {
+  if (heroId === "balloon") return 2.7;
+  return 1.15 * (HEROES[heroId]?.visualScale || 1);
+}
+
+function targetPosition(target) {
+  const heroId = target.heroId || "tower";
+  const y = target.kind ? (target.kind === "king" ? 4.8 : 3.6) : unitHeight(heroId);
+  return new THREE.Vector3(Number(target.x) || 0, y, Number(target.z) || 0);
 }
 
 function renderLobby() {
@@ -366,10 +442,19 @@ function prepareHeroRoot(root) {
   return root;
 }
 
+function applyHeroModelStyle(model, heroId) {
+  const hero = HEROES[heroId] || HEROES.archer;
+  model.rotation.y = MODEL_FORWARD_OFFSET;
+  model.scale.multiplyScalar(hero.visualScale || 1);
+}
+
 function loadHeroAsset(heroId) {
   const hero = HEROES[heroId] || HEROES.archer;
   if (hero.model === "balloon") {
     return Promise.resolve({ root: buildBalloonModel(hero.color), animations: [] });
+  }
+  if (hero.model === "skeleton" || hero.model === "skeleton_archer") {
+    return Promise.resolve({ root: buildSkeletonModel(hero.model === "skeleton_archer", hero.color), animations: [] });
   }
   if (!modelPromises.has(hero.model)) {
     const loader = new GLTFLoader();
@@ -384,10 +469,14 @@ function loadHeroAsset(heroId) {
 }
 
 function instantiateHeroModel(heroId) {
-  return loadHeroAsset(heroId).then((asset) => ({
-    model: cloneSkeleton(asset.root),
-    animations: asset.animations
-  }));
+  return loadHeroAsset(heroId).then((asset) => {
+    const model = cloneSkeleton(asset.root);
+    applyHeroModelStyle(model, heroId);
+    return {
+      model,
+      animations: asset.animations
+    };
+  });
 }
 
 function clipByName(clips, names) {
@@ -463,7 +552,12 @@ function triggerUnitAction(unit, kind) {
 }
 
 function updateUnitAnimation(unit, delta) {
+  unit.animTime = (unit.animTime || 0) + delta * (unit.moving ? 11 : 3);
   unit.mixer?.update(delta);
+  if (!unit.mixer && unit.model) {
+    unit.model.position.y = Math.max(0, Math.sin(unit.animTime) * (unit.moving ? 0.055 : 0.018));
+    unit.model.rotation.z = Math.sin(unit.animTime * 0.7) * (unit.moving ? 0.045 : 0.018);
+  }
   if (unit.actionLockUntil > performance.now()) return;
   playUnitAction(unit, unit.moving ? "run" : "idle", 0.16);
 }
@@ -475,23 +569,139 @@ function buildFallback(heroId) {
   body.position.y = 1.05;
   body.castShadow = true;
   group.add(body);
+  applyHeroModelStyle(group, heroId);
   return group;
 }
 
 function buildBalloonModel(color) {
   const group = new THREE.Group();
-  const balloon = new THREE.Mesh(new THREE.SphereGeometry(0.9, 18, 14), new THREE.MeshStandardMaterial({ color, roughness: 0.55 }));
-  balloon.position.y = 2.25;
-  balloon.scale.y = 1.22;
-  const basket = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.5, 0.8), new THREE.MeshStandardMaterial({ color: 0x7a5132, roughness: 0.8 }));
-  basket.position.y = 0.95;
-  const ropeMat = new THREE.MeshBasicMaterial({ color: 0x2f2319 });
-  [[-0.32, -0.32], [0.32, -0.32], [-0.32, 0.32], [0.32, 0.32]].forEach(([x, z]) => {
-    const rope = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 1.25, 6), ropeMat);
+  const envelopeMat = new THREE.MeshStandardMaterial({ color, roughness: 0.58 });
+  const darkMat = new THREE.MeshStandardMaterial({ color: 0x7d2f47, roughness: 0.7 });
+  const trimMat = new THREE.MeshStandardMaterial({ color: 0xf4d06f, roughness: 0.52 });
+  const basketMat = new THREE.MeshStandardMaterial({ color: 0x7a5132, roughness: 0.85 });
+  const ropeMat = new THREE.MeshStandardMaterial({ color: 0x2f2319, roughness: 0.9 });
+  const bombMat = new THREE.MeshStandardMaterial({ color: 0x2d3233, roughness: 0.65 });
+
+  const envelope = new THREE.Mesh(new THREE.SphereGeometry(1.22, 24, 18), envelopeMat);
+  envelope.position.y = 3.05;
+  envelope.scale.set(1, 1.32, 1);
+  envelope.castShadow = true;
+  group.add(envelope);
+
+  for (let i = 0; i < 6; i += 1) {
+    const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.08, 2.95, 0.05), i % 2 ? trimMat : darkMat);
+    stripe.position.y = 3.05;
+    stripe.position.x = Math.cos(i / 6 * Math.PI * 2) * 1.03;
+    stripe.position.z = Math.sin(i / 6 * Math.PI * 2) * 1.03;
+    stripe.rotation.y = -i / 6 * Math.PI * 2;
+    stripe.castShadow = true;
+    group.add(stripe);
+  }
+
+  const collar = new THREE.Mesh(new THREE.CylinderGeometry(0.72, 0.92, 0.26, 12), trimMat);
+  collar.position.y = 1.74;
+  collar.castShadow = true;
+  group.add(collar);
+
+  const basket = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.62, 0.95), basketMat);
+  basket.position.y = 0.92;
+  basket.castShadow = true;
+  group.add(basket);
+
+  [[-0.42, -0.42], [0.42, -0.42], [-0.42, 0.42], [0.42, 0.42]].forEach(([x, z]) => {
+    const rope = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 1.35, 7), ropeMat);
     rope.position.set(x, 1.55, z);
+    rope.rotation.x = z * 0.12;
+    rope.rotation.z = -x * 0.12;
     group.add(rope);
   });
-  group.add(balloon, basket);
+
+  const bomb = new THREE.Mesh(new THREE.SphereGeometry(0.34, 16, 12), bombMat);
+  bomb.position.set(0, 0.34, -0.18);
+  bomb.castShadow = true;
+  const fuse = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.32, 7), trimMat);
+  fuse.position.set(0.1, 0.67, -0.18);
+  fuse.rotation.z = -0.55;
+  group.add(bomb, fuse);
+  return group;
+}
+
+function boneBetween(from, to, radius, material) {
+  const direction = new THREE.Vector3().subVectors(to, from);
+  const length = direction.length();
+  const bone = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, length, 8), material);
+  bone.position.copy(from).addScaledVector(direction, 0.5);
+  bone.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), direction.normalize());
+  bone.castShadow = true;
+  return bone;
+}
+
+function buildSkeletonModel(archer = false, color = "#e7edf0") {
+  const group = new THREE.Group();
+  const boneMat = new THREE.MeshStandardMaterial({ color: 0xe7edf0, roughness: 0.72 });
+  const clothMat = new THREE.MeshStandardMaterial({ color: new THREE.Color(color), roughness: 0.8 });
+  const darkMat = new THREE.MeshStandardMaterial({ color: 0x283034, roughness: 0.85 });
+  const eyeMat = new THREE.MeshStandardMaterial({ color: 0x7dd7ff, emissive: 0x4cc6ff, emissiveIntensity: 0.8 });
+
+  const skull = new THREE.Mesh(new THREE.SphereGeometry(0.27, 16, 12), boneMat);
+  skull.position.y = 1.68;
+  skull.scale.set(0.92, 1.05, 0.86);
+  skull.castShadow = true;
+  group.add(skull);
+  [-0.09, 0.09].forEach((x) => {
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.035, 8, 6), eyeMat);
+    eye.position.set(x, 1.69, -0.23);
+    group.add(eye);
+  });
+
+  const ribs = new THREE.Group();
+  for (let i = 0; i < 4; i += 1) {
+    const rib = new THREE.Mesh(new THREE.TorusGeometry(0.24 - i * 0.018, 0.016, 6, 18, Math.PI), boneMat);
+    rib.position.y = 1.34 - i * 0.08;
+    rib.rotation.x = Math.PI / 2;
+    rib.castShadow = true;
+    ribs.add(rib);
+  }
+  ribs.add(boneBetween(new THREE.Vector3(0, 1.06, 0), new THREE.Vector3(0, 1.48, 0), 0.035, boneMat));
+  group.add(ribs);
+
+  const pelvis = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.16, 0.22), boneMat);
+  pelvis.position.y = 0.95;
+  pelvis.castShadow = true;
+  group.add(pelvis);
+
+  const limbPairs = [
+    [[-0.25, 1.36, 0], [-0.58, 1.1, -0.04], [-0.38, 0.9, -0.02]],
+    [[0.25, 1.36, 0], [0.58, 1.1, -0.04], [0.38, 0.9, -0.02]],
+    [[-0.15, 0.9, 0], [-0.25, 0.48, 0], [-0.18, 0.08, -0.02]],
+    [[0.15, 0.9, 0], [0.25, 0.48, 0], [0.18, 0.08, -0.02]]
+  ];
+  limbPairs.forEach(([a, b, c]) => {
+    group.add(boneBetween(new THREE.Vector3(...a), new THREE.Vector3(...b), 0.035, boneMat));
+    group.add(boneBetween(new THREE.Vector3(...b), new THREE.Vector3(...c), 0.03, boneMat));
+  });
+
+  const hood = new THREE.Mesh(new THREE.ConeGeometry(0.35, 0.34, 5), clothMat);
+  hood.position.y = 1.88;
+  hood.rotation.y = Math.PI / 5;
+  hood.castShadow = true;
+  group.add(hood);
+
+  if (archer) {
+    const bow = new THREE.Mesh(new THREE.TorusGeometry(0.45, 0.018, 6, 28, Math.PI * 1.25), clothMat);
+    bow.position.set(0.55, 1.04, -0.12);
+    bow.rotation.set(0.4, 0.2, -0.9);
+    group.add(bow);
+    group.add(boneBetween(new THREE.Vector3(0.36, 1.12, -0.18), new THREE.Vector3(0.95, 1.12, -0.18), 0.018, boneMat));
+  } else {
+    const sword = boneBetween(new THREE.Vector3(0.42, 0.9, -0.08), new THREE.Vector3(0.78, 1.55, -0.18), 0.025, darkMat);
+    const blade = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.28, 4), new THREE.MeshStandardMaterial({ color: 0xd7dde0, roughness: 0.35 }));
+    blade.position.set(0.86, 1.7, -0.2);
+    blade.rotation.z = -0.55;
+    group.add(sword, blade);
+  }
+
+  group.position.y = 0.05;
   return group;
 }
 
@@ -515,6 +725,7 @@ function createUnit(id, heroId, team) {
     actions: {},
     currentAction: null,
     actionLockUntil: 0,
+    animTime: Math.random() * Math.PI,
     heroId,
     team,
     moving: false,
@@ -597,6 +808,50 @@ function syncUnits(room) {
   });
 }
 
+function createTowerHealthBillboard(tower) {
+  const canvas = document.createElement("canvas");
+  canvas.width = 256;
+  canvas.height = 72;
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true, depthTest: false }));
+  sprite.position.y = tower.kind === "king" ? 7.15 : 5.5;
+  sprite.scale.set(tower.kind === "king" ? 5.2 : 4.4, tower.kind === "king" ? 1.45 : 1.22, 1);
+  sprite.renderOrder = 20;
+  return { canvas, ctx: canvas.getContext("2d"), texture, sprite, lastKey: "" };
+}
+
+function updateTowerHealthBillboard(entry, tower) {
+  if (!entry.healthBillboard) {
+    entry.healthBillboard = createTowerHealthBillboard(tower);
+    entry.group.add(entry.healthBillboard.sprite);
+  }
+  const hp = Math.max(0, Math.round(tower.hp));
+  const maxHp = Math.max(1, Math.round(tower.maxHp || tower.hp || 1));
+  const key = `${hp}/${maxHp}:${tower.alive}`;
+  if (entry.healthBillboard.lastKey === key) return;
+  entry.healthBillboard.lastKey = key;
+  const { canvas, ctx, texture } = entry.healthBillboard;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = "rgba(8,12,14,0.82)";
+  ctx.roundRect(14, 8, 228, 54, 14);
+  ctx.fill();
+  ctx.strokeStyle = tower.team === "blue" ? "#7dbdff" : "#ff8c91";
+  ctx.lineWidth = 4;
+  ctx.stroke();
+  ctx.fillStyle = "#efe7c8";
+  ctx.font = "800 21px Segoe UI, Arial";
+  ctx.textAlign = "center";
+  ctx.fillText(`${hp}/${maxHp}`, 128, 30);
+  ctx.fillStyle = "rgba(255,255,255,0.18)";
+  ctx.roundRect(34, 39, 188, 12, 6);
+  ctx.fill();
+  ctx.fillStyle = hp / maxHp > 0.38 ? "#8bd450" : "#ef645d";
+  ctx.roundRect(34, 39, 188 * Math.max(0, Math.min(1, hp / maxHp)), 12, 6);
+  ctx.fill();
+  texture.needsUpdate = true;
+}
+
 function createTower(tower) {
   const group = new THREE.Group();
   const teamColor = tower.team === "blue" ? 0x397bdc : 0xc73f45;
@@ -609,7 +864,7 @@ function createTower(tower) {
   const shadowMat = new THREE.MeshStandardMaterial({ color: 0x273029, roughness: 0.9 });
 
   const plinth = new THREE.Mesh(
-    new THREE.CylinderGeometry(isKing ? 2.65 : 2.05, isKing ? 2.95 : 2.35, 0.55, 8),
+    new THREE.CylinderGeometry(isKing ? 2.75 : 2.15, isKing ? 3.05 : 2.45, 0.46, 6),
     shadowMat
   );
   plinth.position.y = 0.28;
@@ -617,8 +872,17 @@ function createTower(tower) {
   plinth.receiveShadow = true;
   group.add(plinth);
 
+  const hexTile = new THREE.Mesh(
+    new THREE.CylinderGeometry(isKing ? 3.35 : 2.7, isKing ? 3.35 : 2.7, 0.18, 6),
+    new THREE.MeshStandardMaterial({ color: tower.team === "blue" ? 0x334f6f : 0x6b3d43, roughness: 0.88 })
+  );
+  hexTile.position.y = 0.09;
+  hexTile.rotation.y = Math.PI / 6;
+  hexTile.receiveShadow = true;
+  group.add(hexTile);
+
   const base = new THREE.Mesh(
-    new THREE.CylinderGeometry(isKing ? 1.85 : 1.35, isKing ? 2.15 : 1.62, isKing ? 4.1 : 3.15, 8),
+    new THREE.CylinderGeometry(isKing ? 1.85 : 1.35, isKing ? 2.15 : 1.62, isKing ? 4.1 : 3.15, 6),
     stoneMat
   );
   base.position.y = isKing ? 2.42 : 2.02;
@@ -627,7 +891,7 @@ function createTower(tower) {
   group.add(base);
 
   const midBand = new THREE.Mesh(
-    new THREE.CylinderGeometry(isKing ? 1.93 : 1.42, isKing ? 1.93 : 1.42, 0.28, 8),
+    new THREE.CylinderGeometry(isKing ? 1.93 : 1.42, isKing ? 1.93 : 1.42, 0.28, 6),
     trimMat
   );
   midBand.position.y = isKing ? 3.35 : 2.75;
@@ -653,7 +917,7 @@ function createTower(tower) {
 
   const topY = isKing ? 4.55 : 3.55;
   const crownBase = new THREE.Mesh(
-    new THREE.CylinderGeometry(isKing ? 2.05 : 1.52, isKing ? 2.05 : 1.52, 0.36, 8),
+    new THREE.CylinderGeometry(isKing ? 2.05 : 1.52, isKing ? 2.05 : 1.52, 0.36, 6),
     trimMat
   );
   crownBase.position.y = topY;
@@ -701,6 +965,7 @@ function createTower(tower) {
   group.position.set(tower.x, 0, tower.z);
   scene.add(group);
   const entry = { group, data: tower };
+  updateTowerHealthBillboard(entry, tower);
   towers.set(tower.id, entry);
   return entry;
 }
@@ -712,6 +977,7 @@ function syncTowers(room) {
     const entry = towers.get(tower.id) || createTower(tower);
     entry.data = tower;
     entry.group.visible = tower.alive !== false;
+    updateTowerHealthBillboard(entry, tower);
   });
   towers.forEach((entry, id) => {
     if (present.has(id)) return;
@@ -814,6 +1080,7 @@ function renderDeckBar(self) {
     const cooldown = Math.max(0, Math.ceil(((self.cooldowns?.[heroId] || 0) - now) / 1000));
     const active = heroId === self.heroId;
     return `<button class="deck-slot${active ? " active" : ""}${cooldown ? " disabled" : ""}" style="--hero-color:${hero.color}" data-slot="${index}" type="button">
+      ${heroArt(heroId, true)}
       <span>${index + 1}. ${hero.name}</span>
       <small>${hero.role}</small>
       ${cooldown ? `<div class="cooldown">${cooldown}</div>` : ""}
@@ -857,7 +1124,7 @@ function onKey(event, pressed) {
 function onMouseMove(event) {
   if (!state.locked || !state.playing) return;
   state.yaw -= event.movementX * 0.0026;
-  state.pitch = Math.max(-0.85, Math.min(0.08, state.pitch - event.movementY * 0.002));
+  state.pitch = Math.max(-0.82, Math.min(0.55, state.pitch - event.movementY * 0.0022));
 }
 
 function onMouseDown(event) {
@@ -871,7 +1138,7 @@ function onMouseDown(event) {
 
 function castAbility() {
   if (!state.playing) return;
-  const forward = new THREE.Vector3(-Math.sin(state.yaw), 0, -Math.cos(state.yaw));
+  const forward = aimDirection(false);
   const point = state.localPosition.clone().addScaledVector(forward, 14);
   triggerUnitAction(units.get(state.selfId), "ability");
   socket.emit("deck-heroes:ability", { x: point.x, z: point.z });
@@ -897,14 +1164,16 @@ function findAimTarget() {
   const self = me();
   if (!self) return null;
   const hero = HEROES[self.heroId] || HEROES.archer;
-  const origin = state.localPosition;
-  const forward = new THREE.Vector3(-Math.sin(state.yaw), 0, -Math.cos(state.yaw));
+  const origin = state.localPosition.clone();
+  origin.y = unitHeight(self.heroId);
+  const forward = aimDirection(true);
   let best = null;
   let bestScore = -Infinity;
 
   state.room.players.forEach((player) => {
     if (player.team === self.team || !player.alive || player.socketId === state.selfId) return;
-    const to = new THREE.Vector3(player.x - origin.x, 0, player.z - origin.z);
+    const target = targetPosition(player);
+    const to = target.sub(origin);
     const dist = to.length();
     if (dist > hero.range + 3 || dist < 0.01) return;
     const dot = forward.dot(to.normalize());
@@ -915,9 +1184,24 @@ function findAimTarget() {
     }
   });
 
+  state.room.supports?.forEach((support) => {
+    if (support.team === self.team || !support.alive) return;
+    const target = targetPosition(support);
+    const to = target.sub(origin);
+    const dist = to.length();
+    if (dist > hero.range + 3 || dist < 0.01) return;
+    const dot = forward.dot(to.normalize());
+    const score = dot * 2 - dist / Math.max(1, hero.range);
+    if (dot > 0.45 && score > bestScore) {
+      bestScore = score;
+      best = { targetSocketId: support.id };
+    }
+  });
+
   state.room.towers.forEach((tower) => {
     if (tower.team === self.team || !tower.alive) return;
-    const to = new THREE.Vector3(tower.x - origin.x, 0, tower.z - origin.z);
+    const target = targetPosition(tower);
+    const to = target.sub(origin);
     const dist = to.length();
     if (dist > hero.range + 4 || dist < 0.01) return;
     const dot = forward.dot(to.normalize());
@@ -942,9 +1226,10 @@ function updateMovement(delta) {
   const isMoving = movement.lengthSq() > 0;
   if (movement.lengthSq() > 0) {
     movement.normalize().multiplyScalar(MOVE_SPEED * hero.speed * delta);
-    state.localPosition.add(movement);
-    state.localPosition.x = Math.max(-ARENA_HALF + 2, Math.min(ARENA_HALF - 2, state.localPosition.x));
-    state.localPosition.z = Math.max(-ARENA_HALF + 2, Math.min(ARENA_HALF - 2, state.localPosition.z));
+    const next = state.localPosition.clone().add(movement);
+    next.x = Math.max(-ARENA_HALF + 2, Math.min(ARENA_HALF - 2, next.x));
+    next.z = Math.max(-ARENA_HALF + 2, Math.min(ARENA_HALF - 2, next.z));
+    state.localPosition.copy(legalLocalPosition(self.heroId, state.localPosition, next));
     self.x = state.localPosition.x;
     self.z = state.localPosition.z;
   }
@@ -967,12 +1252,13 @@ function updateMovement(delta) {
 
 function updateCamera(delta) {
   const target = state.localPosition.clone();
-  target.y = 1.35;
+  target.y = unitHeight(me()?.heroId || "archer") + 0.2;
   const back = new THREE.Vector3(Math.sin(state.yaw), 0, Math.cos(state.yaw)).multiplyScalar(7.8);
-  const height = 4.8 + Math.abs(state.pitch) * 2.2;
+  const height = 4.4 - Math.min(0, state.pitch) * 1.5;
   const desired = target.clone().add(back).add(new THREE.Vector3(0, height, 0));
+  const lookTarget = target.clone().addScaledVector(aimDirection(true), 12);
   camera.position.lerp(desired, Math.min(1, delta * 9));
-  camera.lookAt(target.add(new THREE.Vector3(0, 1.1, 0)));
+  camera.lookAt(lookTarget);
 }
 
 function updateVisuals(delta) {
@@ -998,6 +1284,7 @@ function updateVisuals(delta) {
   });
   for (let i = transient.length - 1; i >= 0; i--) {
     const item = transient[i];
+    item.update?.(delta, item);
     item.life -= delta;
     if (item.material) item.material.opacity = Math.max(0, item.life / item.maxLife);
     if (item.life > 0) continue;
@@ -1008,15 +1295,68 @@ function updateVisuals(delta) {
   }
 }
 
-function projectileLine(from, to, color = 0xffe082) {
+function projectileObject(heroId, color) {
+  const hero = HEROES[heroId] || {};
+  const type = heroId === "tower" ? "cannon" : hero.projectile || "slash";
+  const group = new THREE.Group();
+  const material = new THREE.MeshStandardMaterial({ color, roughness: 0.45, emissive: type === "magic" || type === "heal" ? color : 0x000000, emissiveIntensity: 0.35 });
+  if (type === "arrow" || type === "spear" || type === "bone_arrow") {
+    const isBone = type === "bone_arrow";
+    const shaft = new THREE.Mesh(new THREE.CylinderGeometry(type === "spear" ? 0.045 : 0.028, type === "spear" ? 0.045 : 0.028, type === "spear" ? 1.35 : 1.05, 8), isBone ? new THREE.MeshStandardMaterial({ color: 0xe7edf0, roughness: 0.7 }) : material);
+    shaft.rotation.x = Math.PI / 2;
+    const head = new THREE.Mesh(new THREE.ConeGeometry(type === "spear" ? 0.14 : 0.1, type === "spear" ? 0.34 : 0.24, 8), new THREE.MeshStandardMaterial({ color: isBone ? 0xbac3c7 : 0xe8eef0, roughness: 0.35 }));
+    head.rotation.x = Math.PI / 2;
+    head.position.z = type === "spear" ? 0.78 : 0.62;
+    group.add(shaft, head);
+  } else if (type === "bomb" || type === "cannon") {
+    const ball = new THREE.Mesh(new THREE.SphereGeometry(type === "cannon" ? 0.28 : 0.34, 16, 12), new THREE.MeshStandardMaterial({ color: type === "cannon" ? 0x22292b : 0x313638, roughness: 0.62 }));
+    const fuse = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.26, 6), new THREE.MeshStandardMaterial({ color: 0xf3ca58 }));
+    fuse.position.set(0.12, 0.25, 0);
+    fuse.rotation.z = -0.55;
+    group.add(ball, fuse);
+  } else if (type === "magic" || type === "heal") {
+    const orb = new THREE.Mesh(new THREE.SphereGeometry(0.26, 18, 12), material);
+    const halo = new THREE.Mesh(new THREE.TorusGeometry(0.36, 0.035, 8, 24), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.65 }));
+    halo.rotation.x = Math.PI / 2;
+    group.add(orb, halo);
+  } else {
+    const slash = new THREE.Mesh(new THREE.TorusGeometry(0.34, 0.035, 8, 28, Math.PI * 1.25), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.82 }));
+    slash.rotation.x = Math.PI / 2;
+    group.add(slash);
+  }
+  group.traverse((child) => {
+    if (child.isMesh) child.castShadow = true;
+  });
+  return group;
+}
+
+function projectileLine(from, to, heroId = "tower") {
   if (!scene) return;
-  const material = new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.95 });
-  const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints([
-    new THREE.Vector3(from.x, 1.6, from.z),
-    new THREE.Vector3(to.x, 1.3, to.z)
-  ]), material);
-  scene.add(line);
-  transient.push({ object: line, material, life: 0.18, maxLife: 0.18 });
+  const color = new THREE.Color(HEROES[heroId]?.color || (heroId === "tower" ? "#ffe082" : "#ffffff"));
+  const start = targetPosition(from);
+  const end = targetPosition(to);
+  start.y += from.kind ? 0.2 : 0.45;
+  const object = projectileObject(heroId, color);
+  object.position.copy(start);
+  scene.add(object);
+  const duration = HEROES[heroId]?.projectile === "bomb" || heroId === "tower" ? 0.46 : 0.28;
+  transient.push({
+    object,
+    life: duration,
+    maxLife: duration,
+    start,
+    end,
+    elapsed: 0,
+    update(delta, item) {
+      item.elapsed += delta;
+      const t = Math.min(1, item.elapsed / item.maxLife);
+      object.position.lerpVectors(item.start, item.end, t);
+      object.position.y += Math.sin(t * Math.PI) * (HEROES[heroId]?.projectile === "bomb" || heroId === "tower" ? 2.1 : 0.45);
+      const dir = item.end.clone().sub(item.start).normalize();
+      if (dir.lengthSq() > 0) object.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), dir);
+      object.rotation.z += delta * 7;
+    }
+  });
 }
 
 function abilityMarker(x, z, color = 0xc98bff) {
@@ -1104,17 +1444,25 @@ socket.on("deck-heroes:attack", ({ from, targetSocketId, towerId }) => {
   triggerUnitAction(units.get(from), "attack");
   const targetPlayer = state.room.players.find((player) => player.socketId === targetSocketId);
   const targetTower = state.room.towers.find((tower) => tower.id === towerId);
-  const target = targetPlayer || targetTower;
-  if (target) projectileLine(attacker, target, HEROES[attacker.heroId]?.color || 0xffe082);
+  const targetSupport = state.room.supports?.find((support) => support.id === targetSocketId);
+  const target = targetPlayer || targetSupport || targetTower;
+  if (target) projectileLine(attacker, target, attacker.heroId);
 });
 socket.on("deck-heroes:ability", ({ socketId, x, z, heroId }) => {
   triggerUnitAction(units.get(socketId), "ability");
   abilityMarker(x, z, HEROES[heroId]?.color || 0xc98bff);
 });
+socket.on("deck-heroes:summon", ({ socketId, heroId }) => {
+  const summoner = state.room?.players?.find((player) => player.socketId === socketId);
+  if (!summoner) return;
+  triggerUnitAction(units.get(socketId), "ability");
+  abilityMarker(summoner.x, summoner.z + (summoner.team === "blue" ? 2.4 : -2.4), HEROES[heroId]?.color || 0xa36bff);
+});
 socket.on("deck-heroes:tower-fire", ({ towerId, targetId }) => {
   const tower = state.room?.towers?.find((item) => item.id === towerId);
-  const target = state.room?.players?.find((item) => item.socketId === targetId);
-  if (tower && target) projectileLine(tower, target, tower.team === "blue" ? 0x8ec7ff : 0xff8e8e);
+  const target = state.room?.players?.find((item) => item.socketId === targetId)
+    || state.room?.supports?.find((item) => item.id === targetId);
+  if (tower && target) projectileLine(tower, target, "tower");
 });
 socket.on("deck-heroes:end", ({ winner }) => {
   dom.endTitle.textContent = winner === "draw" ? "Empate" : `${winner === "blue" ? "Azul" : "Vermelho"} venceu`;

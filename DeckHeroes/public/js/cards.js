@@ -32,8 +32,8 @@ export const HEROES = {
   },
   giant: {
     id: "giant", name: "Gigante", role: "Cerco", model: "Barbarian.glb",
-    color: "#df7d5e", hp: 330, speed: 0.72, range: 5.2, damage: 55, fireRateMs: 950,
-    visualScale: 1.55,
+    color: "#df7d5e", hp: 430, speed: 0.64, range: 7, damage: 85, fireRateMs: 980,
+    visualScale: 2.35,
     ability: { id: "stomp", name: "Pisao", cooldownMs: 12000 }
   },
   balloon: {

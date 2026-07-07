@@ -43,8 +43,8 @@ const HEROES = {
   },
   giant: {
     id: "giant", name: "Gigante", role: "Cerco", model: "Barbarian.glb",
-    color: "#df7d5e", hp: 330, speed: 0.72, range: 5.2, damage: 55, fireRateMs: 950, towerDamageMul: 1.45,
-    visualScale: 1.55,
+    color: "#df7d5e", hp: 430, speed: 0.64, range: 7, damage: 85, fireRateMs: 980, towerDamageMul: 2.25,
+    visualScale: 2.35,
     ability: { id: "stomp", name: "Pisao", cooldownMs: 12000, radius: 5, damage: 46 },
     support: true
   },
@@ -109,19 +109,24 @@ const DEFAULT_DECK = ["archer", "knight", "mage", "barbarian", "rogue", "giant",
 const SUPPORT_ORDER = ["knight", "archer", "bomber", "healer", "lancer", "giant", "skeleton", "skeletonArcher"];
 
 const TOWER_LAYOUT = [
-  { id: "red-left", team: "red", kind: "side", x: -14, z: 29, hp: 620 },
-  { id: "red-right", team: "red", kind: "side", x: 14, z: 29, hp: 620 },
-  { id: "red-king", team: "red", kind: "king", x: 0, z: 37, hp: 980 },
-  { id: "blue-left", team: "blue", kind: "side", x: -14, z: -29, hp: 620 },
-  { id: "blue-right", team: "blue", kind: "side", x: 14, z: -29, hp: 620 },
-  { id: "blue-king", team: "blue", kind: "king", x: 0, z: -37, hp: 980 }
+  { id: "red-left", team: "red", kind: "side", x: -14, z: 29, hp: 520 },
+  { id: "red-right", team: "red", kind: "side", x: 14, z: 29, hp: 520 },
+  { id: "red-king", team: "red", kind: "king", x: 0, z: 37, hp: 850 },
+  { id: "blue-left", team: "blue", kind: "side", x: -14, z: -29, hp: 520 },
+  { id: "blue-right", team: "blue", kind: "side", x: 14, z: -29, hp: 520 },
+  { id: "blue-king", team: "blue", kind: "king", x: 0, z: -37, hp: 850 }
 ];
 
-function normalizeDeck(deck) {
+function cleanDeckSelection(deck) {
   const unique = [];
-  (Array.isArray(deck) ? deck : DEFAULT_DECK).forEach((id) => {
+  (Array.isArray(deck) ? deck : []).forEach((id) => {
     if (HEROES[id] && !unique.includes(id)) unique.push(id);
   });
+  return unique.slice(0, 8);
+}
+
+function normalizeDeck(deck) {
+  const unique = cleanDeckSelection(Array.isArray(deck) ? deck : DEFAULT_DECK);
   HERO_ORDER.forEach((id) => {
     if (unique.length < 8 && !unique.includes(id)) unique.push(id);
   });
@@ -141,5 +146,6 @@ module.exports = {
   DEFAULT_DECK,
   SUPPORT_ORDER,
   TOWER_LAYOUT,
+  cleanDeckSelection,
   normalizeDeck
 };

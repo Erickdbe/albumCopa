@@ -11,6 +11,7 @@ const {
   DEFAULT_DECK,
   SUPPORT_ORDER,
   TOWER_LAYOUT,
+  cleanDeckSelection,
   normalizeDeck
 } = require("./config");
 
@@ -278,6 +279,10 @@ function createDeckHeroesModule(io, { onlinePlayers = new Map(), broadcastOnline
       socket.emit("deck-heroes:error", "Precisa iniciar com 2, 4 ou 6 jogadores.");
       return;
     }
+    if (room.players.some((player) => player.deck.length < 8)) {
+      socket.emit("deck-heroes:error", "Todo mundo precisa fechar o deck com 8 cartas.");
+      return;
+    }
     room.status = "playing";
     room.towers = TOWER_LAYOUT.map((tower) => ({ ...tower, maxHp: tower.hp, alive: true }));
     room.supports = [];
@@ -357,7 +362,7 @@ function createDeckHeroesModule(io, { onlinePlayers = new Map(), broadcastOnline
     }
     if (explicit.towerId) {
       const tower = room.towers.find((item) => item.id === explicit.towerId && item.team !== player.team && item.alive);
-      if (tower && distance(player, tower) <= hero.range + 3) return tower;
+      if (tower && distance(player, tower) <= hero.range + 8.5) return tower;
     }
     const enemy = room.players
       .filter((item) => item.team !== player.team && item.alive && distance(player, item) <= hero.range)
@@ -368,7 +373,7 @@ function createDeckHeroesModule(io, { onlinePlayers = new Map(), broadcastOnline
       .sort((a, b) => distance(player, a) - distance(player, b))[0];
     if (support) return support;
     const tower = nearestEnemyTower(room, player);
-    return tower && distance(player, tower) <= hero.range + 2 ? tower : null;
+    return tower && distance(player, tower) <= hero.range + 8 ? tower : null;
   }
 
   function attack(socket, payload = {}) {
@@ -405,6 +410,7 @@ function createDeckHeroesModule(io, { onlinePlayers = new Map(), broadcastOnline
     const now = Date.now();
     if (now < player.abilityCooldownUntil) return;
     player.abilityCooldownUntil = now + (ability.cooldownMs || 9000);
+    let effectPoint = { x: player.x, z: player.z };
 
     if (ability.id === "rage") {
       player.rageUntil = now + ability.durationMs;
@@ -420,11 +426,13 @@ function createDeckHeroesModule(io, { onlinePlayers = new Map(), broadcastOnline
       const legal = legalGroundPosition(player, nextX, nextZ);
       player.x = legal.x;
       player.z = legal.z;
+      effectPoint = { x: player.x, z: player.z };
     } else if (ability.id !== "support_call") {
       const point = {
         x: clamp(payload.x, -ARENA_HALF, ARENA_HALF),
         z: clamp(payload.z, -ARENA_HALF, ARENA_HALF)
       };
+      effectPoint = point;
       [...room.players, ...room.supports, ...room.towers].forEach((target) => {
         if (target.team === player.team || !target.alive || distance(point, target) > (ability.radius || 4)) return;
         applyDamage(room, player, target, ability.damage || 35);
@@ -434,8 +442,8 @@ function createDeckHeroesModule(io, { onlinePlayers = new Map(), broadcastOnline
       socketId: socket.id,
       heroId: player.heroId,
       abilityId: ability.id,
-      x: payload.x,
-      z: payload.z
+      x: effectPoint.x,
+      z: effectPoint.z
     });
     emitRoom(room);
   }
@@ -474,7 +482,8 @@ function createDeckHeroesModule(io, { onlinePlayers = new Map(), broadcastOnline
     const room = findRoomBySocket(socket.id);
     const player = room?.players.find((item) => item.socketId === socket.id);
     if (!room || !player || room.status !== "waiting") return;
-    player.deck = normalizeDeck(deck);
+    const cleanDeck = cleanDeckSelection(deck);
+    player.deck = cleanDeck.length ? cleanDeck : [player.heroId || "archer"];
     if (!player.deck.includes(player.heroId)) player.heroId = player.deck[0];
     player.hp = HEROES[player.heroId].hp;
     emitRoom(room);

@@ -146,6 +146,14 @@ function renderHeroCatalog() {
   });
 }
 
+function cleanDeckSelection(deck) {
+  const unique = [];
+  (Array.isArray(deck) ? deck : []).forEach((id) => {
+    if (HEROES[id] && !unique.includes(id)) unique.push(id);
+  });
+  return unique.slice(0, 8);
+}
+
 function toggleDeckHero(heroId) {
   const index = state.deck.indexOf(heroId);
   if (index >= 0) {
@@ -153,8 +161,10 @@ function toggleDeckHero(heroId) {
     state.deck.splice(index, 1);
   } else if (state.deck.length < 8) {
     state.deck.push(heroId);
+  } else {
+    state.deck[state.deck.length - 1] = heroId;
   }
-  state.deck = normalizeDeck(state.deck);
+  state.deck = cleanDeckSelection(state.deck);
   renderHeroCatalog();
   if (state.room?.status === "waiting") socket.emit("deck-heroes:setDeck", { deck: state.deck });
 }
@@ -209,8 +219,13 @@ function renderLobby() {
   dom.roomCode.textContent = room ? room.roomId : "Offline";
   dom.openRoomBtn.textContent = room ? "Reenviar convites" : "Abrir sala";
   const playerCount = room?.players?.length || 0;
+  const self = me();
+  const selfDeckReady = !room || self?.deck?.length === 8;
+  const roomDeckReady = !room || room.players.every((player) => player.deck?.length === 8);
   dom.statusText.textContent = room
-    ? playerCount % 2 === 0 && playerCount >= 2 ? "Pronto para iniciar com times pares." : "Aguardando entrar mais 1 jogador para fechar par."
+    ? !selfDeckReady ? "Escolha 8 cartas para fechar seu deck."
+      : !roomDeckReady ? "Aguardando todo mundo fechar o deck."
+        : playerCount % 2 === 0 && playerCount >= 2 ? "Pronto para iniciar com times pares." : "Aguardando entrar mais 1 jogador para fechar par."
     : token ? "Abra uma sala para convidar todos online." : "Entre na sua conta do Album para jogar online.";
   dom.playerList.innerHTML = room?.players?.length ? room.players.map((player) => {
     const hero = HEROES[player.heroId] || HEROES.archer;
@@ -219,9 +234,8 @@ function renderLobby() {
       <span>${player.ready ? "Pronto" : "Montando"} · ${hero.name}</span>
     </div>`;
   }).join("") : `<div class="player-row"><strong>Nenhuma sala aberta</strong><span>offline</span></div>`;
-  const self = me();
-  dom.readyBtn.disabled = !room;
-  dom.startBtn.disabled = !room || room.hostSocketId !== state.selfId || playerCount < 2 || playerCount % 2 !== 0;
+  dom.readyBtn.disabled = !room || !selfDeckReady;
+  dom.startBtn.disabled = !room || room.hostSocketId !== state.selfId || playerCount < 2 || playerCount % 2 !== 0 || !roomDeckReady;
   dom.leaveBtn.disabled = !room;
   dom.readyBtn.textContent = self?.ready ? "Cancelar pronto" : "Pronto";
 }
@@ -964,10 +978,53 @@ function createTower(tower) {
 
   group.position.set(tower.x, 0, tower.z);
   scene.add(group);
-  const entry = { group, data: tower };
+  const entry = { group, data: tower, lastAlive: tower.alive !== false };
   updateTowerHealthBillboard(entry, tower);
   towers.set(tower.id, entry);
   return entry;
+}
+
+function towerBreakEffect(entry, tower) {
+  if (!scene) return;
+  const teamColor = tower.team === "blue" ? 0x4d83ff : 0xd85d55;
+  const stoneMat = new THREE.MeshStandardMaterial({ color: 0x9a937f, roughness: 0.82, transparent: true, opacity: 0.95 });
+  const teamMat = new THREE.MeshStandardMaterial({ color: teamColor, roughness: 0.62, transparent: true, opacity: 0.9 });
+  const dustMat = new THREE.MeshBasicMaterial({ color: 0xdfd0ac, transparent: true, opacity: 0.42, side: THREE.DoubleSide });
+  const materials = [stoneMat, teamMat, dustMat];
+  const group = new THREE.Group();
+  group.position.copy(entry?.group?.position || new THREE.Vector3(tower.x, 0, tower.z));
+
+  for (let i = 0; i < 14; i += 1) {
+    const block = new THREE.Mesh(
+      new THREE.BoxGeometry(0.38 + Math.random() * 0.42, 0.22 + Math.random() * 0.34, 0.38 + Math.random() * 0.42),
+      i % 4 === 0 ? teamMat : stoneMat
+    );
+    block.position.set((Math.random() - 0.5) * 2.8, 0.9 + Math.random() * 3.2, (Math.random() - 0.5) * 2.8);
+    block.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
+    block.userData.velocity = new THREE.Vector3((Math.random() - 0.5) * 5.2, 2.8 + Math.random() * 3.2, (Math.random() - 0.5) * 5.2);
+    group.add(block);
+  }
+
+  const dust = new THREE.Mesh(new THREE.RingGeometry(1.2, 1.55, 36), dustMat);
+  dust.rotation.x = -Math.PI / 2;
+  dust.position.y = 0.12;
+  group.add(dust);
+
+  addTransient(group, 1.15, null, (delta, item) => {
+    item.elapsed += delta;
+    const t = Math.min(1, item.elapsed / item.maxLife);
+    group.children.forEach((child) => {
+      if (child === dust) return;
+      child.position.addScaledVector(child.userData.velocity, delta);
+      child.userData.velocity.y -= delta * 8.5;
+      child.rotation.x += delta * 3.2;
+      child.rotation.z += delta * 2.6;
+    });
+    dust.scale.setScalar(1 + t * 5.6);
+    materials.forEach((material) => {
+      material.opacity = Math.max(0, 1 - t);
+    });
+  });
 }
 
 function syncTowers(room) {
@@ -975,7 +1032,10 @@ function syncTowers(room) {
   room.towers.forEach((tower) => {
     present.add(tower.id);
     const entry = towers.get(tower.id) || createTower(tower);
+    const wasAlive = entry.lastAlive !== false;
     entry.data = tower;
+    if (wasAlive && tower.alive === false) towerBreakEffect(entry, tower);
+    entry.lastAlive = tower.alive !== false;
     entry.group.visible = tower.alive !== false;
     updateTowerHealthBillboard(entry, tower);
   });
@@ -1203,10 +1263,10 @@ function findAimTarget() {
     const target = targetPosition(tower);
     const to = target.sub(origin);
     const dist = to.length();
-    if (dist > hero.range + 4 || dist < 0.01) return;
+    if (dist > hero.range + 8.5 || dist < 0.01) return;
     const dot = forward.dot(to.normalize());
     const score = dot * 1.5 - dist / Math.max(1, hero.range);
-    if (dot > 0.35 && score > bestScore) {
+    if (dot > 0.25 && score > bestScore) {
       bestScore = score;
       best = { towerId: tower.id };
     }
@@ -1359,6 +1419,152 @@ function projectileLine(from, to, heroId = "tower") {
   });
 }
 
+function addTransient(object, life, material = null, update = null) {
+  scene.add(object);
+  transient.push({ object, material, life, maxLife: life, elapsed: 0, update });
+}
+
+function expandingRing(x, z, color, radius = 4, life = 0.7) {
+  const material = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.62, side: THREE.DoubleSide });
+  const ring = new THREE.Mesh(new THREE.RingGeometry(0.92, 1.1, 42), material);
+  ring.rotation.x = -Math.PI / 2;
+  ring.position.set(Number(x) || 0, 0.12, Number(z) || 0);
+  addTransient(ring, life, material, (delta, item) => {
+    item.elapsed += delta;
+    const t = Math.min(1, item.elapsed / item.maxLife);
+    ring.scale.setScalar(0.35 + t * radius);
+    material.opacity = 0.62 * (1 - t);
+  });
+}
+
+function fallingProjectile(heroId, start, end, life = 0.55, arc = 0) {
+  const object = projectileObject(heroId, new THREE.Color(HEROES[heroId]?.color || "#ffffff"));
+  object.position.copy(start);
+  addTransient(object, life, null, (delta, item) => {
+    item.elapsed += delta;
+    const t = Math.min(1, item.elapsed / item.maxLife);
+    object.position.lerpVectors(start, end, t);
+    object.position.y += Math.sin(t * Math.PI) * arc;
+    const dir = end.clone().sub(start).normalize();
+    if (dir.lengthSq() > 0) object.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), dir);
+    object.rotation.z += delta * 10;
+  });
+}
+
+function arrowRainEffect(x, z) {
+  expandingRing(x, z, 0x8bd450, 5.2, 0.85);
+  for (let i = 0; i < 16; i += 1) {
+    const angle = Math.random() * Math.PI * 2;
+    const distance = Math.random() * 4.8;
+    const end = new THREE.Vector3(x + Math.cos(angle) * distance, 0.45, z + Math.sin(angle) * distance);
+    const start = end.clone().add(new THREE.Vector3(-1.8 + Math.random() * 1.2, 10 + Math.random() * 4, -1.4 + Math.random() * 1.1));
+    fallingProjectile("archer", start, end, 0.42 + Math.random() * 0.28);
+  }
+}
+
+function meteorEffect(x, z) {
+  const start = new THREE.Vector3(x - 7, 13, z - 5);
+  const end = new THREE.Vector3(x, 0.65, z);
+  const meteor = new THREE.Mesh(
+    new THREE.SphereGeometry(0.62, 18, 12),
+    new THREE.MeshStandardMaterial({ color: 0xff6d3a, emissive: 0xff461a, emissiveIntensity: 1.2, roughness: 0.4 })
+  );
+  addTransient(meteor, 0.72, null, (delta, item) => {
+    item.elapsed += delta;
+    const t = Math.min(1, item.elapsed / item.maxLife);
+    meteor.position.lerpVectors(start, end, t);
+    meteor.scale.setScalar(1 + Math.sin(t * Math.PI) * 0.35);
+    if (t > 0.86 && !item.burst) {
+      item.burst = true;
+      expandingRing(x, z, 0xff7a32, 6.3, 0.62);
+    }
+  });
+}
+
+function smokeStepEffect(x, z) {
+  for (let i = 0; i < 10; i += 1) {
+    const material = new THREE.MeshBasicMaterial({ color: 0x2b2634, transparent: true, opacity: 0.45 });
+    const puff = new THREE.Mesh(new THREE.SphereGeometry(0.35 + Math.random() * 0.3, 10, 8), material);
+    puff.position.set(x + (Math.random() - 0.5) * 1.8, 0.45 + Math.random() * 0.8, z + (Math.random() - 0.5) * 1.8);
+    addTransient(puff, 0.62, material, (delta, item) => {
+      item.elapsed += delta;
+      puff.position.y += delta * 0.9;
+      puff.scale.multiplyScalar(1 + delta * 1.5);
+      material.opacity = 0.45 * (1 - item.elapsed / item.maxLife);
+    });
+  }
+}
+
+function rageEffect(socketId, x, z) {
+  const material = new THREE.MeshBasicMaterial({ color: 0xff9f43, transparent: true, opacity: 0.62, side: THREE.DoubleSide });
+  const ring = new THREE.Mesh(new THREE.RingGeometry(1.25, 1.55, 36), material);
+  ring.rotation.x = -Math.PI / 2;
+  ring.position.set(x, 0.16, z);
+  addTransient(ring, 1.1, material, (delta, item) => {
+    item.elapsed += delta;
+    const unit = units.get(socketId);
+    if (unit) ring.position.copy(unit.group.position).setY(0.16);
+    ring.scale.setScalar(1 + Math.sin(item.elapsed * 16) * 0.18 + item.elapsed * 0.7);
+    material.opacity = 0.62 * (1 - item.elapsed / item.maxLife);
+  });
+}
+
+function healWaveEffect(x, z) {
+  expandingRing(x, z, 0x7de0c5, 7.8, 0.9);
+  const material = new THREE.MeshBasicMaterial({ color: 0xbffff1, transparent: true, opacity: 0.45 });
+  const cross = new THREE.Mesh(new THREE.BoxGeometry(0.3, 2.2, 0.16), material);
+  const cross2 = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.34, 0.16), material);
+  const group = new THREE.Group();
+  group.add(cross, cross2);
+  group.position.set(x, 2.1, z);
+  addTransient(group, 0.82, material, (delta, item) => {
+    item.elapsed += delta;
+    group.position.y += delta * 1.4;
+    group.rotation.y += delta * 2.2;
+    material.opacity = 0.45 * (1 - item.elapsed / item.maxLife);
+  });
+}
+
+function bombEffect(x, z, color = 0xf0c34a) {
+  fallingProjectile("bomber", new THREE.Vector3(x - 2.8, 6.5, z - 2), new THREE.Vector3(x, 0.6, z), 0.55, 1.1);
+  setTimeout(() => {
+    if (scene) expandingRing(x, z, color, 5.8, 0.62);
+  }, 360);
+}
+
+function pierceEffect(x, z, color = 0xa6d3ff) {
+  expandingRing(x, z, color, 3.8, 0.45);
+  for (let i = -1; i <= 1; i += 1) {
+    const start = new THREE.Vector3(x - 5, 1.2, z + i * 0.8);
+    const end = new THREE.Vector3(x + 5, 1.2, z + i * 0.8);
+    fallingProjectile("lancer", start, end, 0.3);
+  }
+}
+
+function playAbilityEffect({ socketId, x, z, heroId, abilityId }) {
+  const unit = units.get(socketId);
+  const base = unit?.group?.position || new THREE.Vector3(Number(x) || 0, 0, Number(z) || 0);
+  const effectX = Number.isFinite(Number(x)) ? Number(x) : base.x;
+  const effectZ = Number.isFinite(Number(z)) ? Number(z) : base.z;
+  if (abilityId === "arrow_rain") arrowRainEffect(effectX, effectZ);
+  else if (abilityId === "meteor") meteorEffect(effectX, effectZ);
+  else if (abilityId === "shield_dash") pierceEffect(effectX, effectZ, 0x6aa8ff);
+  else if (abilityId === "rage") rageEffect(socketId, effectX, effectZ);
+  else if (abilityId === "smoke_step") smokeStepEffect(effectX, effectZ);
+  else if (abilityId === "stomp") expandingRing(effectX, effectZ, 0xdf7d5e, 6.8, 0.75);
+  else if (abilityId === "big_bomb") bombEffect(effectX, effectZ);
+  else if (abilityId === "heal_wave") healWaveEffect(effectX, effectZ);
+  else if (abilityId === "pierce" || abilityId === "bone_volley") pierceEffect(effectX, effectZ, heroId === "skeletonArcher" ? 0xe7edf0 : 0xa6d3ff);
+  else if (abilityId === "curse") {
+    expandingRing(effectX, effectZ, 0xa36bff, 5.6, 0.8);
+    smokeStepEffect(effectX, effectZ);
+  } else if (abilityId === "bone_dash") {
+    expandingRing(effectX, effectZ, 0xe7edf0, 3.2, 0.5);
+  } else {
+    abilityMarker(effectX, effectZ, HEROES[heroId]?.color || 0xc98bff);
+  }
+}
+
 function abilityMarker(x, z, color = 0xc98bff) {
   if (!scene) return;
   const material = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.55, side: THREE.DoubleSide });
@@ -1383,6 +1589,13 @@ function render() {
 
 function applyRoom(room) {
   state.room = room;
+  if (room.status !== "playing") {
+    const self = room.players?.find((player) => player.socketId === state.selfId);
+    if (self?.deck?.length) {
+      state.deck = cleanDeckSelection(self.deck);
+      renderHeroCatalog();
+    }
+  }
   if (room.status === "playing") {
     if (!state.playing) startGame(room);
     else {
@@ -1448,15 +1661,21 @@ socket.on("deck-heroes:attack", ({ from, targetSocketId, towerId }) => {
   const target = targetPlayer || targetSupport || targetTower;
   if (target) projectileLine(attacker, target, attacker.heroId);
 });
-socket.on("deck-heroes:ability", ({ socketId, x, z, heroId }) => {
+socket.on("deck-heroes:ability", ({ socketId, x, z, heroId, abilityId }) => {
   triggerUnitAction(units.get(socketId), "ability");
-  abilityMarker(x, z, HEROES[heroId]?.color || 0xc98bff);
+  playAbilityEffect({ socketId, x, z, heroId, abilityId });
 });
 socket.on("deck-heroes:summon", ({ socketId, heroId }) => {
   const summoner = state.room?.players?.find((player) => player.socketId === socketId);
   if (!summoner) return;
   triggerUnitAction(units.get(socketId), "ability");
   abilityMarker(summoner.x, summoner.z + (summoner.team === "blue" ? 2.4 : -2.4), HEROES[heroId]?.color || 0xa36bff);
+});
+socket.on("deck-heroes:support", ({ socketId, heroId }) => {
+  const summoner = state.room?.players?.find((player) => player.socketId === socketId);
+  if (!summoner) return;
+  triggerUnitAction(units.get(socketId), "ability");
+  expandingRing(summoner.x, summoner.z + (summoner.team === "blue" ? 2.8 : -2.8), HEROES[heroId]?.color || 0xa36bff, 3.8, 0.65);
 });
 socket.on("deck-heroes:tower-fire", ({ towerId, targetId }) => {
   const tower = state.room?.towers?.find((item) => item.id === towerId);

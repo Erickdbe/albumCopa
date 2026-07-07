@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { PointerLockControls } from "three/addons/controls/PointerLockControls.js";
+import { BloomEffect, EffectComposer, EffectPass, RenderPass, VignetteEffect } from "postprocessing";
 import { buildMap } from "./maps.js";
 import { buildWeaponModel, setBowChargeVisual } from "./weapon-models.js";
 import { buildVehicleModel, createCannonProjectile, createExplosion } from "./vehicle-models.js";
@@ -25,7 +26,7 @@ const DANCE_OPTIONS = {
   dance_slow: { label: "Flow", speed: 0.72 }
 };
 
-let scene, camera, renderer, controls, clock, raycaster;
+let scene, camera, renderer, composer, controls, clock, raycaster;
 let obstacles = [];
 let solidMeshesForRaycast = [];
 let weaponRig, currentWeaponMesh, muzzleFlash;
@@ -94,7 +95,11 @@ function ensureScene() {
   renderer = new THREE.WebGLRenderer({ canvas: dom.gameCanvas, antialias: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.08;
   renderer.shadowMap.enabled = true;
+  setupPostProcessing();
 
   const hemi = new THREE.HemisphereLight(0xffffff, 0x445566, 1);
   scene.add(hemi);
@@ -121,6 +126,7 @@ function ensureScene() {
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
+    composer?.setSize(window.innerWidth, window.innerHeight);
   });
   window.addEventListener("keydown", (e) => { unlockAudio(); keys[e.code] = true; onKeyDown(e); });
   window.addEventListener("keyup", (e) => { keys[e.code] = false; });
@@ -138,6 +144,27 @@ function ensureScene() {
   setupDanceHub();
 
   requestAnimationFrame(render);
+}
+
+function setupPostProcessing() {
+  try {
+    composer = new EffectComposer(renderer);
+    composer.addPass(new RenderPass(scene, camera));
+    const bloom = new BloomEffect({
+      intensity: 0.52,
+      luminanceThreshold: 0.72,
+      luminanceSmoothing: 0.24
+    });
+    const vignette = new VignetteEffect({
+      darkness: 0.28,
+      offset: 0.42
+    });
+    composer.addPass(new EffectPass(camera, bloom, vignette));
+    composer.setSize(window.innerWidth, window.innerHeight);
+  } catch (error) {
+    console.warn("Postprocessing desativado:", error);
+    composer = null;
+  }
 }
 
 function clearSceneObjects() {
@@ -1408,7 +1435,8 @@ function render() {
       drawMinimap();
     }
   }
-  renderer.render(scene, camera);
+  if (composer) composer.render(delta);
+  else renderer.render(scene, camera);
   requestAnimationFrame(render);
 }
 

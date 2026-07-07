@@ -18,6 +18,8 @@ const io = new Server(server, { cors: { origin: "*" } });
 
 app.use(express.static(path.join(__dirname, "public")));
 app.use("/node_modules/three", express.static(path.join(__dirname, "node_modules/three")));
+app.use("/ArenaBrawl/vendor/three", express.static(path.join(__dirname, "..", "node_modules", "three")));
+app.use("/ArenaBrawl/vendor/postprocessing", express.static(path.join(__dirname, "..", "node_modules", "postprocessing")));
 
 app.get("/config", (req, res) => {
   res.json({

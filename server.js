@@ -878,8 +878,16 @@ app.use(
   express.static(path.join(__dirname, "node_modules", "three"))
 );
 app.use(
+  "/ArenaBrawl/vendor/postprocessing",
+  express.static(path.join(__dirname, "node_modules", "postprocessing"))
+);
+app.use(
   "/DeckHeroes/vendor/three",
   express.static(path.join(__dirname, "node_modules", "three"))
+);
+app.use(
+  "/DeckHeroes/vendor/postprocessing",
+  express.static(path.join(__dirname, "node_modules", "postprocessing"))
 );
 app.use("/ArenaBrawl", express.static(path.join(__dirname, "ArenaBrawl", "public")));
 app.use("/DeckHeroes", express.static(path.join(__dirname, "DeckHeroes", "public")));

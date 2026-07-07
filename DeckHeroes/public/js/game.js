@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
+import { BloomEffect, EffectComposer, EffectPass, RenderPass, VignetteEffect } from "postprocessing";
 import { ARENA_HALF, MOVE_SPEED, MOVE_SEND_MS, HEROES, HERO_ORDER, DEFAULT_DECK, SUPPORT_ORDER, normalizeDeck } from "./cards.js";
 
 const token = localStorage.getItem("mp_token");
@@ -57,7 +58,7 @@ const state = {
   localPosition: new THREE.Vector3(0, 0, 0)
 };
 
-let scene, camera, renderer, clock, raycaster;
+let scene, camera, renderer, composer, clock, raycaster;
 const units = new Map();
 const towers = new Map();
 const supports = new Map();
@@ -253,7 +254,11 @@ function ensureScene() {
   renderer = new THREE.WebGLRenderer({ canvas: dom.canvas, antialias: true });
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
   renderer.setSize(innerWidth, innerHeight);
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.05;
   renderer.shadowMap.enabled = true;
+  setupPostProcessing();
   clock = new THREE.Clock();
   raycaster = new THREE.Raycaster();
 
@@ -270,6 +275,7 @@ function ensureScene() {
     camera.aspect = innerWidth / innerHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(innerWidth, innerHeight);
+    composer?.setSize(innerWidth, innerHeight);
   });
   addEventListener("keydown", (event) => onKey(event, true));
   addEventListener("keyup", (event) => onKey(event, false));
@@ -286,6 +292,27 @@ function ensureScene() {
     if (state.playing) dom.canvas.requestPointerLock();
   });
   requestAnimationFrame(render);
+}
+
+function setupPostProcessing() {
+  try {
+    composer = new EffectComposer(renderer);
+    composer.addPass(new RenderPass(scene, camera));
+    const bloom = new BloomEffect({
+      intensity: 0.42,
+      luminanceThreshold: 0.68,
+      luminanceSmoothing: 0.22
+    });
+    const vignette = new VignetteEffect({
+      darkness: 0.24,
+      offset: 0.46
+    });
+    composer.addPass(new EffectPass(camera, bloom, vignette));
+    composer.setSize(innerWidth, innerHeight);
+  } catch (error) {
+    console.warn("Postprocessing desativado:", error);
+    composer = null;
+  }
 }
 
 function makeTexture(size, repeat, draw) {
@@ -1541,7 +1568,8 @@ function render() {
     updateVisuals(delta);
     renderHud();
   }
-  renderer?.render(scene, camera);
+  if (composer) composer.render(delta);
+  else renderer?.render(scene, camera);
   requestAnimationFrame(render);
 }
 

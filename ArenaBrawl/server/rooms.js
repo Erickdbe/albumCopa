@@ -441,16 +441,25 @@ function createRoomsModule(io) {
   }
 
   function updatePlaneVehicle(vehicle, stats, input, driver, delta) {
+    if (!driver) {
+      vehicle.enginePower = approach(vehicle.enginePower || 0, 0, delta * 0.8);
+      vehicle.speed = approach(vehicle.speed || 0, 0, stats.acceleration * delta);
+      vehicle.pitch = lerp(vehicle.pitch || 0, 0, delta * 2.4);
+      vehicle.roll = lerp(vehicle.roll || 0, 0, delta * 2.4);
+      vehicle.verticalVelocity = 0;
+      vehicle.lastSpeed = vehicle.speed;
+      return;
+    }
     const throttle = clamp(input.throttle, -1, 1);
     const pitchInput = clamp(input.pitch || input.lift, -1, 1);
     const rollInput = clamp(input.roll || input.steer, -1, 1);
     const yawInput = clamp(input.yaw, -1, 1);
     const brake = input.brake ? 1 : 0;
-    const targetEngine = driver ? clamp(0.58 + throttle * 0.42, 0.18, 1) : 0.18;
+    const targetEngine = clamp(0.58 + throttle * 0.42, 0.18, 1);
 
-    vehicle.enginePower = approach(vehicle.enginePower || 0.35, targetEngine, delta * (driver ? 0.72 : 0.25));
+    vehicle.enginePower = approach(vehicle.enginePower || 0.35, targetEngine, delta * 0.72);
     const cruise = stats.maxSpeed * (0.34 + vehicle.enginePower * 0.66);
-    vehicle.speed = approach(vehicle.speed, driver ? cruise : stats.maxSpeed * 0.28, stats.acceleration * delta * (brake ? 1.7 : 0.72));
+    vehicle.speed = approach(vehicle.speed, cruise, stats.acceleration * delta * (brake ? 1.7 : 0.72));
     if (brake) vehicle.speed = approach(vehicle.speed, stats.maxSpeed * 0.22, stats.acceleration * 1.2 * delta);
 
     const targetRoll = clamp(rollInput * 0.86 + yawInput * 0.18, -1.05, 1.05);
@@ -487,6 +496,7 @@ function createRoomsModule(io) {
 
   function updateVehicles(room, delta, now) {
     const half = MAP_HALF_SIZES[room.settings.mapId] || ARENA_HALF;
+    const groundY = room.settings.mapId === "sketchbook" ? 5.35 : 0;
     room.vehicles.forEach((vehicle) => {
       if (vehicle.destroyed) return;
       const stats = VEHICLE_STATS[vehicle.type];
@@ -506,8 +516,8 @@ function createRoomsModule(io) {
 
       if (vehicle.type === "jetski") {
         vehicle.y = 0.2;
-      } else if (vehicle.type !== "cannon" && vehicle.type !== "plane") {
-        vehicle.y = Math.max(0, vehicle.y - 8 * delta);
+      } else if (vehicle.type !== "cannon" && vehicle.type !== "plane" && vehicle.type !== "helicopter") {
+        vehicle.y = Math.max(groundY, vehicle.y - 8 * delta);
       }
 
       vehicle.x = Math.max(-half + 3, Math.min(half - 3, vehicle.x));

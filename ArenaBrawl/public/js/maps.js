@@ -393,6 +393,7 @@ function buildFloresta(scene) {
 function buildSketchbook(scene) {
   const world = createWorld("sketchbook", scene);
   const meta = MAP_META.sketchbook;
+  world.sketchbookGroundY = 5.35;
   scene.background = new THREE.Color(meta.sky);
   scene.fog = new THREE.Fog(meta.sky, 120, 360);
 
@@ -406,7 +407,7 @@ function buildSketchbook(scene) {
     collisionBox(half, 0, 1.6, half * 2, 7, true)
   ].forEach((box) => world.obstacles.push(box));
 
-  attachSketchbookWorld(world, { scale: 0.36, y: -0.04 });
+  attachSketchbookWorld(world, { scale: 0.36, y: -0.04, usePhysicsCollisions: true });
   return world;
 }
 

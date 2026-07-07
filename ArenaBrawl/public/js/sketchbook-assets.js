@@ -16,6 +16,12 @@ function loadSketchbookAsset(name) {
 function prepareObject(object) {
   object.traverse((child) => {
     if (!child.isMesh) return;
+    if (child.userData?.data === "collision") {
+      child.visible = false;
+      child.castShadow = false;
+      child.receiveShadow = false;
+      return;
+    }
     child.castShadow = true;
     child.receiveShadow = true;
     const materials = Array.isArray(child.material) ? child.material : [child.material];
@@ -29,8 +35,22 @@ function prepareObject(object) {
   });
 }
 
+function renderableBounds(object) {
+  const bounds = new THREE.Box3();
+  let found = false;
+  object.updateMatrixWorld(true);
+  object.traverse((child) => {
+    if (!child.isMesh || child.userData?.data === "collision") return;
+    const childBounds = new THREE.Box3().setFromObject(child);
+    if (childBounds.isEmpty()) return;
+    bounds.union(childBounds);
+    found = true;
+  });
+  return found ? bounds : new THREE.Box3().setFromObject(object);
+}
+
 function normalizeObject(object, options = {}) {
-  const bounds = new THREE.Box3().setFromObject(object);
+  const bounds = renderableBounds(object);
   const size = bounds.getSize(new THREE.Vector3());
   const scalar = options.targetHeight
     ? options.targetHeight / Math.max(0.001, size.y)
@@ -40,7 +60,7 @@ function normalizeObject(object, options = {}) {
   object.scale.multiplyScalar(scalar);
   object.updateMatrixWorld(true);
 
-  const scaledBounds = new THREE.Box3().setFromObject(object);
+  const scaledBounds = renderableBounds(object);
   object.position.x -= (scaledBounds.min.x + scaledBounds.max.x) / 2;
   object.position.y -= scaledBounds.min.y;
   object.position.z -= (scaledBounds.min.z + scaledBounds.max.z) / 2;
@@ -111,6 +131,24 @@ function addCollisionFromBox(world, box, solid = true) {
   });
 }
 
+function shouldUseSketchbookCollision(world, box) {
+  const width = box.max.x - box.min.x;
+  const depth = box.max.z - box.min.z;
+  const height = box.max.y - box.min.y;
+  const topY = box.max.y;
+  const minY = box.min.y;
+  const footprint = width * depth;
+  const groundY = world.sketchbookGroundY || 5.35;
+
+  if (topY <= groundY + 0.72) return false;
+  if (minY > groundY + 36) return false;
+  if (height < 1.15) return false;
+  if (width > 75 || depth > 122) return false;
+  if (footprint > 2200 && height < 10) return false;
+  if (Math.min(width, depth) < 0.12) return false;
+  return true;
+}
+
 export function attachSketchbookWorld(world, options = {}) {
   const anchor = new THREE.Group();
   anchor.name = "sketchbook-world-anchor";
@@ -133,7 +171,9 @@ export function attachSketchbookWorld(world, options = {}) {
       const box = new THREE.Box3().setFromObject(child);
       if (isPhysics) {
         child.visible = false;
-        if (options.usePhysicsCollisions) addCollisionFromBox(world, box, true);
+        if (options.usePhysicsCollisions && shouldUseSketchbookCollision(world, box)) {
+          addCollisionFromBox(world, box, true);
+        }
         return;
       }
       world.raycastMeshes.push(child);
@@ -151,7 +191,7 @@ export async function loadSketchbookCharacter() {
   const gltf = await loadSketchbookAsset("boxman");
   const model = cloneSkeleton(gltf.scene);
   normalizeObject(model, {
-    targetHeight: 1.82,
+    targetHeight: 1.55,
     rotation: [0, Math.PI, 0]
   });
   prepareObject(model);

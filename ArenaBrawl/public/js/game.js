@@ -148,7 +148,7 @@ function ensureScene() {
   controls.addEventListener("unlock", () => {
     setAiming(false);
     cancelCharge();
-    if (local.alive && !danceHubOpen) dom.pauseHint.hidden = false;
+    if (local.alive && !danceHubOpen && !local.vehicleId) dom.pauseHint.hidden = false;
   });
   setupRespawnLoadoutControls();
   setupDanceHub();
@@ -400,14 +400,14 @@ function buildAvatar(p) {
   const hitboxMaterial = new THREE.MeshBasicMaterial({
     transparent: true, opacity: 0, depthWrite: false, colorWrite: false
   });
-  const bodyHitbox = new THREE.Mesh(new THREE.BoxGeometry(0.95, 1.18, 0.72), hitboxMaterial);
-  bodyHitbox.position.y = 1.05;
+  const bodyHitbox = new THREE.Mesh(new THREE.BoxGeometry(0.82, 0.94, 0.62), hitboxMaterial);
+  bodyHitbox.position.y = 0.86;
   root.add(bodyHitbox);
-  const lowerHitbox = new THREE.Mesh(new THREE.BoxGeometry(0.82, 0.82, 0.66), hitboxMaterial.clone());
-  lowerHitbox.position.y = 0.37;
+  const lowerHitbox = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.58, 0.58), hitboxMaterial.clone());
+  lowerHitbox.position.y = 0.3;
   root.add(lowerHitbox);
-  const headHitbox = new THREE.Mesh(new THREE.SphereGeometry(0.38, 12, 10), hitboxMaterial.clone());
-  headHitbox.position.y = 1.72;
+  const headHitbox = new THREE.Mesh(new THREE.SphereGeometry(0.3, 12, 10), hitboxMaterial.clone());
+  headHitbox.position.y = 1.45;
   headHitbox.userData.isHead = true;
   root.add(headHitbox);
 
@@ -447,7 +447,7 @@ function buildAvatar(p) {
   ctx.fillText(p.username || "Jogador", 128, 42);
   const tagSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(tagCanvas), depthTest: false }));
   tagSprite.scale.set(1.4, 0.35, 1);
-  tagSprite.position.y = 2.25;
+  tagSprite.position.y = 1.95;
   root.add(tagSprite);
 
   scene.add(root);
@@ -564,7 +564,7 @@ function gatherVehicleHittable() {
   const meshes = [];
   vehicles.forEach((entry) => {
     if (entry.target.destroyed) return;
-    entry.model.traverse((child) => { if (child.isMesh) meshes.push(child); });
+    entry.model.traverse((child) => { if (child.isMesh && child.visible !== false) meshes.push(child); });
   });
   return meshes;
 }
@@ -1336,11 +1336,12 @@ function updateVehicleControls() {
 }
 
 function updateMovement(delta) {
-  if (!controls.isLocked || !local.alive) return;
+  if (!local.alive) return;
   if (local.vehicleId) {
     updateVehicleControls();
     return;
   }
+  if (!controls.isLocked) return;
   const weapon = currentWeapon(local.slot);
   const sprinting = Boolean(keys.ShiftLeft || keys.ShiftRight);
   const crouching = Boolean(keys.ControlLeft || keys.ControlRight);
@@ -1494,28 +1495,41 @@ function renderWithCameraMode(delta) {
   const eyeQuaternion = camera.quaternion.clone();
   const viewEuler = new THREE.Euler().setFromQuaternion(camera.quaternion, "YXZ");
   const yawOnly = new THREE.Euler(0, viewEuler.y, 0, "YXZ");
-  const offset = new THREE.Vector3(0, 1.05, 5.4).applyEuler(yawOnly);
-  const desired = eyePosition.clone().add(offset);
-  const direction = desired.clone().sub(eyePosition);
+  const lookTarget = new THREE.Vector3(eyePosition.x, local.jumpOffset + 1.12, eyePosition.z);
+  const offset = new THREE.Vector3(0, 2.05, 7.4).applyEuler(yawOnly);
+  const desired = lookTarget.clone().add(offset);
+  const direction = desired.clone().sub(lookTarget);
   const distance = direction.length();
+  let tooClose = false;
 
   if (distance > 0.01) {
     direction.normalize();
-    raycaster.set(eyePosition, direction);
+    raycaster.set(lookTarget, direction);
     raycaster.far = distance;
     const hit = raycaster.intersectObjects(solidMeshesForRaycast, false)
       .find((item) => item.object.visible !== false && item.distance > 0.45);
-    if (hit) desired.copy(eyePosition).addScaledVector(direction, Math.max(0.65, hit.distance - 0.35));
+    if (hit) {
+      const cameraDistance = Math.max(0.65, hit.distance - 0.35);
+      tooClose = cameraDistance < 2.4;
+      desired.copy(lookTarget).addScaledVector(direction, cameraDistance);
+    }
   }
 
   const previousWeaponVisible = weaponRig.visible;
+  if (tooClose) {
+    if (localViewAvatar) localViewAvatar.root.visible = false;
+    weaponRig.visible = previousWeaponVisible;
+    drawFrame(delta);
+    return;
+  }
+
   weaponRig.visible = false;
   camera.position.copy(desired);
-  camera.lookAt(eyePosition.x, eyePosition.y - 0.18, eyePosition.z);
+  camera.lookAt(lookTarget.x, lookTarget.y + 0.1, lookTarget.z);
   drawFrame(delta);
   camera.position.copy(eyePosition);
   camera.quaternion.copy(eyeQuaternion);
-  weaponRig.visible = cameraMode === "first" ? previousWeaponVisible : false;
+  weaponRig.visible = previousWeaponVisible;
 }
 
 function drawMinimap() {
@@ -1734,6 +1748,7 @@ export function attachSocket(activeSocket) {
     local.sprinting = false;
     local.crouching = false;
     local.jumping = false;
+    dom.pauseHint.hidden = true;
     closeDanceHub({ relock: false });
     local.lastVehicleShotAt = 0;
     syncVehicles([...(Array.from(vehicles.values()).map((entry) => entry.target).filter((item) => item.id !== vehicle.id)), vehicle]);

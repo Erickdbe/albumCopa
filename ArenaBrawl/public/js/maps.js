@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { MAP_HALF_SIZES, MAP_META } from "./config.js";
 import { attachMeshyModel } from "./meshy-assets.js";
+import { attachSketchbookWorld } from "./sketchbook-assets.js";
 
 const textureLoader = new THREE.TextureLoader();
 const groundTextureCache = new Map();
@@ -389,6 +390,25 @@ function buildFloresta(scene) {
   return world;
 }
 
+function buildSketchbook(scene) {
+  const world = createWorld("sketchbook", scene);
+  const meta = MAP_META.sketchbook;
+  scene.background = new THREE.Color(meta.sky);
+  scene.fog = new THREE.Fog(meta.sky, 120, 360);
+
+  addGround(world, meta.ground, null, 36);
+  const half = world.half;
+  [
+    collisionBox(0, -half, half * 2, 1.6, 7, true),
+    collisionBox(0, half, half * 2, 1.6, 7, true),
+    collisionBox(-half, 0, 1.6, half * 2, 7, true),
+    collisionBox(half, 0, 1.6, half * 2, 7, true)
+  ].forEach((box) => world.obstacles.push(box));
+
+  attachSketchbookWorld(world, { scale: 0.36, y: -0.04 });
+  return world;
+}
+
 function spawnDebris(world, position, count = 6, strength = 1, color = 0x777777) {
   for (let i = 0; i < count; i++) {
     const size = 0.08 + Math.random() * 0.18 * strength;
@@ -535,7 +555,7 @@ function updateWorld(world, delta, event = null) {
   if(world.mapId==="floresta")updateForest(world,world.animated.elapsed,event);
 }
 
-const BUILDERS={praia:buildPraia,cidade:buildCidade,floresta:buildFloresta};
+const BUILDERS={sketchbook:buildSketchbook,praia:buildPraia,cidade:buildCidade,floresta:buildFloresta};
 
 export function buildMap(mapId, scene) {
   const world=(BUILDERS[mapId]||BUILDERS.praia)(scene);

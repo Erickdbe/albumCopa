@@ -60,15 +60,22 @@ export const GRENADE_ORDER = ["explosive", "smoke", "flash", "impact"];
 export const GRENADE_CHARGES_PER_LIFE = 2;
 
 export const MAP_META = {
+  sketchbook: { id: "sketchbook", name: "Sketchbook", sky: 0xb7d6e6, ground: 0xd9d2bf },
   praia: { id: "praia", name: "Praia", sky: 0x8fd6ff, ground: 0xe8d68a },
   cidade: { id: "cidade", name: "Cidade", sky: 0x9fb0c2, ground: 0x6b6f75 },
   floresta: { id: "floresta", name: "Floresta", sky: 0x9fd1ff, ground: 0x3f5c34 }
 };
-export const MAP_ORDER = ["praia", "cidade", "floresta"];
+export const MAP_ORDER = ["sketchbook", "praia", "cidade", "floresta"];
 
-export const MAP_HALF_SIZES = { praia: 90, cidade: 78, floresta: 92 };
+export const MAP_HALF_SIZES = { sketchbook: 190, praia: 90, cidade: 78, floresta: 92 };
 
 export const VEHICLE_SPAWNS = {
+  sketchbook: [
+    { id: "sketch-car-left", type: "car", x: -46, y: 0, z: -18, yaw: Math.PI },
+    { id: "sketch-car-right", type: "car", x: 48, y: 0, z: 24, yaw: -Math.PI / 2 },
+    { id: "sketch-plane", type: "plane", x: 0, y: 5, z: 112, yaw: Math.PI },
+    { id: "sketch-heli", type: "helicopter", x: -74, y: 4, z: 72, yaw: Math.PI / 2 }
+  ],
   cidade: [
     { id: "city-car-red", type: "car", x: -24, y: 0, z: -4, yaw: Math.PI / 2 },
     { id: "city-car-blue", type: "car", x: 24, y: 0, z: 4, yaw: -Math.PI / 2 },
@@ -93,6 +100,7 @@ export const VEHICLE_STATS = {
   quad: { name: "Quadriciclo", maxHealth: 220, maxSpeed: 17 },
   jetski: { name: "Jetski", maxHealth: 180, maxSpeed: 23 },
   plane: { name: "Aviao", maxHealth: 320, maxSpeed: 34, builtInWeapon: true },
+  helicopter: { name: "Helicoptero", maxHealth: 300, maxSpeed: 28, builtInWeapon: true },
   cannon: { name: "Canhao", maxHealth: 420, maxSpeed: 0, builtInWeapon: true }
 };
 

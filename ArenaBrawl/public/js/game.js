@@ -334,19 +334,16 @@ function colorFromId(id) {
 }
 
 function characterIdForPlayer(player) {
-  if (player.team === "red") return "emberbound";
-  if (player.team === "blue") return "scout";
-  let hash = 0;
-  for (const char of player.socketId || "") hash = (hash * 33 + char.charCodeAt(0)) >>> 0;
-  return hash % 2 ? "scout" : "emberbound";
+  return "boxman";
 }
 
 function animationForAvatar(avatar) {
   if (!avatar.alive) return "death";
-  if (avatar.inVehicle) return "crouch";
+  if (avatar.inVehicle) return "drive";
   if (avatar.emoteUntil > performance.now() && !avatar.moving && !avatar.jumping) return "dance";
   if (avatar.crouching) return "crouch";
-  if (avatar.sprinting || avatar.jumping) return "run";
+  if (avatar.jumping) return "jump";
+  if (avatar.sprinting) return "run";
   if (avatar.moving) return "walk";
   return "idle";
 }
@@ -519,6 +516,10 @@ function nearestVehicle() {
   return nearest;
 }
 
+function isAirVehicleType(type) {
+  return type === "plane" || type === "helicopter";
+}
+
 function updateVehicleHud() {
   const entry = vehicles.get(local.vehicleId);
   if (!entry) {
@@ -563,6 +564,7 @@ function updateVehiclePresentation(delta) {
         quad: new THREE.Vector3(0, 0.66, 0),
         jetski: new THREE.Vector3(0, 0.68, 0.05),
         plane: new THREE.Vector3(0, 0.92, 0.1),
+        helicopter: new THREE.Vector3(0, 0.9, 0.05),
         cannon: new THREE.Vector3(0, 0.72, 0.25)
       };
       const seat = (seatOffsets[entry.target.type] || seatOffsets.car)
@@ -597,10 +599,11 @@ function updateVehiclePresentation(delta) {
   const cameraEuler = new THREE.Euler((driven.state.pitch || 0) * 0.45, driven.state.yaw, (driven.state.roll || 0) * 0.2, "YXZ");
   const offset = driven.model.userData.cameraOffset.clone().applyEuler(cameraEuler);
   const desired = driven.model.position.clone().add(offset);
-  camera.position.lerp(desired, Math.min(1, delta * (driven.target.type === "plane" ? 8 : 14)));
+  const airVehicle = isAirVehicleType(driven.target.type);
+  camera.position.lerp(desired, Math.min(1, delta * (airVehicle ? 8 : 14)));
   const forward = new THREE.Vector3(0, 0, -1).applyEuler(new THREE.Euler(driven.state.pitch || 0, driven.state.yaw, 0, "YXZ"));
-  const lookTarget = driven.model.position.clone().addScaledVector(forward, driven.target.type === "plane" ? 18 : 8);
-  lookTarget.y += driven.target.type === "plane" ? 1.2 : 1.1;
+  const lookTarget = driven.model.position.clone().addScaledVector(forward, airVehicle ? 18 : 8);
+  lookTarget.y += airVehicle ? 1.2 : 1.1;
   camera.lookAt(lookTarget);
   local.jumpOffset = driven.state.y;
   weaponRig.visible = !VEHICLE_STATS[driven.target.type]?.builtInWeapon;
@@ -1243,10 +1246,10 @@ function updateVehicleControls() {
   const entry = vehicles.get(local.vehicleId);
   if (!entry) return;
   const now = performance.now();
-  if (local.mouseDown && entry.target.type === "plane") fireVehicleWeapon();
+  if (local.mouseDown && isAirVehicleType(entry.target.type)) fireVehicleWeapon();
   if (now - lastVehicleInputSent < MOVE_SEND_MS) return;
   lastVehicleInputSent = now;
-  const isPlane = entry.target.type === "plane";
+  const isPlane = isAirVehicleType(entry.target.type);
   const throttle = Number(Boolean(keys.KeyW)) - Number(Boolean(keys.KeyS));
   const steer = Number(Boolean(keys.KeyA)) - Number(Boolean(keys.KeyD));
   const lift = Number(Boolean(keys.Space)) - Number(Boolean(keys.ControlLeft || keys.ControlRight));
@@ -1537,8 +1540,12 @@ export function attachSocket(activeSocket) {
     selfId = socket.id;
     mapWorld = buildMap(room.settings.mapId, scene);
     obstacles = mapWorld.obstacles;
-    solidMeshesForRaycast = [];
-    scene.traverse((obj) => { if (obj.isMesh && obj.userData.socketId === undefined) solidMeshesForRaycast.push(obj); });
+    solidMeshesForRaycast = mapWorld.raycastMeshes || [];
+    scene.traverse((obj) => {
+      if (obj.isMesh && obj.userData.socketId === undefined && !solidMeshesForRaycast.includes(obj)) {
+        solidMeshesForRaycast.push(obj);
+      }
+    });
     syncVehicles(room.vehicles || []);
     activeWorldEvent = room.worldEvent || null;
     activeWorldTime = room.worldTime || null;

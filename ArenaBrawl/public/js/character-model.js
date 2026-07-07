@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
+import { loadSketchbookCharacter } from "./sketchbook-assets.js";
 
 const MODEL_ROOTS = {
   emberbound: "./assets/models/emberbound/",
@@ -16,6 +17,7 @@ const SHARED_ANIMATIONS = {
 };
 const characterModelPromises = new Map();
 let sharedClipsPromise = null;
+let sketchbookCharacterPromise = null;
 
 function loadTexture(loader, root, name) {
   return loader.loadAsync(`${root}${name}`).then((texture) => {
@@ -86,6 +88,60 @@ function sharedClips() {
 }
 
 export async function attachAnimatedCharacter(avatar) {
+  if ((avatar.characterId || "boxman") === "boxman") {
+    if (!sketchbookCharacterPromise) sketchbookCharacterPromise = loadSketchbookCharacter();
+    const { model: sourceModel, animations } = await sketchbookCharacterPromise;
+    if (!avatar.root.parent) return;
+
+    const model = cloneSkeleton(sourceModel);
+    model.name = "boxman-character";
+    avatar.root.add(model);
+
+    const mixer = new THREE.AnimationMixer(model);
+    const byName = new Map(animations.map((clip) => [clip.name, clip]));
+    const aliases = {
+      idle: "idle",
+      walk: "run",
+      run: "sprint",
+      jump: "jump_running",
+      drive: "driving",
+      crouch: "sitting",
+      death: "drop_idle",
+      dance: "rotate_left"
+    };
+    const actions = {};
+    Object.entries(aliases).forEach(([name, clipName]) => {
+      const clip = byName.get(clipName) || byName.get("idle");
+      if (!clip) return;
+      const action = mixer.clipAction(clip);
+      if (name === "death") {
+        action.setLoop(THREE.LoopOnce, 1);
+        action.clampWhenFinished = true;
+      }
+      if (name === "dance") {
+        action.setLoop(THREE.LoopRepeat, Infinity);
+      }
+      actions[name] = action;
+    });
+
+    avatar.model = model;
+    avatar.mixer = mixer;
+    avatar.actions = actions;
+    avatar.sketchbookCharacter = true;
+    avatar.fallbackMeshes.forEach((mesh) => {
+      mesh.material = mesh.material.clone();
+      mesh.material.colorWrite = false;
+      mesh.material.depthWrite = false;
+    });
+    avatar.root.attach(avatar.gun);
+    avatar.gun.position.set(0.34, 1.18, -0.46);
+    avatar.gun.rotation.set(-0.06, 0, 0);
+    avatar.gun.scale.setScalar(0.32);
+    avatar.gun.visible = true;
+    avatar.setAnimation(avatar.desiredAnimation || "idle", true);
+    return;
+  }
+
   const [sourceModel, clips] = await Promise.all([
     characterModel(avatar.characterId || "emberbound"),
     sharedClips()
@@ -132,7 +188,10 @@ export async function attachAnimatedCharacter(avatar) {
 export function setCharacterAnimation(avatar, name, immediate = false, speed = null) {
   const next = avatar.actions?.[name] || avatar.actions?.idle;
   if (!next) return;
-  const effectiveSpeed = Number.isFinite(Number(speed)) ? Number(speed) : (name === "death" ? 2.8 : 1);
+  let defaultSpeed = name === "death" ? 2.8 : 1;
+  if (avatar.sketchbookCharacter && name === "walk") defaultSpeed = 0.68;
+  if (avatar.sketchbookCharacter && name === "crouch") defaultSpeed = 0.9;
+  const effectiveSpeed = Number.isFinite(Number(speed)) ? Number(speed) : defaultSpeed;
   next.setEffectiveTimeScale(effectiveSpeed);
   if (avatar.animationName === name) {
     if (!next.isRunning()) next.reset().play();

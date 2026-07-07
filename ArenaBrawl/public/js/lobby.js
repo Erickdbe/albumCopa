@@ -26,7 +26,7 @@ const state = {
   classId: "rifle",
   secondaryId: "pistol_common",
   settings: {
-    mapId: "praia", durationMin: 10, scoreLimit: 50, mode: "ffa",
+    mapId: "sketchbook", durationMin: 10, scoreLimit: 50, mode: "ffa",
     moveSpeedMul: 1, jumpHeightMul: 1, grenadesEnabled: true, secondaryEnabled: true, maxPlayers: 16
   },
   currentRoom: null,

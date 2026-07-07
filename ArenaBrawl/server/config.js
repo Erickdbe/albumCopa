@@ -65,16 +65,23 @@ const GRENADES = {
 const GRENADE_IDS = Object.keys(GRENADES);
 const GRENADE_CHARGES_PER_LIFE = 2;
 
-const MAP_IDS = ["praia", "cidade", "floresta"];
+const MAP_IDS = ["sketchbook", "praia", "cidade", "floresta"];
 const MAP_META = {
+  sketchbook: { id: "sketchbook", name: "Sketchbook" },
   praia: { id: "praia", name: "Praia" },
   cidade: { id: "cidade", name: "Cidade" },
   floresta: { id: "floresta", name: "Floresta" }
 };
 
-const MAP_HALF_SIZES = { praia: 90, cidade: 78, floresta: 92 };
+const MAP_HALF_SIZES = { sketchbook: 190, praia: 90, cidade: 78, floresta: 92 };
 
 const VEHICLE_SPAWNS = {
+  sketchbook: [
+    { id: "sketch-car-left", type: "car", x: -46, y: 0, z: -18, yaw: Math.PI },
+    { id: "sketch-car-right", type: "car", x: 48, y: 0, z: 24, yaw: -Math.PI / 2 },
+    { id: "sketch-plane", type: "plane", x: 0, y: 5, z: 112, yaw: Math.PI },
+    { id: "sketch-heli", type: "helicopter", x: -74, y: 4, z: 72, yaw: Math.PI / 2 }
+  ],
   cidade: [
     { id: "city-car-red", type: "car", x: -24, y: 0, z: -4, yaw: Math.PI / 2 },
     { id: "city-car-blue", type: "car", x: 24, y: 0, z: 4, yaw: -Math.PI / 2 },
@@ -99,6 +106,7 @@ const VEHICLE_STATS = {
   quad: { maxHealth: 220, maxSpeed: 17, acceleration: 14, turnSpeed: 1.9 },
   jetski: { maxHealth: 180, maxSpeed: 23, acceleration: 17, turnSpeed: 1.75 },
   plane: { maxHealth: 320, maxSpeed: 34, acceleration: 11, turnSpeed: 1.15, builtInWeapon: true },
+  helicopter: { maxHealth: 300, maxSpeed: 28, acceleration: 10, turnSpeed: 1.45, builtInWeapon: true },
   cannon: { maxHealth: 420, maxSpeed: 0, acceleration: 0, turnSpeed: 0.8, builtInWeapon: true }
 };
 
@@ -106,6 +114,18 @@ const ARENA_HALF = 92;
 
 // Pontos de spawn por mapa (compartilhado com public/js/maps.js no cliente).
 const MAP_SPAWNS = {
+  sketchbook: {
+    ffa: [
+      { x: -42, y: 0, z: -54, yaw: 0.4 }, { x: 42, y: 0, z: -54, yaw: -0.4 },
+      { x: -56, y: 0, z: 18, yaw: Math.PI / 2 }, { x: 56, y: 0, z: 18, yaw: -Math.PI / 2 },
+      { x: -32, y: 0, z: 72, yaw: 2.7 }, { x: 32, y: 0, z: 72, yaw: -2.7 },
+      { x: 0, y: 0, z: -82, yaw: 0 }, { x: 0, y: 0, z: 92, yaw: Math.PI }
+    ],
+    teams: {
+      red: [{ x: -58, y: 0, z: -54, yaw: 0.75 }, { x: -48, y: 0, z: -28, yaw: 1.05 }, { x: -64, y: 0, z: 18, yaw: Math.PI / 2 }, { x: -38, y: 0, z: 70, yaw: 2.55 }],
+      blue: [{ x: 58, y: 0, z: 54, yaw: -2.35 }, { x: 48, y: 0, z: 28, yaw: -2.1 }, { x: 64, y: 0, z: -18, yaw: -Math.PI / 2 }, { x: 38, y: 0, z: -70, yaw: -0.55 }]
+    }
+  },
   praia: {
     ffa: [
       { x: -30, y: 0, z: -30, yaw: 0.78 }, { x: 30, y: 0, z: -30, yaw: -0.78 },
@@ -181,7 +201,7 @@ function normalizeSettings(input = {}) {
     grenadesEnabled: input.grenadesEnabled !== false,
     secondaryEnabled: input.secondaryEnabled !== false,
     maxPlayers: Math.round(clamp(input.maxPlayers, 2, 16)),
-    mapId: MAP_IDS.includes(input.mapId) ? input.mapId : "praia"
+    mapId: MAP_IDS.includes(input.mapId) ? input.mapId : "sketchbook"
   };
 }
 

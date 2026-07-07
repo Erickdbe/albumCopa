@@ -498,7 +498,7 @@ function createRoomsModule(io) {
         vehicle.yaw += input.steer * stats.turnSpeed * delta;
         vehicle.pitch = 0;
         vehicle.roll = 0;
-      } else if (vehicle.type === "plane") {
+      } else if (vehicle.type === "plane" || vehicle.type === "helicopter") {
         updatePlaneVehicle(vehicle, stats, input, driver, delta);
       } else {
         updateGroundVehicle(vehicle, stats, input, driver, delta, vehicle.type === "jetski");

@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { attachMeshyModel } from "./meshy-assets.js";
+import { attachSketchbookVehicle } from "./sketchbook-assets.js";
 
 const materials = {
   dark: new THREE.MeshStandardMaterial({ color: 0x22262b, roughness: 0.65, metalness: 0.45 }),
@@ -116,15 +117,17 @@ export function buildVehicleModel(vehicle) {
   else if(vehicle.type==="motorcycle")model=buildMotorcycle(0xe2b532);
   else if(vehicle.type==="quad")model=buildQuad(0x4b8a43);
   else if(vehicle.type==="jetski")model=buildJetski(0x27a2d1);
+  else if(vehicle.type==="helicopter")model=buildPlane(0x6f7f8f);
   else if(vehicle.type==="plane")model=buildPlane(vehicle.id.includes("forest")?0x3d7043:0xd65d43);
   else model=buildCannon();
   model.userData.vehicleId=vehicle.id;
   model.traverse((child)=>{if(child.isMesh)child.userData.vehicleId=vehicle.id;});
   model.position.set(vehicle.x,vehicle.y,vehicle.z);
   model.rotation.y=vehicle.yaw||0;
-  if(vehicle.type==="car")attachMeshyModel(model,"car-cruiser",{targetSize:4.25,align:"x-to-z"});
+  if(vehicle.type==="car")attachSketchbookVehicle(model,"car",{targetSize:4.45});
   else if(vehicle.type==="motorcycle")attachMeshyModel(model,"vehicle-thunder",{targetSize:2.5,align:"negative-x-to-z"});
-  else if(vehicle.type==="plane")attachMeshyModel(model,"plane",{targetSize:7.2,align:"negative-x-to-z"});
+  else if(vehicle.type==="helicopter")attachSketchbookVehicle(model,"helicopter",{targetSize:7.2,offset:new THREE.Vector3(0,0.12,0)});
+  else if(vehicle.type==="plane")attachSketchbookVehicle(model,"plane",{targetSize:7.5,offset:new THREE.Vector3(0,0.05,0)});
   return model;
 }
 

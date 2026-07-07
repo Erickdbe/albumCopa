@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { MAP_HALF_SIZES, MAP_META } from "./config.js";
+import { MAP_HALF_SIZES, MAP_META, SKETCHBOOK_GROUND_Y } from "./config.js";
 import { attachMeshyModel } from "./meshy-assets.js";
 import { attachSketchbookWorld } from "./sketchbook-assets.js";
 
@@ -393,19 +393,14 @@ function buildFloresta(scene) {
 function buildSketchbook(scene) {
   const world = createWorld("sketchbook", scene);
   const meta = MAP_META.sketchbook;
-  world.sketchbookGroundY = 5.35;
+  world.sketchbookGroundY = SKETCHBOOK_GROUND_Y;
+  world.requireExplicitGround = true;
+  world.safeSpawn = { x: 0, y: SKETCHBOOK_GROUND_Y, z: 0, yaw: 0 };
   scene.background = new THREE.Color(meta.sky);
   scene.fog = new THREE.Fog(meta.sky, 120, 360);
 
   addGround(world, meta.ground, null, 36);
-  const half = world.half;
-  world.obstacles.push(collisionBox(0, 0, half * 2 - 4, half * 2 - 4, 5.35, false));
-  [
-    collisionBox(0, -half, half * 2, 1.6, 7, true),
-    collisionBox(0, half, half * 2, 1.6, 7, true),
-    collisionBox(-half, 0, 1.6, half * 2, 7, true),
-    collisionBox(half, 0, 1.6, half * 2, 7, true)
-  ].forEach((box) => world.obstacles.push(box));
+  world.obstacles.push(collisionBox(0, 0, 120, 76, SKETCHBOOK_GROUND_Y, false));
 
   attachSketchbookWorld(world, { scale: 0.36, y: -0.04, usePhysicsCollisions: true });
   return world;

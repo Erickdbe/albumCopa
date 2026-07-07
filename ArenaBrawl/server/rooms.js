@@ -9,6 +9,8 @@ const {
   MAP_HALF_SIZES,
   VEHICLE_SPAWNS,
   VEHICLE_STATS,
+  SKETCHBOOK_GROUND_Y,
+  constrainMapPosition,
   normalizeSettings,
   pickSpawn,
   HEADSHOT_MULTIPLIER
@@ -293,9 +295,14 @@ function createRoomsModule(io) {
     if (vehicle?.driverId === player.socketId) vehicle.driverId = null;
     player.vehicleId = null;
     if (vehicle) {
-      player.x = vehicle.x + Math.cos(vehicle.yaw) * 2.2;
-      player.y = Math.max(0, vehicle.y);
-      player.z = vehicle.z - Math.sin(vehicle.yaw) * 2.2;
+      const exit = constrainMapPosition(room.settings.mapId, {
+        x: vehicle.x + Math.cos(vehicle.yaw) * 2.2,
+        y: Math.max(0, vehicle.y),
+        z: vehicle.z - Math.sin(vehicle.yaw) * 2.2
+      });
+      player.x = exit.x;
+      player.y = Math.max(0, Number.isFinite(Number(exit.y)) ? Number(exit.y) : vehicle.y);
+      player.z = exit.z;
       io.to(room.roomId).emit("vehicle:occupied", { vehicleId: vehicle.id, driverId: null });
       io.to(room.roomId).volatile.emit("match:player-move", {
         socketId: player.socketId, x: player.x, y: player.y, z: player.z,
@@ -496,7 +503,7 @@ function createRoomsModule(io) {
 
   function updateVehicles(room, delta, now) {
     const half = MAP_HALF_SIZES[room.settings.mapId] || ARENA_HALF;
-    const groundY = room.settings.mapId === "sketchbook" ? 5.35 : 0;
+    const groundY = room.settings.mapId === "sketchbook" ? SKETCHBOOK_GROUND_Y : 0;
     room.vehicles.forEach((vehicle) => {
       if (vehicle.destroyed) return;
       const stats = VEHICLE_STATS[vehicle.type];
@@ -906,9 +913,13 @@ function createRoomsModule(io) {
       if (!player || !player.alive || player.vehicleId) return;
       const mapHalf = MAP_HALF_SIZES[room.settings.mapId] || ARENA_HALF;
       const num = (v, fb) => (Number.isFinite(Number(v)) ? Number(v) : fb);
-      player.x = Math.max(-mapHalf, Math.min(mapHalf, num(state.x, player.x)));
-      player.z = Math.max(-mapHalf, Math.min(mapHalf, num(state.z, player.z)));
-      player.y = Math.max(0, Math.min(24, num(state.y, player.y)));
+      const rawX = Math.max(-mapHalf, Math.min(mapHalf, num(state.x, player.x)));
+      const rawZ = Math.max(-mapHalf, Math.min(mapHalf, num(state.z, player.z)));
+      const rawY = Math.max(0, Math.min(24, num(state.y, player.y)));
+      const constrained = constrainMapPosition(room.settings.mapId, { x: rawX, y: rawY, z: rawZ });
+      player.x = constrained.x;
+      player.z = constrained.z;
+      player.y = Math.max(0, Math.min(24, num(constrained.y, rawY)));
       player.yaw = num(state.yaw, player.yaw);
       player.pitch = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, num(state.pitch, player.pitch)));
       player.moving = Boolean(state.moving);

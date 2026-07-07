@@ -74,13 +74,17 @@ const MAP_META = {
 };
 
 const MAP_HALF_SIZES = { sketchbook: 190, praia: 90, cidade: 78, floresta: 92 };
+const SKETCHBOOK_GROUND_Y = 5.35;
+const SKETCHBOOK_PLAYABLE_AREAS = [
+  { minX: -60, maxX: 60, minZ: -38, maxZ: 38 }
+];
 
 const VEHICLE_SPAWNS = {
   sketchbook: [
-    { id: "sketch-car-left", type: "car", x: -55, y: 5.35, z: -10, yaw: Math.PI },
-    { id: "sketch-car-right", type: "car", x: 48, y: 5.35, z: 28, yaw: -Math.PI / 2 },
-    { id: "sketch-plane", type: "plane", x: 0, y: 5.35, z: 92, yaw: Math.PI },
-    { id: "sketch-heli", type: "helicopter", x: -74, y: 6.2, z: 72, yaw: Math.PI / 2 }
+    { id: "sketch-car-left", type: "car", x: -48, y: SKETCHBOOK_GROUND_Y, z: 30, yaw: Math.PI / 2 },
+    { id: "sketch-car-right", type: "car", x: 48, y: SKETCHBOOK_GROUND_Y, z: -30, yaw: -Math.PI / 2 },
+    { id: "sketch-plane", type: "plane", x: 0, y: SKETCHBOOK_GROUND_Y, z: 28, yaw: Math.PI },
+    { id: "sketch-heli", type: "helicopter", x: -48, y: SKETCHBOOK_GROUND_Y + 0.85, z: -4, yaw: Math.PI / 2 }
   ],
   cidade: [
     { id: "city-car-red", type: "car", x: -24, y: 0, z: -4, yaw: Math.PI / 2 },
@@ -116,14 +120,28 @@ const ARENA_HALF = 92;
 const MAP_SPAWNS = {
   sketchbook: {
     ffa: [
-      { x: -56, y: 5.35, z: 18, yaw: Math.PI / 2 }, { x: 56, y: 5.35, z: 18, yaw: -Math.PI / 2 },
-      { x: -32, y: 5.35, z: 72, yaw: 2.7 }, { x: 32, y: 5.35, z: 72, yaw: -2.7 },
-      { x: 0, y: 5.35, z: -82, yaw: 0 }, { x: 38, y: 5.35, z: -70, yaw: -0.55 },
-      { x: -55, y: 5.35, z: -10, yaw: 1.05 }, { x: 48, y: 5.35, z: 28, yaw: -2.1 }
+      { x: 0, y: SKETCHBOOK_GROUND_Y, z: 0, yaw: 0 },
+      { x: -36, y: SKETCHBOOK_GROUND_Y, z: 28, yaw: 1.9 },
+      { x: 36, y: SKETCHBOOK_GROUND_Y, z: -28, yaw: -1.2 },
+      { x: -40, y: SKETCHBOOK_GROUND_Y, z: -4, yaw: Math.PI / 2 },
+      { x: 40, y: SKETCHBOOK_GROUND_Y, z: 4, yaw: -Math.PI / 2 },
+      { x: -28, y: SKETCHBOOK_GROUND_Y, z: 0, yaw: Math.PI / 2 },
+      { x: 28, y: SKETCHBOOK_GROUND_Y, z: 0, yaw: -Math.PI / 2 },
+      { x: 0, y: SKETCHBOOK_GROUND_Y, z: 12, yaw: Math.PI }
     ],
     teams: {
-      red: [{ x: -56, y: 5.35, z: 18, yaw: Math.PI / 2 }, { x: -55, y: 5.35, z: -10, yaw: 1.05 }, { x: -32, y: 5.35, z: 72, yaw: 2.55 }, { x: 0, y: 5.35, z: -82, yaw: 0 }],
-      blue: [{ x: 56, y: 5.35, z: 18, yaw: -Math.PI / 2 }, { x: 48, y: 5.35, z: 28, yaw: -2.1 }, { x: 32, y: 5.35, z: 72, yaw: -2.7 }, { x: 38, y: 5.35, z: -70, yaw: -0.55 }]
+      red: [
+        { x: -40, y: SKETCHBOOK_GROUND_Y, z: -4, yaw: Math.PI / 2 },
+        { x: -36, y: SKETCHBOOK_GROUND_Y, z: 28, yaw: 1.9 },
+        { x: -28, y: SKETCHBOOK_GROUND_Y, z: 0, yaw: Math.PI / 2 },
+        { x: -48, y: SKETCHBOOK_GROUND_Y, z: 30, yaw: 1.45 }
+      ],
+      blue: [
+        { x: 40, y: SKETCHBOOK_GROUND_Y, z: 4, yaw: -Math.PI / 2 },
+        { x: 36, y: SKETCHBOOK_GROUND_Y, z: -28, yaw: -1.2 },
+        { x: 28, y: SKETCHBOOK_GROUND_Y, z: 0, yaw: -Math.PI / 2 },
+        { x: 48, y: SKETCHBOOK_GROUND_Y, z: -30, yaw: -1.7 }
+      ]
     }
   },
   praia: {
@@ -170,6 +188,38 @@ function pickSpawn(mapId, mode, team) {
   return list[Math.floor(Math.random() * list.length)];
 }
 
+function pointInArea(area, x, z) {
+  return x >= area.minX && x <= area.maxX && z >= area.minZ && z <= area.maxZ;
+}
+
+function closestPointOnArea(area, x, z) {
+  return {
+    x: clamp(x, area.minX, area.maxX),
+    z: clamp(z, area.minZ, area.maxZ)
+  };
+}
+
+function constrainMapPosition(mapId, position = {}) {
+  const x = Number(position.x) || 0;
+  const z = Number(position.z) || 0;
+  if (mapId !== "sketchbook") return { x, z, y: position.y };
+  if (SKETCHBOOK_PLAYABLE_AREAS.some((area) => pointInArea(area, x, z))) {
+    return { x, z, y: position.y };
+  }
+
+  let best = null;
+  for (const area of SKETCHBOOK_PLAYABLE_AREAS) {
+    const point = closestPointOnArea(area, x, z);
+    const dist = Math.hypot(point.x - x, point.z - z);
+    if (!best || dist < best.dist) best = { ...point, dist };
+  }
+  return {
+    x: best?.x ?? 0,
+    z: best?.z ?? 0,
+    y: SKETCHBOOK_GROUND_Y
+  };
+}
+
 const MATCH_DURATIONS_MIN = [3, 5, 10, 15];
 const SCORE_LIMITS = [25, 50, 100, 200];
 const MODES = ["ffa", "teams"];
@@ -212,6 +262,7 @@ module.exports = {
   GRENADES, GRENADE_IDS, GRENADE_CHARGES_PER_LIFE,
   MAP_IDS, MAP_META, MAP_SPAWNS, ARENA_HALF,
   MAP_HALF_SIZES, VEHICLE_SPAWNS, VEHICLE_STATS,
+  SKETCHBOOK_GROUND_Y, SKETCHBOOK_PLAYABLE_AREAS, constrainMapPosition,
   MATCH_DURATIONS_MIN, SCORE_LIMITS, MODES,
   DEFAULT_SETTINGS,
   normalizeSettings,

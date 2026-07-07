@@ -257,15 +257,36 @@ function toggleCameraMode() {
 }
 
 /* ── Terreno (piso + colisao generalizada) ─────────────────────────── */
-function groundHeightAt(x, z, feetY) {
-  let best = 0;
+function groundInfoAt(x, z, feetY) {
+  let best = mapWorld?.requireExplicitGround ? -Infinity : 0;
+  let found = !mapWorld?.requireExplicitGround;
   for (const ob of obstacles) {
     if (ob.active === false) continue;
     if (x > ob.minX && x < ob.maxX && z > ob.minZ && z < ob.maxZ) {
-      if (ob.topY <= feetY + STEP_TOLERANCE && ob.topY > best) best = ob.topY;
+      if (ob.topY <= feetY + STEP_TOLERANCE && ob.topY > best) {
+        best = ob.topY;
+        found = true;
+      }
     }
   }
-  return best;
+  if (!Number.isFinite(best)) best = mapWorld?.safeSpawn?.y || 0;
+  return { height: best, found };
+}
+function groundHeightAt(x, z, feetY) {
+  return groundInfoAt(x, z, feetY).height;
+}
+function snapLocalToSafeGround() {
+  const safe = mapWorld?.safeSpawn || { x: 0, y: 0, z: 0, yaw: 0 };
+  local.jumpOffset = safe.y || 0;
+  local.verticalVelocity = 0;
+  local.onGround = true;
+  camera.position.set(safe.x || 0, EYE_HEIGHT + local.jumpOffset, safe.z || 0);
+  if (Number.isFinite(safe.yaw)) camera.quaternion.setFromEuler(new THREE.Euler(0, safe.yaw, 0, "YXZ"));
+}
+function ensureLocalPlayablePosition() {
+  if (!mapWorld?.requireExplicitGround) return;
+  const ground = groundInfoAt(camera.position.x, camera.position.z, local.jumpOffset);
+  if (!ground.found) snapLocalToSafeGround();
 }
 function isBlockedAt(x, z, feetY) {
   for (const ob of obstacles) {
@@ -1377,6 +1398,10 @@ function updateMovement(delta) {
     camera.position.x = prevX;
     camera.position.z = prevZ;
   }
+  if (mapWorld?.requireExplicitGround && !groundInfoAt(camera.position.x, camera.position.z, feetY).found) {
+    camera.position.x = prevX;
+    camera.position.z = prevZ;
+  }
 
   if (!climbing && local.externalVelocity.lengthSq() > 0.01) {
     camera.position.x += local.externalVelocity.x * delta;
@@ -1387,7 +1412,12 @@ function updateMovement(delta) {
     local.externalVelocity.y = 0;
   }
 
-  const groundY = groundHeightAt(camera.position.x, camera.position.z, feetY);
+  const groundInfo = groundInfoAt(camera.position.x, camera.position.z, feetY);
+  if (mapWorld?.requireExplicitGround && !groundInfo.found) {
+    snapLocalToSafeGround();
+    return;
+  }
+  const groundY = groundInfo.height;
   const jumpHeight = JUMP_HEIGHT_BASE * room.settings.jumpHeightMul;
   if (climbing) {
     local.externalVelocity.set(0, 0, 0);
@@ -1711,6 +1741,7 @@ export function attachSocket(activeSocket) {
 
     camera.position.set(me?.x || 0, EYE_HEIGHT + (me?.y || 0), me?.z || 0);
     camera.quaternion.setFromEuler(new THREE.Euler(0, me?.yaw || 0, 0, "YXZ"));
+    ensureLocalPlayablePosition();
 
     setViewWeapon("#4c5a3a", CLASSES[local.classId].primary.id);
     if (me) createLocalViewAvatar(me);
@@ -1768,6 +1799,7 @@ export function attachSocket(activeSocket) {
     weaponRig.visible = true;
     camera.position.set(Number(x) || camera.position.x, EYE_HEIGHT + (Number(y) || 0), Number(z) || camera.position.z);
     local.jumpOffset = Number(y) || 0;
+    ensureLocalPlayablePosition();
     switchSlot("primary");
     updateVehicleHud();
   });
@@ -1914,6 +1946,7 @@ export function attachSocket(activeSocket) {
       local.onGround = true;
       camera.position.set(x, EYE_HEIGHT + y, z);
       camera.quaternion.setFromEuler(new THREE.Euler(0, yaw, 0, "YXZ"));
+      ensureLocalPlayablePosition();
       local.ammo.primary = CLASSES[local.classId].primary.magSize;
       local.ammo.secondary = SECONDARY_WEAPONS[local.secondaryId].magSize;
       local.grenadeCharges = Object.fromEntries(GRENADE_ORDER.map((id) => [id, GRENADE_CHARGES_PER_LIFE]));

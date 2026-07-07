@@ -68,13 +68,14 @@ export const MAP_META = {
 export const MAP_ORDER = ["sketchbook", "praia", "cidade", "floresta"];
 
 export const MAP_HALF_SIZES = { sketchbook: 190, praia: 90, cidade: 78, floresta: 92 };
+export const SKETCHBOOK_GROUND_Y = 5.35;
 
 export const VEHICLE_SPAWNS = {
   sketchbook: [
-    { id: "sketch-car-left", type: "car", x: -55, y: 5.35, z: -10, yaw: Math.PI },
-    { id: "sketch-car-right", type: "car", x: 48, y: 5.35, z: 28, yaw: -Math.PI / 2 },
-    { id: "sketch-plane", type: "plane", x: 0, y: 5.35, z: 92, yaw: Math.PI },
-    { id: "sketch-heli", type: "helicopter", x: -74, y: 6.2, z: 72, yaw: Math.PI / 2 }
+    { id: "sketch-car-left", type: "car", x: -48, y: SKETCHBOOK_GROUND_Y, z: 30, yaw: Math.PI / 2 },
+    { id: "sketch-car-right", type: "car", x: 48, y: SKETCHBOOK_GROUND_Y, z: -30, yaw: -Math.PI / 2 },
+    { id: "sketch-plane", type: "plane", x: 0, y: SKETCHBOOK_GROUND_Y, z: 28, yaw: Math.PI },
+    { id: "sketch-heli", type: "helicopter", x: -48, y: SKETCHBOOK_GROUND_Y + 0.85, z: -4, yaw: Math.PI / 2 }
   ],
   cidade: [
     { id: "city-car-red", type: "car", x: -24, y: 0, z: -4, yaw: Math.PI / 2 },

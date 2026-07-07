@@ -45,7 +45,7 @@ function buildCar(color) {
   box(group, [2.2, 0.62, 4.1], [0, 0.75, 0], body);
   box(group, [1.85, 0.78, 2.05], [0, 1.42, 0.18], materials.glass);
   box(group, [1.9, 0.22, 0.75], [0, 1.12, -1.62], body);
-  [[-1.02,0.48,-1.35],[1.02,0.48,-1.35],[-1.02,0.48,1.35],[1.02,0.48,1.35]].forEach((p)=>addWheel(group,...p));
+  group.userData.wheels = [[-1.02,0.48,-1.35],[1.02,0.48,-1.35],[-1.02,0.48,1.35],[1.02,0.48,1.35]].map((p)=>addWheel(group,...p));
   box(group,[0.36,0.2,0.08],[-0.62,0.8,-2.08],mat(0xffefb0,{emissive:0x554411}));
   box(group,[0.36,0.2,0.08],[0.62,0.8,-2.08],mat(0xffefb0,{emissive:0x554411}));
   group.userData.cameraOffset=new THREE.Vector3(0,2.15,0.25);group.userData.radius=2.25;
@@ -54,7 +54,7 @@ function buildCar(color) {
 
 function buildMotorcycle(color) {
   const group=new THREE.Group(),body=mat(color);
-  addWheel(group,0,0.55,-1.15,0.58,0.22);addWheel(group,0,0.55,1.15,0.58,0.22);
+  group.userData.wheels=[addWheel(group,0,0.55,-1.15,0.58,0.22),addWheel(group,0,0.55,1.15,0.58,0.22)];
   box(group,[0.42,0.48,1.55],[0,0.95,0.05],body,[0.08,0,0]);
   box(group,[0.5,0.16,0.8],[0,1.2,0.55],materials.dark);
   box(group,[0.12,1.1,0.12],[0,1.15,-0.88],materials.metal,[0.22,0,0]);
@@ -67,7 +67,7 @@ function buildQuad(color) {
   const group=new THREE.Group(),body=mat(color);
   box(group,[1.55,0.48,2.35],[0,0.82,0],body);
   box(group,[0.72,0.24,0.9],[0,1.15,0.35],materials.dark);
-  [[-0.9,0.5,-0.8],[0.9,0.5,-0.8],[-0.9,0.5,0.8],[0.9,0.5,0.8]].forEach((p)=>addWheel(group,...p,0.5,0.38));
+  group.userData.wheels=[[-0.9,0.5,-0.8],[0.9,0.5,-0.8],[-0.9,0.5,0.8],[0.9,0.5,0.8]].map((p)=>addWheel(group,...p,0.5,0.38));
   box(group,[1.15,0.1,0.1],[0,1.5,-0.62],materials.metal);
   group.userData.cameraOffset=new THREE.Vector3(0,1.9,0.2);group.userData.radius=1.45;
   return group;
@@ -89,6 +89,10 @@ function buildPlane(color) {
   box(group,[2.7,0.14,0.85],[0,0.3,2.0],body);
   box(group,[0.15,1.45,0.9],[0,0.75,2.1],body);
   cylinder(group,0.68,0.2,[0,0,-2.85],materials.dark,[Math.PI/2,0,0],6);
+  const propeller=new THREE.Group();propeller.position.set(0,0,-3.02);group.add(propeller);
+  box(propeller,[0.16,2.25,0.08],[0,0,0],materials.dark);
+  box(propeller,[2.25,0.16,0.08],[0,0,0],materials.dark);
+  group.userData.propeller=propeller;
   box(group,[0.95,0.52,0.9],[0,0.55,-0.6],materials.glass);
   cylinder(group,0.055,2.1,[-0.42,-0.18,-1.45],materials.dark,[Math.PI/2,0,0]);
   cylinder(group,0.055,2.1,[0.42,-0.18,-1.45],materials.dark,[Math.PI/2,0,0]);

@@ -42,6 +42,14 @@ function approach(value, target, amount) {
   return Math.max(target, value - amount);
 }
 
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, Number(value) || 0));
+}
+
+function lerp(value, target, amount) {
+  return value + (target - value) * Math.max(0, Math.min(1, amount));
+}
+
 function makeVehicles(mapId) {
   return (VEHICLE_SPAWNS[mapId] || []).map((spawn) => {
     const stats = VEHICLE_STATS[spawn.type];
@@ -52,7 +60,13 @@ function makeVehicles(mapId) {
       speed: 0,
       driverId: null,
       destroyed: false,
-      input: { throttle: 0, steer: 0, lift: 0 },
+      input: { throttle: 0, steer: 0, lift: 0, pitch: 0, roll: 0, yaw: 0, brake: 0 },
+      pitch: 0,
+      roll: 0,
+      steering: 0,
+      enginePower: 0,
+      verticalVelocity: 0,
+      lastSpeed: 0,
       lastFireAt: 0,
       lastRamAt: new Map()
     };
@@ -63,6 +77,7 @@ function publicVehicle(vehicle) {
   return {
     id: vehicle.id, type: vehicle.type,
     x: vehicle.x, y: vehicle.y, z: vehicle.z, yaw: vehicle.yaw,
+    pitch: vehicle.pitch || 0, roll: vehicle.roll || 0, enginePower: vehicle.enginePower || 0,
     speed: vehicle.speed, health: vehicle.health, maxHealth: vehicle.maxHealth,
     driverId: vehicle.driverId, destroyed: vehicle.destroyed
   };
@@ -155,6 +170,7 @@ function createRoomsModule(io) {
       playerVotes,
       vehicles: (room.vehicles || []).map(publicVehicle),
       worldEvent: room.worldEvent || null,
+      worldTime: room.worldTime || null,
       endsAt: room.endsAt || null
     };
   }
@@ -336,6 +352,20 @@ function createRoomsModule(io) {
     return null;
   }
 
+  function worldTimeForRoom(room, now) {
+    const lengthMs = room.settings.mapId === "cidade" ? 210000 : room.settings.mapId === "floresta" ? 240000 : 195000;
+    const progress = ((now - room.startedAt) % lengthMs) / lengthMs;
+    const sun = Math.sin(progress * Math.PI * 2 - Math.PI * 0.42) * 0.5 + 0.5;
+    const moon = 1 - sun;
+    const phase = sun > 0.72 ? "day" : sun > 0.38 ? (progress < 0.55 ? "dawn" : "dusk") : "night";
+    return {
+      progress,
+      phase,
+      sun: Math.max(0, Math.min(1, sun)),
+      moon: Math.max(0, Math.min(1, moon))
+    };
+  }
+
   function applyWorldEventForces(room, event, now) {
     if (!event) return;
     if (event.type === "tsunami" && event.phase === "surge") {
@@ -374,6 +404,87 @@ function createRoomsModule(io) {
     }
   }
 
+  function updateGroundVehicle(vehicle, stats, input, driver, delta, waterMode = false) {
+    const throttle = clamp(input.throttle, -1, 1);
+    const steerInput = clamp(input.steer, -1, 1);
+    const brake = input.brake ? 1 : 0;
+    const speedRatio = Math.min(1, Math.abs(vehicle.speed) / Math.max(1, stats.maxSpeed));
+    const lowSpeedTorque = 1.15 - speedRatio * 0.45;
+    const targetPower = driver ? Math.max(0.08, Math.abs(throttle)) : 0;
+
+    vehicle.enginePower = approach(vehicle.enginePower || 0, targetPower, delta * (driver ? 2.6 : 0.8));
+    vehicle.steering = lerp(vehicle.steering || 0, steerInput, delta * (waterMode ? 5.5 : 7.5));
+
+    if (driver && throttle !== 0) {
+      vehicle.speed += throttle * stats.acceleration * lowSpeedTorque * delta;
+    } else {
+      vehicle.speed = approach(vehicle.speed, 0, stats.acceleration * (waterMode ? 0.42 : 0.34) * delta);
+    }
+    if (brake) vehicle.speed = approach(vehicle.speed, 0, stats.acceleration * 1.8 * delta);
+
+    const drag = waterMode ? 0.985 : 0.992;
+    vehicle.speed *= Math.pow(drag, delta * 60);
+    vehicle.speed = clamp(vehicle.speed, -stats.maxSpeed * 0.42, stats.maxSpeed);
+
+    const steeringAtSpeed = Math.min(1, Math.abs(vehicle.speed) / Math.max(1, stats.maxSpeed * 0.28));
+    const reverseMul = vehicle.speed >= 0 ? 1 : -1;
+    vehicle.yaw += vehicle.steering * stats.turnSpeed * steeringAtSpeed * reverseMul * delta;
+    vehicle.x -= Math.sin(vehicle.yaw) * vehicle.speed * delta;
+    vehicle.z -= Math.cos(vehicle.yaw) * vehicle.speed * delta;
+
+    const acceleration = (vehicle.speed - (vehicle.lastSpeed || 0)) / Math.max(0.001, delta);
+    const targetRoll = -vehicle.steering * steeringAtSpeed * (waterMode ? 0.18 : 0.26);
+    const targetPitch = clamp(-acceleration * 0.012, -0.22, 0.18);
+    vehicle.roll = lerp(vehicle.roll || 0, targetRoll, delta * 5.5);
+    vehicle.pitch = lerp(vehicle.pitch || 0, targetPitch, delta * 4.5);
+    vehicle.lastSpeed = vehicle.speed;
+  }
+
+  function updatePlaneVehicle(vehicle, stats, input, driver, delta) {
+    const throttle = clamp(input.throttle, -1, 1);
+    const pitchInput = clamp(input.pitch || input.lift, -1, 1);
+    const rollInput = clamp(input.roll || input.steer, -1, 1);
+    const yawInput = clamp(input.yaw, -1, 1);
+    const brake = input.brake ? 1 : 0;
+    const targetEngine = driver ? clamp(0.58 + throttle * 0.42, 0.18, 1) : 0.18;
+
+    vehicle.enginePower = approach(vehicle.enginePower || 0.35, targetEngine, delta * (driver ? 0.72 : 0.25));
+    const cruise = stats.maxSpeed * (0.34 + vehicle.enginePower * 0.66);
+    vehicle.speed = approach(vehicle.speed, driver ? cruise : stats.maxSpeed * 0.28, stats.acceleration * delta * (brake ? 1.7 : 0.72));
+    if (brake) vehicle.speed = approach(vehicle.speed, stats.maxSpeed * 0.22, stats.acceleration * 1.2 * delta);
+
+    const targetRoll = clamp(rollInput * 0.86 + yawInput * 0.18, -1.05, 1.05);
+    vehicle.roll = lerp(vehicle.roll || 0, targetRoll, delta * 3.2);
+    const targetPitch = clamp((vehicle.pitch || 0) + pitchInput * delta * 0.88, -0.62, 0.52);
+    vehicle.pitch = lerp(vehicle.pitch || 0, targetPitch, delta * 4.2);
+
+    const bankTurn = Math.sin(vehicle.roll || 0) * stats.turnSpeed * 0.78;
+    vehicle.yaw += (yawInput * stats.turnSpeed * 0.55 + bankTurn) * delta;
+
+    const forward = {
+      x: -Math.sin(vehicle.yaw) * Math.cos(vehicle.pitch || 0),
+      y: Math.sin(vehicle.pitch || 0),
+      z: -Math.cos(vehicle.yaw) * Math.cos(vehicle.pitch || 0)
+    };
+    vehicle.x += forward.x * vehicle.speed * delta;
+    vehicle.z += forward.z * vehicle.speed * delta;
+    vehicle.verticalVelocity = lerp(vehicle.verticalVelocity || 0, forward.y * vehicle.speed * 0.82 + input.lift * 3.2, delta * 2.8);
+    vehicle.y += vehicle.verticalVelocity * delta;
+
+    if (vehicle.y <= 3) {
+      vehicle.y = 3;
+      vehicle.verticalVelocity = Math.max(0, vehicle.verticalVelocity || 0);
+      vehicle.pitch = lerp(vehicle.pitch || 0, 0, delta * 2.2);
+      vehicle.roll = lerp(vehicle.roll || 0, 0, delta * 1.8);
+    }
+    if (vehicle.y >= 44) {
+      vehicle.y = 44;
+      vehicle.verticalVelocity = Math.min(0, vehicle.verticalVelocity || 0);
+      vehicle.pitch = Math.min(vehicle.pitch || 0, 0.15);
+    }
+    vehicle.lastSpeed = vehicle.speed;
+  }
+
   function updateVehicles(room, delta, now) {
     const half = MAP_HALF_SIZES[room.settings.mapId] || ARENA_HALF;
     room.vehicles.forEach((vehicle) => {
@@ -381,26 +492,21 @@ function createRoomsModule(io) {
       const stats = VEHICLE_STATS[vehicle.type];
       const driver = room.players.find((player) => player.socketId === vehicle.driverId && player.alive);
       if (!driver && vehicle.driverId) vehicle.driverId = null;
-      const input = driver ? vehicle.input : { throttle: 0, steer: 0, lift: 0 };
+      const input = driver ? vehicle.input : { throttle: 0, steer: 0, lift: 0, pitch: 0, roll: 0, yaw: 0, brake: 0 };
 
       if (vehicle.type === "cannon") {
         vehicle.yaw += input.steer * stats.turnSpeed * delta;
+        vehicle.pitch = 0;
+        vehicle.roll = 0;
+      } else if (vehicle.type === "plane") {
+        updatePlaneVehicle(vehicle, stats, input, driver, delta);
       } else {
-        const targetSpeed = input.throttle * stats.maxSpeed;
-        vehicle.speed = approach(vehicle.speed, targetSpeed, stats.acceleration * delta);
-        if (!driver) vehicle.speed = approach(vehicle.speed, 0, stats.acceleration * 0.6 * delta);
-        const steerStrength = Math.min(1, Math.abs(vehicle.speed) / Math.max(1, stats.maxSpeed * 0.35));
-        vehicle.yaw += input.steer * stats.turnSpeed * steerStrength * delta * (vehicle.speed >= 0 ? 1 : -1);
-        vehicle.x -= Math.sin(vehicle.yaw) * vehicle.speed * delta;
-        vehicle.z -= Math.cos(vehicle.yaw) * vehicle.speed * delta;
+        updateGroundVehicle(vehicle, stats, input, driver, delta, vehicle.type === "jetski");
       }
 
-      if (vehicle.type === "plane") {
-        vehicle.y = Math.max(3, Math.min(36, vehicle.y + input.lift * 12 * delta));
-        if (driver && Math.abs(vehicle.speed) < 9) vehicle.speed = approach(vehicle.speed, 9, 8 * delta);
-      } else if (vehicle.type === "jetski") {
+      if (vehicle.type === "jetski") {
         vehicle.y = 0.2;
-      } else if (vehicle.type !== "cannon") {
+      } else if (vehicle.type !== "cannon" && vehicle.type !== "plane") {
         vehicle.y = Math.max(0, vehicle.y - 8 * delta);
       }
 
@@ -415,6 +521,7 @@ function createRoomsModule(io) {
         driver.y = vehicle.y;
         driver.z = vehicle.z;
         driver.yaw = vehicle.yaw;
+        driver.pitch = vehicle.pitch || 0;
       }
 
       if (Math.abs(vehicle.speed) > 7 && now % 250 < WORLD_TICK_MS) {
@@ -443,12 +550,14 @@ function createRoomsModule(io) {
     room.vehicles = makeVehicles(room.settings.mapId);
     room.worldObjects = new Map();
     room.worldEvent = null;
+    room.worldTime = worldTimeForRoom(room, room.startedAt);
     room.worldTick = 0;
     room.worldTimer = setInterval(() => {
       if (!rooms.has(room.roomId) || room.status !== "playing") return;
       const now = Date.now();
       const event = eventForRoom(room, now);
       room.worldEvent = event;
+      room.worldTime = worldTimeForRoom(room, now);
       updateVehicles(room, WORLD_TICK_MS / 1000, now);
       applyWorldEventForces(room, event, now);
       room.worldTick += 1;
@@ -457,6 +566,9 @@ function createRoomsModule(io) {
       }
       if (room.worldTick % 4 === 0) {
         io.to(room.roomId).emit("arena-world:event", event || { type: "none", phase: "idle", progress: 0 });
+      }
+      if (room.worldTick % 10 === 0) {
+        io.to(room.roomId).volatile.emit("arena-world:time", room.worldTime);
       }
     }, WORLD_TICK_MS);
   }
@@ -685,7 +797,11 @@ function createRoomsModule(io) {
       vehicle.input = {
         throttle: clampInput(input.throttle),
         steer: clampInput(input.steer),
-        lift: clampInput(input.lift)
+        lift: clampInput(input.lift),
+        pitch: clampInput(input.pitch),
+        roll: clampInput(input.roll),
+        yaw: clampInput(input.yaw),
+        brake: Boolean(input.brake)
       };
     });
 

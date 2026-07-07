@@ -12,7 +12,7 @@ import {
 } from "./game-audio.js";
 import {
   CLASSES, CLASS_ORDER, SECONDARY_WEAPONS, SECONDARY_ORDER, GRENADES, GRENADE_ORDER, GRENADE_CHARGES_PER_LIFE,
-  ARENA_HALF, MAP_HALF_SIZES, VEHICLE_STATS, EYE_HEIGHT, GRAVITY, WALK_SPEED, SPRINT_MUL, CROUCH_MUL, MOVE_SEND_MS,
+  ARENA_HALF, MAP_HALF_SIZES, MAP_META, VEHICLE_STATS, EYE_HEIGHT, GRAVITY, WALK_SPEED, SPRINT_MUL, CROUCH_MUL, MOVE_SEND_MS,
   HEADSHOT_MULTIPLIER
 } from "./config.js";
 
@@ -27,11 +27,13 @@ const DANCE_OPTIONS = {
 };
 
 let scene, camera, renderer, composer, controls, clock, raycaster;
+let hemiLight, sunLight;
 let obstacles = [];
 let solidMeshesForRaycast = [];
 let weaponRig, currentWeaponMesh, muzzleFlash;
 let mapWorld = null;
 let activeWorldEvent = null;
+let activeWorldTime = null;
 let socket = null;
 let room = null;
 let selfId = null;
@@ -101,13 +103,13 @@ function ensureScene() {
   renderer.shadowMap.enabled = true;
   setupPostProcessing();
 
-  const hemi = new THREE.HemisphereLight(0xffffff, 0x445566, 1);
-  scene.add(hemi);
-  const sun = new THREE.DirectionalLight(0xffffff, 1.1);
-  sun.position.set(30, 45, 15);
-  sun.castShadow = true;
-  sun.shadow.mapSize.set(1024, 1024);
-  scene.add(sun);
+  hemiLight = new THREE.HemisphereLight(0xffffff, 0x445566, 1);
+  scene.add(hemiLight);
+  sunLight = new THREE.DirectionalLight(0xffffff, 1.1);
+  sunLight.position.set(30, 45, 15);
+  sunLight.castShadow = true;
+  sunLight.shadow.mapSize.set(1024, 1024);
+  scene.add(sunLight);
 
   controls = new PointerLockControls(camera, document.body);
   camera.rotation.order = "YXZ";
@@ -167,17 +169,51 @@ function setupPostProcessing() {
   }
 }
 
+function applyWorldLighting(delta) {
+  if (!scene || !activeWorldTime || !room) return;
+  const sun = Math.max(0, Math.min(1, Number(activeWorldTime.sun) || 0));
+  const progress = Math.max(0, Math.min(1, Number(activeWorldTime.progress) || 0));
+  const mapMeta = MAP_META[room.settings.mapId] || MAP_META.cidade;
+  const baseSky = new THREE.Color(mapMeta.sky || 0x7db6d6);
+  const nightSky = new THREE.Color(0x101722);
+  const dawnSky = new THREE.Color(0xff9168);
+  const sky = nightSky.clone().lerp(baseSky, sun);
+  const horizonWarmth = Math.max(0, 1 - Math.abs(sun - 0.46) / 0.25);
+  sky.lerp(dawnSky, horizonWarmth * 0.22);
+
+  scene.background?.lerp?.(sky, Math.min(1, delta * 0.8));
+  if (scene.fog?.color) scene.fog.color.lerp(sky, Math.min(1, delta * 0.8));
+
+  const ambient = 0.36 + sun * 0.78;
+  const sunIntensity = 0.18 + sun * 1.28;
+  if (hemiLight) {
+    hemiLight.intensity = THREE.MathUtils.lerp(hemiLight.intensity, ambient, Math.min(1, delta * 1.2));
+    hemiLight.color.lerp(new THREE.Color(sun > 0.45 ? 0xffffff : 0x9eb8ff), Math.min(1, delta * 0.8));
+    hemiLight.groundColor.lerp(new THREE.Color(sun > 0.45 ? 0x445566 : 0x161a2b), Math.min(1, delta * 0.8));
+  }
+  if (sunLight) {
+    sunLight.intensity = THREE.MathUtils.lerp(sunLight.intensity, sunIntensity, Math.min(1, delta * 1.4));
+    const angle = progress * Math.PI * 2 - Math.PI * 0.45;
+    sunLight.position.set(Math.cos(angle) * 52, 12 + sun * 58, Math.sin(angle) * 52);
+    sunLight.color.lerp(new THREE.Color(horizonWarmth > 0.1 ? 0xffd3a0 : 0xffffff), Math.min(1, delta * 0.8));
+  }
+  if (renderer) {
+    const targetExposure = 0.78 + sun * 0.38 + horizonWarmth * 0.08;
+    renderer.toneMappingExposure = THREE.MathUtils.lerp(renderer.toneMappingExposure, targetExposure, Math.min(1, delta * 0.9));
+  }
+}
+
 function clearSceneObjects() {
   [...scene.children].forEach((child) => {
     if (child === camera) return;
     scene.remove(child);
   });
-  const hemi = new THREE.HemisphereLight(0xffffff, 0x445566, 1);
-  scene.add(hemi);
-  const sun = new THREE.DirectionalLight(0xffffff, 1.1);
-  sun.position.set(30, 45, 15);
-  sun.castShadow = true;
-  scene.add(sun);
+  hemiLight = new THREE.HemisphereLight(0xffffff, 0x445566, 1);
+  scene.add(hemiLight);
+  sunLight = new THREE.DirectionalLight(0xffffff, 1.1);
+  sunLight.position.set(30, 45, 15);
+  sunLight.castShadow = true;
+  scene.add(sunLight);
   remotePlayers.forEach((a) => scene.remove(a.root));
   remotePlayers.clear();
   activeGrenades.forEach((g) => scene.remove(g.mesh));
@@ -418,6 +454,7 @@ function spawnOrUpdateRemote(p) {
   }
   avatar.root.position.set(p.x, p.y, p.z);
   avatar.root.rotation.y = p.yaw;
+  avatar.root.rotation.z = 0;
   avatar.root.visible = p.alive;
   avatar.alive = p.alive !== false;
   avatar.moving = Boolean(p.moving);
@@ -445,6 +482,7 @@ function syncVehicles(vehicleStates = []) {
     let entry = vehicles.get(state.id);
     if (!entry) {
       const model = buildVehicleModel(state);
+      model.rotation.order = "YXZ";
       scene.add(model);
       entry = { model, state: { ...state }, target: { ...state }, destroyedStyled: false };
       vehicles.set(state.id, entry);
@@ -504,8 +542,18 @@ function updateVehiclePresentation(delta) {
     while (yawDelta > Math.PI) yawDelta -= Math.PI * 2;
     while (yawDelta < -Math.PI) yawDelta += Math.PI * 2;
     entry.state.yaw += yawDelta * t;
+    entry.state.pitch = THREE.MathUtils.lerp(entry.state.pitch || 0, entry.target.pitch || 0, t);
+    entry.state.roll = THREE.MathUtils.lerp(entry.state.roll || 0, entry.target.roll || 0, t);
+    entry.state.enginePower = THREE.MathUtils.lerp(entry.state.enginePower || 0, entry.target.enginePower || 0, t);
+    entry.state.speed = THREE.MathUtils.lerp(entry.state.speed || 0, entry.target.speed || 0, t);
     entry.model.position.set(entry.state.x, entry.state.y, entry.state.z);
-    entry.model.rotation.y = entry.state.yaw;
+    entry.model.rotation.set(entry.state.pitch || 0, entry.state.yaw, entry.state.roll || 0);
+    entry.model.userData.wheels?.forEach((wheel) => {
+      wheel.rotation.x += (entry.state.speed || 0) * delta * 2.4;
+    });
+    if (entry.model.userData.propeller) {
+      entry.model.userData.propeller.rotation.z += (10 + (entry.state.enginePower || 0) * 58) * delta;
+    }
 
     const driverAvatar = remotePlayers.get(entry.target.driverId);
     if (driverAvatar?.alive && !entry.target.destroyed) {
@@ -518,9 +566,10 @@ function updateVehiclePresentation(delta) {
         cannon: new THREE.Vector3(0, 0.72, 0.25)
       };
       const seat = (seatOffsets[entry.target.type] || seatOffsets.car)
-        .clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), entry.state.yaw);
+        .clone().applyEuler(entry.model.rotation);
       driverAvatar.root.position.copy(entry.model.position).add(seat);
       driverAvatar.root.rotation.y = entry.state.yaw;
+      driverAvatar.root.rotation.z = (entry.state.roll || 0) * 0.35;
       driverAvatar.root.visible = true;
       driverAvatar.inVehicle = true;
       driverAvatar.moving = false;
@@ -545,9 +594,14 @@ function updateVehiclePresentation(delta) {
     weaponRig.visible = true;
     return;
   }
-  const offset = driven.model.userData.cameraOffset.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), driven.state.yaw);
+  const cameraEuler = new THREE.Euler((driven.state.pitch || 0) * 0.45, driven.state.yaw, (driven.state.roll || 0) * 0.2, "YXZ");
+  const offset = driven.model.userData.cameraOffset.clone().applyEuler(cameraEuler);
   const desired = driven.model.position.clone().add(offset);
-  camera.position.lerp(desired, Math.min(1, delta * 16));
+  camera.position.lerp(desired, Math.min(1, delta * (driven.target.type === "plane" ? 8 : 14)));
+  const forward = new THREE.Vector3(0, 0, -1).applyEuler(new THREE.Euler(driven.state.pitch || 0, driven.state.yaw, 0, "YXZ"));
+  const lookTarget = driven.model.position.clone().addScaledVector(forward, driven.target.type === "plane" ? 18 : 8);
+  lookTarget.y += driven.target.type === "plane" ? 1.2 : 1.1;
+  camera.lookAt(lookTarget);
   local.jumpOffset = driven.state.y;
   weaponRig.visible = !VEHICLE_STATS[driven.target.type]?.builtInWeapon;
   updateVehicleHud();
@@ -1192,10 +1246,18 @@ function updateVehicleControls() {
   if (local.mouseDown && entry.target.type === "plane") fireVehicleWeapon();
   if (now - lastVehicleInputSent < MOVE_SEND_MS) return;
   lastVehicleInputSent = now;
+  const isPlane = entry.target.type === "plane";
+  const throttle = Number(Boolean(keys.KeyW)) - Number(Boolean(keys.KeyS));
+  const steer = Number(Boolean(keys.KeyA)) - Number(Boolean(keys.KeyD));
+  const lift = Number(Boolean(keys.Space)) - Number(Boolean(keys.ControlLeft || keys.ControlRight));
   socket.emit("vehicle:input", {
-    throttle: Number(Boolean(keys.KeyW)) - Number(Boolean(keys.KeyS)),
-    steer: Number(Boolean(keys.KeyA)) - Number(Boolean(keys.KeyD)),
-    lift: Number(Boolean(keys.Space)) - Number(Boolean(keys.ControlLeft || keys.ControlRight))
+    throttle,
+    steer,
+    lift: isPlane ? lift : 0,
+    pitch: isPlane ? lift : 0,
+    roll: isPlane ? steer : 0,
+    yaw: 0,
+    brake: !isPlane && Boolean(keys.Space)
   });
 }
 
@@ -1420,6 +1482,7 @@ function render() {
   const delta = Math.min(clock.getDelta(), 0.05);
   if (room && room.status === "playing") {
     updateVehiclePresentation(delta);
+    applyWorldLighting(delta);
     updateMovement(delta);
     updateGrenadesPhysics(delta);
     updateBallistics(delta);
@@ -1478,6 +1541,7 @@ export function attachSocket(activeSocket) {
     scene.traverse((obj) => { if (obj.isMesh && obj.userData.socketId === undefined) solidMeshesForRaycast.push(obj); });
     syncVehicles(room.vehicles || []);
     activeWorldEvent = room.worldEvent || null;
+    activeWorldTime = room.worldTime || null;
 
     const me = room.players.find((p) => p.socketId === selfId);
     local.classId = me?.classId || "rifle";
@@ -1573,6 +1637,7 @@ export function attachSocket(activeSocket) {
   socket.on("vehicle:fired", renderVehicleFire);
 
   socket.on("arena-world:event", (event) => updateEventAlert(event?.type === "none" ? null : event));
+  socket.on("arena-world:time", (time) => { activeWorldTime = time || activeWorldTime; });
 
   socket.on("world:object-state", (state) => mapWorld?.applyObjectState(state));
 
@@ -1588,6 +1653,7 @@ export function attachSocket(activeSocket) {
     if (!avatar) return;
     avatar.root.position.set(p.x, p.y, p.z);
     avatar.root.rotation.y = p.yaw;
+    if (!p.vehicleId) avatar.root.rotation.z = 0;
     avatar.root.visible = true;
     avatar.alive = true;
     avatar.moving = Boolean(p.moving);
@@ -1805,6 +1871,7 @@ export function initGamePlayerJoinHandler(socketRef) {
   socketRef.on("room:update", (roomState) => {
     if (room && room.status === "playing" && roomState.status === "playing") {
       room.settings = roomState.settings;
+      activeWorldTime = roomState.worldTime || activeWorldTime;
       roomState.players.forEach((p) => {
         if (p.socketId !== selfId && !remotePlayers.has(p.socketId)) spawnOrUpdateRemote(p);
       });

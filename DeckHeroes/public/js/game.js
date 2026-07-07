@@ -203,8 +203,12 @@ function aimDirection(includePitch = true) {
   ).normalize();
 }
 
+function heroFloatHeight(heroId) {
+  return heroId === "balloon" ? 1.45 : 0;
+}
+
 function unitHeight(heroId) {
-  if (heroId === "balloon") return 2.7;
+  if (heroId === "balloon") return 2.7 + heroFloatHeight(heroId);
   return 1.15 * (HEROES[heroId]?.visualScale || 1);
 }
 
@@ -569,7 +573,7 @@ function updateUnitAnimation(unit, delta) {
   unit.animTime = (unit.animTime || 0) + delta * (unit.moving ? 11 : 3);
   unit.mixer?.update(delta);
   if (!unit.mixer && unit.model) {
-    unit.model.position.y = Math.max(0, Math.sin(unit.animTime) * (unit.moving ? 0.055 : 0.018));
+    unit.model.position.y = (unit.floatHeight || 0) + Math.max(0, Math.sin(unit.animTime) * (unit.moving ? 0.055 : 0.018));
     unit.model.rotation.z = Math.sin(unit.animTime * 0.7) * (unit.moving ? 0.045 : 0.018);
   }
   if (unit.actionLockUntil > performance.now()) return;
@@ -730,6 +734,7 @@ function createUnit(id, heroId, team) {
   ring.position.y = 0.035;
   group.add(ring);
   const fallback = buildFallback(heroId);
+  fallback.position.y += heroFloatHeight(heroId);
   group.add(fallback);
   scene.add(group);
   const unit = {
@@ -741,6 +746,7 @@ function createUnit(id, heroId, team) {
     actionLockUntil: 0,
     animTime: Math.random() * Math.PI,
     heroId,
+    floatHeight: heroFloatHeight(heroId),
     team,
     moving: false,
     target: { x: 0, z: 0, yaw: 0 },
@@ -751,6 +757,7 @@ function createUnit(id, heroId, team) {
     if (!group.parent) return;
     group.remove(unit.model);
     unit.model = model;
+    unit.model.position.y += unit.floatHeight || 0;
     group.add(model);
     setupUnitAnimations(unit, animations);
     playUnitAction(unit, "idle", 0);
@@ -762,14 +769,17 @@ function createUnit(id, heroId, team) {
 function updateUnitVisual(unit, data, instant = false) {
   if (unit.heroId !== data.heroId) {
     unit.heroId = data.heroId;
+    unit.floatHeight = heroFloatHeight(data.heroId);
     unit.group.remove(unit.model);
     unit.model = buildFallback(data.heroId);
+    unit.model.position.y += unit.floatHeight || 0;
     unit.group.add(unit.model);
     setupUnitAnimations(unit, []);
     instantiateHeroModel(data.heroId).then(({ model, animations }) => {
       if (!unit.group.parent || unit.heroId !== data.heroId) return;
       unit.group.remove(unit.model);
       unit.model = model;
+      unit.model.position.y += unit.floatHeight || 0;
       unit.group.add(model);
       setupUnitAnimations(unit, animations);
       playUnitAction(unit, "idle", 0);
@@ -1215,63 +1225,9 @@ function attack() {
   const now = performance.now();
   if (now - state.lastAttackAt < 130) return;
   state.lastAttackAt = now;
-  const target = findAimTarget();
+  const aim = aimDirection(true);
   triggerUnitAction(units.get(state.selfId), "attack");
-  socket.emit("deck-heroes:attack", target || {});
-}
-
-function findAimTarget() {
-  const self = me();
-  if (!self) return null;
-  const hero = HEROES[self.heroId] || HEROES.archer;
-  const origin = state.localPosition.clone();
-  origin.y = unitHeight(self.heroId);
-  const forward = aimDirection(true);
-  let best = null;
-  let bestScore = -Infinity;
-
-  state.room.players.forEach((player) => {
-    if (player.team === self.team || !player.alive || player.socketId === state.selfId) return;
-    const target = targetPosition(player);
-    const to = target.sub(origin);
-    const dist = to.length();
-    if (dist > hero.range + 3 || dist < 0.01) return;
-    const dot = forward.dot(to.normalize());
-    const score = dot * 2 - dist / Math.max(1, hero.range);
-    if (dot > 0.45 && score > bestScore) {
-      bestScore = score;
-      best = { targetSocketId: player.socketId };
-    }
-  });
-
-  state.room.supports?.forEach((support) => {
-    if (support.team === self.team || !support.alive) return;
-    const target = targetPosition(support);
-    const to = target.sub(origin);
-    const dist = to.length();
-    if (dist > hero.range + 3 || dist < 0.01) return;
-    const dot = forward.dot(to.normalize());
-    const score = dot * 2 - dist / Math.max(1, hero.range);
-    if (dot > 0.45 && score > bestScore) {
-      bestScore = score;
-      best = { targetSocketId: support.id };
-    }
-  });
-
-  state.room.towers.forEach((tower) => {
-    if (tower.team === self.team || !tower.alive) return;
-    const target = targetPosition(tower);
-    const to = target.sub(origin);
-    const dist = to.length();
-    if (dist > hero.range + 8.5 || dist < 0.01) return;
-    const dot = forward.dot(to.normalize());
-    const score = dot * 1.5 - dist / Math.max(1, hero.range);
-    if (dot > 0.25 && score > bestScore) {
-      bestScore = score;
-      best = { towerId: tower.id };
-    }
-  });
-  return best;
+  socket.emit("deck-heroes:attack", { aimX: aim.x, aimY: aim.y, aimZ: aim.z });
 }
 
 function updateMovement(delta) {
@@ -1390,11 +1346,13 @@ function projectileObject(heroId, color) {
   return group;
 }
 
-function projectileLine(from, to, heroId = "tower") {
+function projectileLine(from, to, heroId = "tower", endOverride = null) {
   if (!scene) return;
   const color = new THREE.Color(HEROES[heroId]?.color || (heroId === "tower" ? "#ffe082" : "#ffffff"));
   const start = targetPosition(from);
-  const end = targetPosition(to);
+  const end = endOverride
+    ? new THREE.Vector3(Number(endOverride.x) || 0, Number(endOverride.y) || 0, Number(endOverride.z) || 0)
+    : targetPosition(to);
   start.y += from.kind ? 0.2 : 0.45;
   const object = projectileObject(heroId, color);
   object.position.copy(start);
@@ -1651,7 +1609,7 @@ socket.on("deck-heroes:move", (player) => {
   unit.target.z = player.z;
   unit.target.yaw = player.yaw;
 });
-socket.on("deck-heroes:attack", ({ from, targetSocketId, towerId }) => {
+socket.on("deck-heroes:attack", ({ from, targetSocketId, towerId, heroId, endX, endY, endZ }) => {
   const attacker = state.room?.players?.find((player) => player.socketId === from);
   if (!attacker) return;
   triggerUnitAction(units.get(from), "attack");
@@ -1659,7 +1617,10 @@ socket.on("deck-heroes:attack", ({ from, targetSocketId, towerId }) => {
   const targetTower = state.room.towers.find((tower) => tower.id === towerId);
   const targetSupport = state.room.supports?.find((support) => support.id === targetSocketId);
   const target = targetPlayer || targetSupport || targetTower;
-  if (target) projectileLine(attacker, target, attacker.heroId);
+  const hasEndPoint = Number.isFinite(Number(endX)) && Number.isFinite(Number(endY)) && Number.isFinite(Number(endZ));
+  if (target || hasEndPoint) {
+    projectileLine(attacker, target || attacker, heroId || attacker.heroId, hasEndPoint ? { x: endX, y: endY, z: endZ } : null);
+  }
 });
 socket.on("deck-heroes:ability", ({ socketId, x, z, heroId, abilityId }) => {
   triggerUnitAction(units.get(socketId), "ability");

@@ -23,8 +23,34 @@ function distance(a, b) {
   return Math.hypot(a.x - b.x, a.z - b.z);
 }
 
+function distance3(a, b) {
+  return Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
+}
+
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, Number(value) || 0));
+}
+
+function dot3(a, b) {
+  return a.x * b.x + a.y * b.y + a.z * b.z;
+}
+
+function addScaled3(origin, direction, scale) {
+  return {
+    x: origin.x + direction.x * scale,
+    y: origin.y + direction.y * scale,
+    z: origin.z + direction.z * scale
+  };
+}
+
+function normalize3(vector, fallback) {
+  const length = Math.hypot(vector.x, vector.y, vector.z);
+  if (!Number.isFinite(length) || length < 0.01) return fallback;
+  return {
+    x: vector.x / length,
+    y: vector.y / length,
+    z: vector.z / length
+  };
 }
 
 const WATER_HALF_WIDTH = 2.35;
@@ -58,6 +84,72 @@ function supportGoal(support, target) {
     Math.abs(center - support.x) < Math.abs(best - support.x) ? center : best
   ), BRIDGE_CENTERS[0]);
   return { x: bridgeX, z: support.z };
+}
+
+function heroVisualHeight(heroId) {
+  if (heroId === "balloon") return 5.6;
+  return Math.max(1.8, 2.05 * (HEROES[heroId]?.visualScale || 1));
+}
+
+function attackOrigin(player) {
+  const height = heroVisualHeight(player.heroId);
+  const y = player.heroId === "balloon" ? 3.45 : Math.max(1.05, height * 0.58);
+  return { x: player.x, y, z: player.z };
+}
+
+function aimDirection(player, payload = {}) {
+  const fallback = normalize3({ x: -Math.sin(player.yaw), y: 0, z: -Math.cos(player.yaw) }, { x: 0, y: 0, z: -1 });
+  return normalize3({
+    x: Number(payload.aimX),
+    y: Number(payload.aimY),
+    z: Number(payload.aimZ)
+  }, fallback);
+}
+
+function targetRadius(target) {
+  if (target.kind) return target.kind === "king" ? 3.15 : 2.55;
+  if (target.heroId === "balloon") return 1.75;
+  if (target.heroId === "giant") return 1.65;
+  return Math.max(0.72, 0.78 * (HEROES[target.heroId]?.visualScale || 1));
+}
+
+function targetVerticalSamples(target) {
+  if (target.kind) {
+    const height = target.kind === "king" ? 5.8 : 4.4;
+    return [height * 0.25, height * 0.52, height * 0.78];
+  }
+  if (target.heroId === "balloon") return [2.35, 3.65, 4.95];
+  const height = heroVisualHeight(target.heroId);
+  return [height * 0.35, height * 0.62, height * 0.86];
+}
+
+function aimHitCandidate(origin, direction, target, hero) {
+  const radius = targetRadius(target);
+  const maxAlong = hero.range + radius + (target.kind ? 6 : 1.6);
+  let best = null;
+  targetVerticalSamples(target).forEach((y) => {
+    const point = { x: target.x, y, z: target.z };
+    const toPoint = {
+      x: point.x - origin.x,
+      y: point.y - origin.y,
+      z: point.z - origin.z
+    };
+    const along = dot3(toPoint, direction);
+    if (along < 0.15 || along > maxAlong) return;
+    const closest = addScaled3(origin, direction, along);
+    const miss = distance3(point, closest);
+    if (miss > radius) return;
+    const candidate = {
+      target,
+      along,
+      miss,
+      impact: closest
+    };
+    if (!best || candidate.along < best.along || (candidate.along === best.along && candidate.miss < best.miss)) {
+      best = candidate;
+    }
+  });
+  return best;
 }
 
 function createDeckHeroesModule(io, { onlinePlayers = new Map(), broadcastOnlineList = () => {} } = {}) {
@@ -352,28 +444,23 @@ function createDeckHeroesModule(io, { onlinePlayers = new Map(), broadcastOnline
       .sort((a, b) => distance(source, a) - distance(source, b))[0] || null;
   }
 
-  function chooseAttackTarget(room, player, explicit = {}) {
+  function chooseAttackTarget(room, player, payload = {}) {
     const hero = HEROES[player.heroId] || HEROES.archer;
-    if (explicit.targetSocketId) {
-      const target = room.players.find((item) => item.socketId === explicit.targetSocketId && item.team !== player.team && item.alive);
-      if (target && distance(player, target) <= hero.range + 2) return target;
-      const support = room.supports.find((item) => item.id === explicit.targetSocketId && item.team !== player.team && item.alive);
-      if (support && distance(player, support) <= hero.range + 2) return support;
-    }
-    if (explicit.towerId) {
-      const tower = room.towers.find((item) => item.id === explicit.towerId && item.team !== player.team && item.alive);
-      if (tower && distance(player, tower) <= hero.range + 8.5) return tower;
-    }
-    const enemy = room.players
-      .filter((item) => item.team !== player.team && item.alive && distance(player, item) <= hero.range)
-      .sort((a, b) => distance(player, a) - distance(player, b))[0];
-    if (enemy) return enemy;
-    const support = room.supports
-      .filter((item) => item.team !== player.team && item.alive && distance(player, item) <= hero.range)
-      .sort((a, b) => distance(player, a) - distance(player, b))[0];
-    if (support) return support;
-    const tower = nearestEnemyTower(room, player);
-    return tower && distance(player, tower) <= hero.range + 8 ? tower : null;
+    const origin = attackOrigin(player);
+    const direction = aimDirection(player, payload);
+    const candidates = [
+      ...room.players.filter((item) => item.team !== player.team && item.alive),
+      ...room.supports.filter((item) => item.team !== player.team && item.alive),
+      ...room.towers.filter((item) => item.team !== player.team && item.alive)
+    ]
+      .map((target) => aimHitCandidate(origin, direction, target, hero))
+      .filter(Boolean)
+      .sort((a, b) => a.along - b.along || a.miss - b.miss);
+    const hit = candidates[0] || null;
+    return {
+      target: hit?.target || null,
+      impact: hit?.impact || addScaled3(origin, direction, hero.range + 2.5)
+    };
   }
 
   function attack(socket, payload = {}) {
@@ -384,9 +471,17 @@ function createDeckHeroesModule(io, { onlinePlayers = new Map(), broadcastOnline
     const now = Date.now();
     if (now - player.lastAttackAt < hero.fireRateMs) return;
     player.lastAttackAt = now;
-    const target = chooseAttackTarget(room, player, payload);
+    const result = chooseAttackTarget(room, player, payload);
+    const target = result.target;
     if (!target) {
-      io.to(room.roomId).emit("deck-heroes:attack", { from: socket.id, heroId: player.heroId, missed: true });
+      io.to(room.roomId).emit("deck-heroes:attack", {
+        from: socket.id,
+        heroId: player.heroId,
+        missed: true,
+        endX: result.impact.x,
+        endY: result.impact.y,
+        endZ: result.impact.z
+      });
       return;
     }
     const rage = player.rageUntil && now < player.rageUntil ? 1.45 : 1;
@@ -396,7 +491,10 @@ function createDeckHeroesModule(io, { onlinePlayers = new Map(), broadcastOnline
       from: socket.id,
       heroId: player.heroId,
       targetSocketId: target.socketId || (target.ownerId ? target.id : null),
-      towerId: target.kind ? target.id : null
+      towerId: target.kind ? target.id : null,
+      endX: result.impact.x,
+      endY: result.impact.y,
+      endZ: result.impact.z
     });
     emitRoom(room);
   }

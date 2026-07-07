@@ -44,7 +44,7 @@ const HEROES = {
   giant: {
     id: "giant", name: "Gigante", role: "Cerco", model: "Barbarian.glb",
     color: "#df7d5e", hp: 430, speed: 0.64, range: 7, damage: 85, fireRateMs: 980, towerDamageMul: 2.25,
-    visualScale: 2.35,
+    visualScale: 2.65,
     ability: { id: "stomp", name: "Pisao", cooldownMs: 12000, radius: 5, damage: 46 },
     support: true
   },

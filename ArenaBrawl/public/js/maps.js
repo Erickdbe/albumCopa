@@ -400,9 +400,9 @@ function buildSketchbook(scene) {
   scene.fog = new THREE.Fog(meta.sky, 120, 360);
 
   addGround(world, meta.ground, null, 36);
-  world.obstacles.push(collisionBox(0, 0, 120, 76, SKETCHBOOK_GROUND_Y, false));
+  world.obstacles.push(collisionBox(0, -2, 148, 112, SKETCHBOOK_GROUND_Y, false));
 
-  attachSketchbookWorld(world, { scale: 0.36, y: -0.04, usePhysicsCollisions: true });
+  attachSketchbookWorld(world, { scale: 0.36, y: -0.04, usePhysicsCollisions: true, usePhysicsGround: true });
   return world;
 }
 

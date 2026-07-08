@@ -527,8 +527,15 @@ function createRoomsModule(io) {
         vehicle.y = Math.max(groundY, vehicle.y - 8 * delta);
       }
 
-      vehicle.x = Math.max(-half + 3, Math.min(half - 3, vehicle.x));
-      vehicle.z = Math.max(-half + 3, Math.min(half - 3, vehicle.z));
+      if (room.settings.mapId === "sketchbook") {
+        const constrained = constrainMapPosition(room.settings.mapId, { x: vehicle.x, y: vehicle.y, z: vehicle.z });
+        vehicle.x = constrained.x;
+        vehicle.z = constrained.z;
+        if (vehicle.type !== "plane" && vehicle.type !== "helicopter") vehicle.y = Math.max(groundY, Number(constrained.y) || vehicle.y);
+      } else {
+        vehicle.x = Math.max(-half + 3, Math.min(half - 3, vehicle.x));
+        vehicle.z = Math.max(-half + 3, Math.min(half - 3, vehicle.z));
+      }
       if (vehicle.type === "jetski" && room.settings.mapId === "praia" && vehicle.z < 29) {
         vehicle.z = 29;
         vehicle.speed = Math.max(0, vehicle.speed * 0.45);

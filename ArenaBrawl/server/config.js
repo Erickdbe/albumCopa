@@ -76,7 +76,9 @@ const MAP_META = {
 const MAP_HALF_SIZES = { sketchbook: 190, praia: 90, cidade: 78, floresta: 92 };
 const SKETCHBOOK_GROUND_Y = 5.35;
 const SKETCHBOOK_PLAYABLE_AREAS = [
-  { minX: -60, maxX: 60, minZ: -38, maxZ: 38 }
+  { minX: -74, maxX: 74, minZ: -58, maxZ: 53 },
+  { minX: -13, maxX: 13, minZ: 50, maxZ: 125 },
+  { minX: -14, maxX: 14, minZ: 118, maxZ: 184 }
 ];
 
 const VEHICLE_SPAWNS = {

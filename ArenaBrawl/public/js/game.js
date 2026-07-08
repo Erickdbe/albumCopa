@@ -17,6 +17,7 @@ import {
 } from "./config.js";
 
 const STEP_TOLERANCE = 0.65;
+const PLAYER_COLLISION_RADIUS = 0.32;
 const JUMP_HEIGHT_BASE = 1.5; // altura de pulo de referencia (multiplicada por jumpHeightMul)
 const DEFAULT_FOV = 78;
 const LADDER_SPEED = 4.8;
@@ -47,6 +48,9 @@ const vehicles = new Map();
 const activeGrenades = [];
 const activeBallistics = [];
 const _readEuler = new THREE.Euler(0, 0, 0, "YXZ");
+const groundRaycaster = new THREE.Raycaster();
+const groundRayOrigin = new THREE.Vector3();
+const groundRayDirection = new THREE.Vector3(0, -1, 0);
 let lastFootstepAt = 0;
 let lastMinimapDrawAt = 0;
 let danceHubOpen = false;
@@ -257,16 +261,46 @@ function toggleCameraMode() {
 }
 
 /* ── Terreno (piso + colisao generalizada) ─────────────────────────── */
+function pointInsideObstacle2D(ob, x, z, padding = 0) {
+  if (ob.type === "obb") {
+    const dx = x - ob.centerX;
+    const dz = z - ob.centerZ;
+    const cos = Math.cos(-(ob.yaw || 0));
+    const sin = Math.sin(-(ob.yaw || 0));
+    const localX = dx * cos - dz * sin;
+    const localZ = dx * sin + dz * cos;
+    return Math.abs(localX) <= (ob.halfX || 0) + padding &&
+      Math.abs(localZ) <= (ob.halfZ || 0) + padding;
+  }
+  return x > ob.minX - padding && x < ob.maxX + padding &&
+    z > ob.minZ - padding && z < ob.maxZ + padding;
+}
+
 function groundInfoAt(x, z, feetY) {
   let best = mapWorld?.requireExplicitGround ? -Infinity : 0;
   let found = !mapWorld?.requireExplicitGround;
+  const groundMeshes = mapWorld?.groundRaycastMeshes || [];
+  if (groundMeshes.length) {
+    groundRayOrigin.set(x, Math.max(feetY + 18, (mapWorld.safeSpawn?.y || 0) + 80), z);
+    groundRaycaster.set(groundRayOrigin, groundRayDirection);
+    groundRaycaster.far = 180;
+    const hits = groundRaycaster.intersectObjects(groundMeshes, false);
+    for (const hit of hits) {
+      const y = hit.point.y;
+      if (y <= feetY + STEP_TOLERANCE && y > best) {
+        best = y;
+        found = true;
+        break;
+      }
+    }
+  }
   for (const ob of obstacles) {
     if (ob.active === false) continue;
-    if (x > ob.minX && x < ob.maxX && z > ob.minZ && z < ob.maxZ) {
-      if (ob.topY <= feetY + STEP_TOLERANCE && ob.topY > best) {
-        best = ob.topY;
-        found = true;
-      }
+    if (!pointInsideObstacle2D(ob, x, z, 0.08)) continue;
+    if (ob.solid && feetY + STEP_TOLERANCE < ob.topY) continue;
+    if (ob.topY <= feetY + STEP_TOLERANCE && ob.topY > best) {
+      best = ob.topY;
+      found = true;
     }
   }
   if (!Number.isFinite(best)) best = mapWorld?.safeSpawn?.y || 0;
@@ -292,7 +326,7 @@ function isBlockedAt(x, z, feetY) {
   for (const ob of obstacles) {
     if (ob.active === false) continue;
     if (!ob.solid) continue;
-    if (x > ob.minX && x < ob.maxX && z > ob.minZ && z < ob.maxZ) {
+    if (pointInsideObstacle2D(ob, x, z, PLAYER_COLLISION_RADIUS)) {
       if (feetY + STEP_TOLERANCE < ob.topY) return true;
     }
   }
@@ -421,14 +455,14 @@ function buildAvatar(p) {
   const hitboxMaterial = new THREE.MeshBasicMaterial({
     transparent: true, opacity: 0, depthWrite: false, colorWrite: false
   });
-  const bodyHitbox = new THREE.Mesh(new THREE.BoxGeometry(0.82, 0.94, 0.62), hitboxMaterial);
-  bodyHitbox.position.y = 0.86;
+  const bodyHitbox = new THREE.Mesh(new THREE.BoxGeometry(0.92, 1.08, 0.68), hitboxMaterial);
+  bodyHitbox.position.y = 0.9;
   root.add(bodyHitbox);
-  const lowerHitbox = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.58, 0.58), hitboxMaterial.clone());
-  lowerHitbox.position.y = 0.3;
+  const lowerHitbox = new THREE.Mesh(new THREE.BoxGeometry(0.78, 0.62, 0.64), hitboxMaterial.clone());
+  lowerHitbox.position.y = 0.32;
   root.add(lowerHitbox);
-  const headHitbox = new THREE.Mesh(new THREE.SphereGeometry(0.3, 12, 10), hitboxMaterial.clone());
-  headHitbox.position.y = 1.45;
+  const headHitbox = new THREE.Mesh(new THREE.SphereGeometry(0.34, 12, 10), hitboxMaterial.clone());
+  headHitbox.position.y = 1.56;
   headHitbox.userData.isHead = true;
   root.add(headHitbox);
 
@@ -684,6 +718,7 @@ function updateVehiclePresentation(delta) {
     weaponRig.visible = true;
     return;
   }
+  dom.pauseHint.hidden = true;
   const cameraEuler = new THREE.Euler((driven.state.pitch || 0) * 0.45, driven.state.yaw, (driven.state.roll || 0) * 0.2, "YXZ");
   const offset = driven.model.userData.cameraOffset.clone().applyEuler(cameraEuler);
   const desired = driven.model.position.clone().add(offset);
@@ -693,6 +728,9 @@ function updateVehiclePresentation(delta) {
   const lookTarget = driven.model.position.clone().addScaledVector(forward, airVehicle ? 18 : 8);
   lookTarget.y += airVehicle ? 1.2 : 1.1;
   camera.lookAt(lookTarget);
+  local.x = driven.state.x;
+  local.y = driven.state.y;
+  local.z = driven.state.z;
   local.jumpOffset = driven.state.y;
   weaponRig.visible = !VEHICLE_STATS[driven.target.type]?.builtInWeapon;
   updateVehicleHud();
@@ -1404,8 +1442,17 @@ function updateMovement(delta) {
   }
 
   if (!climbing && local.externalVelocity.lengthSq() > 0.01) {
+    const beforeExternalX = camera.position.x;
+    const beforeExternalZ = camera.position.z;
     camera.position.x += local.externalVelocity.x * delta;
     camera.position.z += local.externalVelocity.z * delta;
+    if (
+      isBlockedAt(camera.position.x, camera.position.z, feetY) ||
+      (mapWorld?.requireExplicitGround && !groundInfoAt(camera.position.x, camera.position.z, feetY).found)
+    ) {
+      camera.position.x = beforeExternalX;
+      camera.position.z = beforeExternalZ;
+    }
     local.verticalVelocity = Math.max(local.verticalVelocity, local.externalVelocity.y);
     local.externalVelocity.x *= Math.max(0, 1 - delta * 2.4);
     local.externalVelocity.z *= Math.max(0, 1 - delta * 2.4);

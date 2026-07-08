@@ -113,25 +113,63 @@ export function attachSketchbookVehicle(anchor, vehicleType, options = {}) {
   });
 }
 
-function addCollisionFromBox(world, box, solid = true) {
+function addAabbCollision(world, box, solid = true, source = "sketchbook") {
   const width = box.max.x - box.min.x;
   const depth = box.max.z - box.min.z;
   const height = box.max.y - box.min.y;
-  if (width < 0.15 || depth < 0.15 || height < 0.05) return;
-  if (Math.abs(box.min.x) > world.half + 45 && Math.abs(box.max.x) > world.half + 45) return;
-  if (Math.abs(box.min.z) > world.half + 45 && Math.abs(box.max.z) > world.half + 45) return;
+  if (width < 0.08 || depth < 0.08 || height < 0.025) return false;
   world.obstacles.push({
+    type: "aabb",
     minX: box.min.x,
     maxX: box.max.x,
     minZ: box.min.z,
     maxZ: box.max.z,
+    minY: box.min.y,
+    maxY: box.max.y,
     topY: box.max.y,
     solid,
-    active: true
+    active: true,
+    source
   });
+  return true;
 }
 
-function shouldUseSketchbookCollision(world, box) {
+function addObbCollision(world, mesh, box, solid = true, source = "sketchbook") {
+  const geometry = mesh.geometry;
+  if (!geometry) return addAabbCollision(world, box, solid, source);
+  if (!geometry.boundingBox) geometry.computeBoundingBox();
+  if (!geometry.boundingBox) return addAabbCollision(world, box, solid, source);
+
+  const rotation = new THREE.Euler().setFromQuaternion(mesh.getWorldQuaternion(new THREE.Quaternion()), "YXZ");
+  const tilted = Math.abs(rotation.x) > 0.16 || Math.abs(rotation.z) > 0.16;
+  if (tilted) return addAabbCollision(world, box, solid, source);
+
+  const center = geometry.boundingBox.getCenter(new THREE.Vector3()).applyMatrix4(mesh.matrixWorld);
+  const size = geometry.boundingBox.getSize(new THREE.Vector3());
+  const scale = mesh.getWorldScale(new THREE.Vector3());
+  const halfX = Math.abs(size.x * scale.x) * 0.5;
+  const halfY = Math.abs(size.y * scale.y) * 0.5;
+  const halfZ = Math.abs(size.z * scale.z) * 0.5;
+  if (halfX < 0.04 || halfZ < 0.04 || halfY < 0.012) return false;
+
+  world.obstacles.push({
+    type: "obb",
+    centerX: center.x,
+    centerZ: center.z,
+    halfX,
+    halfZ,
+    minY: center.y - halfY,
+    maxY: center.y + halfY,
+    topY: center.y + halfY,
+    yaw: rotation.y,
+    solid,
+    active: true,
+    source
+  });
+  return true;
+}
+
+function classifySketchbookCollider(world, box, userData = {}) {
   const width = box.max.x - box.min.x;
   const depth = box.max.z - box.min.z;
   const height = box.max.y - box.min.y;
@@ -140,13 +178,36 @@ function shouldUseSketchbookCollision(world, box) {
   const footprint = width * depth;
   const groundY = world.sketchbookGroundY || 5.35;
 
-  if (topY <= groundY + 0.72) return false;
-  if (minY > groundY + 36) return false;
-  if (height < 1.15) return false;
-  if (width > 75 || depth > 122) return false;
-  if (footprint > 2200 && height < 10) return false;
-  if (Math.min(width, depth) < 0.12) return false;
-  return true;
+  if (minY > groundY + 62) return null;
+  if (Math.min(width, depth) < 0.08 || height < 0.025) return null;
+  if (width > 230 || depth > 260) return null;
+
+  const nearWalkableFloor = topY >= groundY - 0.28 && topY <= groundY + 1.15;
+  const broadLowSurface = footprint > 5 && height <= 4.8;
+  if (nearWalkableFloor && broadLowSurface) return "ground";
+
+  const type = String(userData.type || "").toLowerCase();
+  if (type === "trimesh" && minY <= groundY + 0.35 && topY <= groundY + 2.45 && footprint > 4) return "ground";
+  if (type === "trimesh" && topY <= groundY + 0.45) return "ground";
+  if (height < 0.22 && footprint > 1) return "ground";
+  if (height < 0.9 && footprint < 0.8) return null;
+
+  return "solid";
+}
+
+function registerSketchbookCollider(world, mesh, kind) {
+  const box = new THREE.Box3().setFromObject(mesh);
+  if (box.isEmpty()) return false;
+  const solid = kind === "solid";
+  const useObb = String(mesh.userData?.type || "").toLowerCase() === "box";
+  const added = useObb
+    ? addObbCollision(world, mesh, box, solid)
+    : addAabbCollision(world, box, solid);
+  if (added) {
+    world.sketchbookColliderStats = world.sketchbookColliderStats || { ground: 0, solid: 0 };
+    world.sketchbookColliderStats[kind] = (world.sketchbookColliderStats[kind] || 0) + 1;
+  }
+  return added;
 }
 
 export function attachSketchbookWorld(world, options = {}) {
@@ -154,6 +215,7 @@ export function attachSketchbookWorld(world, options = {}) {
   anchor.name = "sketchbook-world-anchor";
   world.root.add(anchor);
   world.raycastMeshes = world.raycastMeshes || [];
+  world.groundRaycastMeshes = world.groundRaycastMeshes || [];
 
   loadSketchbookAsset("world").then((gltf) => {
     const model = gltf.scene.clone(true);
@@ -168,11 +230,16 @@ export function attachSketchbookWorld(world, options = {}) {
       child.castShadow = true;
       child.receiveShadow = true;
       const isPhysics = child.userData?.data === "physics";
-      const box = new THREE.Box3().setFromObject(child);
       if (isPhysics) {
         child.visible = false;
-        if (options.usePhysicsCollisions && shouldUseSketchbookCollision(world, box)) {
-          addCollisionFromBox(world, box, true);
+        child.castShadow = false;
+        child.receiveShadow = false;
+        const kind = classifySketchbookCollider(world, new THREE.Box3().setFromObject(child), child.userData);
+        if (kind === "ground" && options.usePhysicsGround !== false) {
+          world.groundRaycastMeshes.push(child);
+          registerSketchbookCollider(world, child, "ground");
+        } else if (kind === "solid" && options.usePhysicsCollisions !== false) {
+          registerSketchbookCollider(world, child, "solid");
         }
         return;
       }

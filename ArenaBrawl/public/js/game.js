@@ -51,6 +51,11 @@ const _readEuler = new THREE.Euler(0, 0, 0, "YXZ");
 const groundRaycaster = new THREE.Raycaster();
 const groundRayOrigin = new THREE.Vector3();
 const groundRayDirection = new THREE.Vector3(0, -1, 0);
+const localMoveVelocity = new THREE.Vector3();
+const localMoveTarget = new THREE.Vector3();
+const thirdPersonRenderPosition = new THREE.Vector3();
+const thirdPersonRenderTarget = new THREE.Vector3();
+let thirdPersonCameraReady = false;
 let lastFootstepAt = 0;
 let lastMinimapDrawAt = 0;
 let danceHubOpen = false;
@@ -256,6 +261,7 @@ function updateCameraToggle() {
 function toggleCameraMode() {
   cameraMode = cameraMode === "third" ? "first" : "third";
   localStorage.setItem("arenaBrawlCameraMode", cameraMode);
+  thirdPersonCameraReady = false;
   updateCameraToggle();
   if (cameraMode === "first" && !local.vehicleId) weaponRig.visible = true;
 }
@@ -274,6 +280,13 @@ function pointInsideObstacle2D(ob, x, z, padding = 0) {
   }
   return x > ob.minX - padding && x < ob.maxX + padding &&
     z > ob.minZ - padding && z < ob.maxZ + padding;
+}
+
+function lerpAngle(current, target, alpha) {
+  let delta = target - current;
+  while (delta > Math.PI) delta -= Math.PI * 2;
+  while (delta < -Math.PI) delta += Math.PI * 2;
+  return current + delta * alpha;
 }
 
 function groundInfoAt(x, z, feetY) {
@@ -314,6 +327,8 @@ function snapLocalToSafeGround() {
   local.jumpOffset = safe.y || 0;
   local.verticalVelocity = 0;
   local.onGround = true;
+  localMoveVelocity.set(0, 0, 0);
+  localMoveTarget.set(0, 0, 0);
   camera.position.set(safe.x || 0, EYE_HEIGHT + local.jumpOffset, safe.z || 0);
   if (Number.isFinite(safe.yaw)) camera.quaternion.setFromEuler(new THREE.Euler(0, safe.yaw, 0, "YXZ"));
 }
@@ -516,7 +531,10 @@ function buildAvatar(p) {
     alive: p.alive !== false,
     moving: Boolean(p.moving), sprinting: Boolean(p.sprinting), jumping: Boolean(p.jumping), crouching: Boolean(p.crouching),
     model: null, mixer: null, actions: null, animationName: null, desiredAnimation: "idle",
-    characterId: characterIdForPlayer(p), emoteUntil: 0, emoteSpeed: 1, inVehicle: Boolean(p.vehicleId)
+    characterId: characterIdForPlayer(p), emoteUntil: 0, emoteSpeed: 1, inVehicle: Boolean(p.vehicleId),
+    targetPosition: new THREE.Vector3(p.x || 0, p.y || 0, p.z || 0),
+    targetYaw: Number.isFinite(Number(p.yaw)) ? Number(p.yaw) : 0,
+    hasNetworkTarget: false
   };
   avatar.setAnimation = (name, immediate = false, speed = null) => {
     avatar.desiredAnimation = name;
@@ -571,8 +589,14 @@ function spawnOrUpdateRemote(p) {
     avatar = buildAvatar(p);
     remotePlayers.set(p.socketId, avatar);
   }
-  avatar.root.position.set(p.x, p.y, p.z);
-  avatar.root.rotation.y = p.yaw;
+  avatar.targetPosition = avatar.targetPosition || new THREE.Vector3();
+  avatar.targetPosition.set(p.x, p.y, p.z);
+  avatar.targetYaw = Number.isFinite(Number(p.yaw)) ? Number(p.yaw) : avatar.root.rotation.y;
+  if (!avatar.hasNetworkTarget) {
+    avatar.root.position.copy(avatar.targetPosition);
+    avatar.root.rotation.y = avatar.targetYaw;
+    avatar.hasNetworkTarget = true;
+  }
   avatar.root.rotation.z = 0;
   avatar.root.visible = p.alive;
   avatar.alive = p.alive !== false;
@@ -1400,7 +1424,11 @@ function updateMovement(delta) {
     updateVehicleControls();
     return;
   }
-  if (!controls.isLocked) return;
+  if (!controls.isLocked) {
+    localMoveVelocity.multiplyScalar(Math.max(0, 1 - delta * 12));
+    localMoveTarget.set(0, 0, 0);
+    return;
+  }
   const weapon = currentWeapon(local.slot);
   const sprinting = Boolean(keys.ShiftLeft || keys.ShiftRight);
   const crouching = Boolean(keys.ControlLeft || keys.ControlRight);
@@ -1415,14 +1443,22 @@ function updateMovement(delta) {
   const climbing = Boolean(ladder && forward !== 0 && !keys.Space);
   local.climbing = climbing;
 
-  const moveVec = new THREE.Vector3(strafe, 0, climbing ? 0 : -forward);
-  let moving = moveVec.lengthSq() > 0 || climbing;
-  if (moving) moveVec.normalize().multiplyScalar(speed * delta);
+  const rawMoveInput = new THREE.Vector3(strafe, 0, climbing ? 0 : -forward);
+  const wantsMove = rawMoveInput.lengthSq() > 0;
+  if (wantsMove) rawMoveInput.normalize();
+  localMoveTarget.copy(rawMoveInput).multiplyScalar(wantsMove && !climbing ? speed : 0);
+  const response = wantsMove ? (sprinting ? 17 : 14) : 19;
+  localMoveVelocity.x = THREE.MathUtils.damp(localMoveVelocity.x, localMoveTarget.x, response, delta);
+  localMoveVelocity.z = THREE.MathUtils.damp(localMoveVelocity.z, localMoveTarget.z, response, delta);
+  if (Math.abs(localMoveVelocity.x) < 0.015) localMoveVelocity.x = 0;
+  if (Math.abs(localMoveVelocity.z) < 0.015) localMoveVelocity.z = 0;
+  const moveVec = new THREE.Vector3(localMoveVelocity.x * delta, 0, localMoveVelocity.z * delta);
+  let moving = localMoveVelocity.lengthSq() > 0.08 || climbing;
   local.moving = moving;
   local.sprinting = sprinting;
   local.crouching = crouching;
   local.jumping = !local.onGround || climbing;
-  if (moving) stopLocalEmote();
+  if (wantsMove || climbing) stopLocalEmote();
 
   const prevX = camera.position.x, prevZ = camera.position.z;
   controls.moveRight(moveVec.x);
@@ -1435,10 +1471,12 @@ function updateMovement(delta) {
   if (isBlockedAt(camera.position.x, camera.position.z, feetY)) {
     camera.position.x = prevX;
     camera.position.z = prevZ;
+    localMoveVelocity.multiplyScalar(0.25);
   }
   if (mapWorld?.requireExplicitGround && !groundInfoAt(camera.position.x, camera.position.z, feetY).found) {
     camera.position.x = prevX;
     camera.position.z = prevZ;
+    localMoveVelocity.multiplyScalar(0.25);
   }
 
   if (!climbing && local.externalVelocity.lengthSq() > 0.01) {
@@ -1539,6 +1577,14 @@ function updateGrenadesPhysics(delta) {
 
 function animateAvatars(delta) {
   remotePlayers.forEach((avatar) => {
+    if (!avatar.inVehicle && avatar.targetPosition) {
+      const posAlpha = Math.min(1, delta * 13);
+      const yawAlpha = Math.min(1, delta * 14);
+      const distance = avatar.root.position.distanceTo(avatar.targetPosition);
+      if (distance > 8) avatar.root.position.copy(avatar.targetPosition);
+      else avatar.root.position.lerp(avatar.targetPosition, posAlpha);
+      avatar.root.rotation.y = lerpAngle(avatar.root.rotation.y, avatar.targetYaw || avatar.root.rotation.y, yawAlpha);
+    }
     if (avatar.mixer) {
       const animation = animationForAvatar(avatar);
       avatar.setAnimation(animation, false, animation === "dance" ? avatar.emoteSpeed : null);
@@ -1563,6 +1609,7 @@ function renderWithCameraMode(delta) {
   updateLocalViewAvatar(delta);
   const useThirdPerson = cameraMode === "third" && room?.status === "playing" && local.alive && !local.vehicleId;
   if (!useThirdPerson) {
+    thirdPersonCameraReady = false;
     if (localViewAvatar) localViewAvatar.root.visible = false;
     drawFrame(delta);
     return;
@@ -1570,11 +1617,14 @@ function renderWithCameraMode(delta) {
 
   const eyePosition = camera.position.clone();
   const eyeQuaternion = camera.quaternion.clone();
-  const viewEuler = new THREE.Euler().setFromQuaternion(camera.quaternion, "YXZ");
-  const yawOnly = new THREE.Euler(0, viewEuler.y, 0, "YXZ");
-  const lookTarget = new THREE.Vector3(eyePosition.x, local.jumpOffset + 1.12, eyePosition.z);
-  const offset = new THREE.Vector3(0, 2.05, 7.4).applyEuler(yawOnly);
-  const desired = lookTarget.clone().add(offset);
+  const viewDirection = new THREE.Vector3(0, 0, -1).applyQuaternion(eyeQuaternion).normalize();
+  const rightDirection = new THREE.Vector3(1, 0, 0).applyQuaternion(eyeQuaternion).setY(0).normalize();
+  const lookTarget = new THREE.Vector3(eyePosition.x, local.jumpOffset + 1.28, eyePosition.z);
+  const desired = lookTarget.clone()
+    .addScaledVector(viewDirection, -6.8)
+    .addScaledVector(rightDirection, 0.42);
+  desired.y = Math.max(local.jumpOffset + 0.78, desired.y + 0.5);
+  const aimTarget = lookTarget.clone().addScaledVector(viewDirection, 10.5);
   const direction = desired.clone().sub(lookTarget);
   const distance = direction.length();
   let tooClose = false;
@@ -1592,6 +1642,17 @@ function renderWithCameraMode(delta) {
     }
   }
 
+  if (!thirdPersonCameraReady) {
+    thirdPersonRenderPosition.copy(desired);
+    thirdPersonRenderTarget.copy(aimTarget);
+    thirdPersonCameraReady = true;
+  } else {
+    const cameraAlpha = Math.min(1, delta * 9.5);
+    const targetAlpha = Math.min(1, delta * 12);
+    thirdPersonRenderPosition.lerp(desired, cameraAlpha);
+    thirdPersonRenderTarget.lerp(aimTarget, targetAlpha);
+  }
+
   const previousWeaponVisible = weaponRig.visible;
   if (tooClose) {
     if (localViewAvatar) localViewAvatar.root.visible = false;
@@ -1601,8 +1662,8 @@ function renderWithCameraMode(delta) {
   }
 
   weaponRig.visible = false;
-  camera.position.copy(desired);
-  camera.lookAt(lookTarget.x, lookTarget.y + 0.1, lookTarget.z);
+  camera.position.copy(thirdPersonRenderPosition);
+  camera.lookAt(thirdPersonRenderTarget);
   drawFrame(delta);
   camera.position.copy(eyePosition);
   camera.quaternion.copy(eyeQuaternion);
@@ -1785,6 +1846,9 @@ export function attachSocket(activeSocket) {
     local.jumping = false;
     local.externalVelocity.set(0, 0, 0);
     local.pendingFallDamage = 0;
+    localMoveVelocity.set(0, 0, 0);
+    localMoveTarget.set(0, 0, 0);
+    thirdPersonCameraReady = false;
 
     camera.position.set(me?.x || 0, EYE_HEIGHT + (me?.y || 0), me?.z || 0);
     camera.quaternion.setFromEuler(new THREE.Euler(0, me?.yaw || 0, 0, "YXZ"));
@@ -1821,6 +1885,8 @@ export function attachSocket(activeSocket) {
 
   socket.on("vehicle:entered", (vehicle) => {
     local.vehicleId = vehicle.id;
+    localMoveVelocity.set(0, 0, 0);
+    localMoveTarget.set(0, 0, 0);
     local.emoteActive = false;
     local.moving = false;
     local.sprinting = false;
@@ -1837,6 +1903,8 @@ export function attachSocket(activeSocket) {
 
   socket.on("vehicle:exited", ({ x, y, z }) => {
     local.vehicleId = null;
+    localMoveVelocity.set(0, 0, 0);
+    localMoveTarget.set(0, 0, 0);
     local.mouseDown = false;
     local.climbing = false;
     local.moving = false;
@@ -1883,8 +1951,9 @@ export function attachSocket(activeSocket) {
   socket.on("match:player-move", (p) => {
     const avatar = remotePlayers.get(p.socketId);
     if (!avatar) return;
-    avatar.root.position.set(p.x, p.y, p.z);
-    avatar.root.rotation.y = p.yaw;
+    avatar.targetPosition = avatar.targetPosition || new THREE.Vector3();
+    avatar.targetPosition.set(p.x, p.y, p.z);
+    avatar.targetYaw = Number.isFinite(Number(p.yaw)) ? Number(p.yaw) : avatar.targetYaw || avatar.root.rotation.y;
     if (!p.vehicleId) avatar.root.rotation.z = 0;
     avatar.root.visible = true;
     avatar.alive = true;
@@ -1933,6 +2002,9 @@ export function attachSocket(activeSocket) {
       local.alive = false; local.health = 0;
       local.deaths += 1;
       local.vehicleId = null;
+      localMoveVelocity.set(0, 0, 0);
+      localMoveTarget.set(0, 0, 0);
+      thirdPersonCameraReady = false;
       local.mouseDown = false;
       local.emoteActive = false;
       local.moving = false;
@@ -1990,6 +2062,9 @@ export function attachSocket(activeSocket) {
       local.team = team || local.team;
       local.slot = "primary";
       local.jumpOffset = y; local.verticalVelocity = 0;
+      localMoveVelocity.set(0, 0, 0);
+      localMoveTarget.set(0, 0, 0);
+      thirdPersonCameraReady = false;
       local.onGround = true;
       camera.position.set(x, EYE_HEIGHT + y, z);
       camera.quaternion.setFromEuler(new THREE.Euler(0, yaw, 0, "YXZ"));

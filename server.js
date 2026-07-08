@@ -2242,6 +2242,19 @@ const HEAD_SOCCER_TEAM_COLORS = {
   blue: "#2f8fd8",
   red: "#d84545"
 };
+const HEAD_SOCCER_POWER_TYPES = ["freeze_ball", "ice_wall", "power_kick", "slow_opponent", "shrink_opponent", "goalkeeper"];
+const HEAD_SOCCER_POWER_META = {
+  freeze_ball:    { label: "Gelo",       color: "#66e6ff" },
+  ice_wall:       { label: "Parede",     color: "#b9f3ff" },
+  power_kick:     { label: "Chute forte", color: "#ffb13b" },
+  slow_opponent:  { label: "Lento",      color: "#8fa7ff" },
+  shrink_opponent:{ label: "Mini",       color: "#ff8ad6" },
+  goalkeeper:     { label: "Goleiro",    color: "#ffe66d" }
+};
+const HEAD_SOCCER_POWER_RADIUS = 24;
+const HEAD_SOCCER_MAX_POWERUPS = 3;
+const HEAD_SOCCER_POWER_LIFETIME_MS = 17000;
+const HEAD_SOCCER_GOAL_PAUSE_MS = 2000;
 
 function headSoccerTeamName(team) {
   return team === "blue" ? "Azuis" : "Vermelhos";
@@ -2249,6 +2262,200 @@ function headSoccerTeamName(team) {
 
 function headSoccerSpritePath(folder, pose) {
   return `kenney_sports-pack/PNG/${folder}/character${folder}%20(${pose}).png`;
+}
+
+function effectiveHeadSoccerPlayerRadius(player, now = Date.now()) {
+  const base = Number(player.radius || HEAD_SOCCER_FIELD.playerRadius);
+  return player.smallUntil && player.smallUntil > now ? base * 0.58 : base;
+}
+
+function headSoccerOwnGoalSide(team) {
+  return team === "blue" ? "left" : "right";
+}
+
+function resetHeadSoccerPowerState(room, now = Date.now()) {
+  room.powerUps = [];
+  room.iceWalls = [];
+  room.goalkeeper = null;
+  room.nextPowerAt = now + 2800;
+  room.powerSeq = room.powerSeq || 0;
+  room.powerMessage = "";
+  room.powerMessageUntil = 0;
+  room.goalPauseUntil = 0;
+  room.pendingAfterGoal = null;
+  room.goalBanner = null;
+  room.players?.forEach(player => {
+    player.slowUntil = 0;
+    player.smallUntil = 0;
+    player.powerKickUntil = 0;
+    player.stunUntil = 0;
+  });
+}
+
+function scheduleNextHeadSoccerPower(room, now = Date.now()) {
+  room.nextPowerAt = now + 5200 + Math.random() * 5200;
+}
+
+function spawnHeadSoccerPower(room, now = Date.now()) {
+  if ((room.powerUps || []).length >= HEAD_SOCCER_MAX_POWERUPS) return;
+  room.powerSeq = Number(room.powerSeq || 0) + 1;
+  const type = HEAD_SOCCER_POWER_TYPES[Math.floor(Math.random() * HEAD_SOCCER_POWER_TYPES.length)];
+  const meta = HEAD_SOCCER_POWER_META[type];
+  const x = 180 + Math.random() * (HEAD_SOCCER_FIELD.width - 360);
+  const y = 90 + Math.random() * (HEAD_SOCCER_FIELD.height - 180);
+  room.powerUps.push({
+    id: `${room.roomId}-p${room.powerSeq}`,
+    type,
+    label: meta.label,
+    color: meta.color,
+    x,
+    y,
+    radius: HEAD_SOCCER_POWER_RADIUS,
+    expiresAt: now + HEAD_SOCCER_POWER_LIFETIME_MS
+  });
+}
+
+function setHeadSoccerPowerMessage(room, text, now = Date.now()) {
+  room.powerMessage = text;
+  room.powerMessageUntil = now + 2400;
+}
+
+function applyHeadSoccerPower(room, player, power, now = Date.now()) {
+  const enemies = room.players.filter(item => item.team !== player.team);
+  const ownSide = headSoccerOwnGoalSide(player.team);
+  const powerLabel = HEAD_SOCCER_POWER_META[power.type]?.label || "Poder";
+
+  if (power.type === "freeze_ball") {
+    room.ball.vx = 0;
+    room.ball.vy = 0;
+    room.ball.frozenUntil = now + 2200;
+    setHeadSoccerPowerMessage(room, `${player.username} congelou a bola!`, now);
+    return;
+  }
+
+  if (power.type === "ice_wall") {
+    room.iceWalls = (room.iceWalls || []).filter(wall => wall.side !== ownSide && wall.until > now);
+    room.iceWalls.push({
+      side: ownSide,
+      ownerTeam: player.team,
+      until: now + 7600
+    });
+    setHeadSoccerPowerMessage(room, `${player.username} levantou uma parede de gelo!`, now);
+    return;
+  }
+
+  if (power.type === "power_kick") {
+    player.powerKickUntil = now + 9000;
+    setHeadSoccerPowerMessage(room, `${player.username} pegou chute forte!`, now);
+    return;
+  }
+
+  if (power.type === "slow_opponent") {
+    enemies.forEach(enemy => { enemy.slowUntil = Math.max(enemy.slowUntil || 0, now + 5200); });
+    setHeadSoccerPowerMessage(room, `${player.username} desacelerou os rivais!`, now);
+    return;
+  }
+
+  if (power.type === "shrink_opponent") {
+    enemies.forEach(enemy => { enemy.smallUntil = Math.max(enemy.smallUntil || 0, now + 6200); });
+    setHeadSoccerPowerMessage(room, `${player.username} deixou os rivais pequenos!`, now);
+    return;
+  }
+
+  if (power.type === "goalkeeper") {
+    room.goalkeeper = {
+      side: ownSide,
+      ownerTeam: player.team,
+      until: now + 20000,
+      x: ownSide === "left" ? 78 : HEAD_SOCCER_FIELD.width - 78,
+      y: (HEAD_SOCCER_FIELD.goalTop + HEAD_SOCCER_FIELD.goalBottom) / 2,
+      radius: 44
+    };
+    setHeadSoccerPowerMessage(room, `${player.username} invocou um goleiro!`, now);
+    return;
+  }
+
+  setHeadSoccerPowerMessage(room, `${player.username} pegou ${powerLabel}.`, now);
+}
+
+function updateHeadSoccerPowerUps(room, now = Date.now()) {
+  room.powerUps = (room.powerUps || []).filter(power => power.expiresAt > now);
+  room.iceWalls = (room.iceWalls || []).filter(wall => wall.until > now);
+  if (room.goalkeeper && room.goalkeeper.until <= now) room.goalkeeper = null;
+  if (room.powerMessageUntil && room.powerMessageUntil <= now) room.powerMessage = "";
+
+  if (now >= Number(room.nextPowerAt || 0)) {
+    spawnHeadSoccerPower(room, now);
+    scheduleNextHeadSoccerPower(room, now);
+  }
+
+  if (!room.powerUps.length) return;
+
+  const collected = new Set();
+  for (const player of room.players) {
+    const radius = effectiveHeadSoccerPlayerRadius(player, now);
+    for (const power of room.powerUps) {
+      if (collected.has(power.id)) continue;
+      const dist = Math.hypot(player.x - power.x, player.y - power.y);
+      if (dist <= radius + (power.radius || HEAD_SOCCER_POWER_RADIUS)) {
+        collected.add(power.id);
+        applyHeadSoccerPower(room, player, power, now);
+      }
+    }
+  }
+
+  if (collected.size) {
+    room.powerUps = room.powerUps.filter(power => !collected.has(power.id));
+  }
+}
+
+function deflectHeadSoccerBallFromGoal(room, side, source, now = Date.now()) {
+  const ball = room.ball;
+  const centerY = (HEAD_SOCCER_FIELD.goalTop + HEAD_SOCCER_FIELD.goalBottom) / 2;
+  if (side === "left") {
+    ball.x = HEAD_SOCCER_FIELD.goalWidth + ball.radius + 18;
+    ball.vx = Math.abs(ball.vx) * 0.92 + 260;
+  } else {
+    ball.x = HEAD_SOCCER_FIELD.width - HEAD_SOCCER_FIELD.goalWidth - ball.radius - 18;
+    ball.vx = -Math.abs(ball.vx) * 0.92 - 260;
+  }
+  ball.vy += (ball.y - centerY) * 2.6;
+  if (source === "goalkeeper") {
+    room.goalkeeper = null;
+    setHeadSoccerPowerMessage(room, "Goleiro defendeu!", now);
+  } else {
+    setHeadSoccerPowerMessage(room, "Parede de gelo bloqueou!", now);
+  }
+}
+
+function defendHeadSoccerGoalEffects(room, now = Date.now()) {
+  const ball = room.ball;
+  const inGoalHeight = ball.y > HEAD_SOCCER_FIELD.goalTop - 28 && ball.y < HEAD_SOCCER_FIELD.goalBottom + 28;
+  if (!inGoalHeight) return false;
+
+  const movingLeft = ball.vx < -20 && ball.x - ball.radius <= HEAD_SOCCER_FIELD.goalWidth + 18;
+  const movingRight = ball.vx > 20 && ball.x + ball.radius >= HEAD_SOCCER_FIELD.width - HEAD_SOCCER_FIELD.goalWidth - 18;
+  const threatSide = movingLeft ? "left" : movingRight ? "right" : null;
+  if (!threatSide) return false;
+
+  const wall = (room.iceWalls || []).find(item => item.side === threatSide && item.until > now);
+  if (wall) {
+    deflectHeadSoccerBallFromGoal(room, threatSide, "ice_wall", now);
+    return true;
+  }
+
+  if (room.goalkeeper && room.goalkeeper.side === threatSide && room.goalkeeper.until > now) {
+    deflectHeadSoccerBallFromGoal(room, threatSide, "goalkeeper", now);
+    return true;
+  }
+
+  return false;
+}
+
+function headSoccerGoalScorerName(room, scoringTeam) {
+  const touchedBy = room.players.find(player => player.socketId === room.ball?.lastTouchSocketId);
+  if (touchedBy) return touchedBy.username;
+  return headSoccerTeamName(scoringTeam);
 }
 
 function makeHeadSoccerPlayer(socket, index, bet) {
@@ -2279,6 +2486,10 @@ function makeHeadSoccerPlayer(socket, index, bet) {
     kickTimer: 0,
     kickCooldown: 0,
     kickQueued: false,
+    slowUntil: 0,
+    smallUntil: 0,
+    powerKickUntil: 0,
+    stunUntil: 0,
     joinedAt: Date.now()
   };
 }
@@ -2321,6 +2532,10 @@ function resetHeadSoccerPositions(room) {
     player.kickTimer = 0;
     player.kickCooldown = 0;
     player.kickQueued = false;
+    player.slowUntil = 0;
+    player.smallUntil = 0;
+    player.powerKickUntil = 0;
+    player.stunUntil = 0;
   });
 
   red.forEach((player, index) => {
@@ -2334,6 +2549,10 @@ function resetHeadSoccerPositions(room) {
     player.kickTimer = 0;
     player.kickCooldown = 0;
     player.kickQueued = false;
+    player.slowUntil = 0;
+    player.smallUntil = 0;
+    player.powerKickUntil = 0;
+    player.stunUntil = 0;
   });
 
   room.ball = {
@@ -2341,7 +2560,11 @@ function resetHeadSoccerPositions(room) {
     y: HEAD_SOCCER_FIELD.height / 2,
     vx: (Math.random() > 0.5 ? 1 : -1) * 120,
     vy: (Math.random() - 0.5) * 70,
-    radius: HEAD_SOCCER_FIELD.ballRadius
+    radius: HEAD_SOCCER_FIELD.ballRadius,
+    frozenUntil: 0,
+    lastTouchSocketId: null,
+    lastTouchUsername: "",
+    lastTouchTeam: ""
   };
 }
 
@@ -2357,7 +2580,36 @@ function serializeHeadSoccerRoom(room, viewerSocketId) {
     message: room.message,
     field: HEAD_SOCCER_FIELD,
     scores: room.scores,
-    ball: room.ball,
+    ball: {
+      ...room.ball,
+      frozenMs: Math.max(0, Number(room.ball?.frozenUntil || 0) - now)
+    },
+    powerUps: (room.powerUps || []).map(power => ({
+      id: power.id,
+      type: power.type,
+      label: power.label,
+      color: power.color,
+      x: Math.round(power.x),
+      y: Math.round(power.y),
+      radius: power.radius,
+      expiresIn: Math.max(0, power.expiresAt - now)
+    })),
+    iceWalls: (room.iceWalls || []).filter(wall => wall.until > now).map(wall => ({
+      side: wall.side,
+      ownerTeam: wall.ownerTeam,
+      until: wall.until,
+      leftMs: Math.max(0, wall.until - now)
+    })),
+    goalkeeper: room.goalkeeper && room.goalkeeper.until > now ? {
+      side: room.goalkeeper.side,
+      ownerTeam: room.goalkeeper.ownerTeam,
+      x: room.goalkeeper.x,
+      y: room.goalkeeper.y,
+      radius: room.goalkeeper.radius,
+      leftMs: Math.max(0, room.goalkeeper.until - now)
+    } : null,
+    goalBanner: room.goalBanner && room.goalBanner.until > now ? room.goalBanner : null,
+    powerMessage: room.powerMessageUntil > now ? room.powerMessage : "",
     gameEndsAt: room.gameEndsAt || null,
     gameLeftMs: room.status === "playing" ? Math.max(0, (room.gameEndsAt || now) - now) : 0,
     winnerTeam: room.winnerTeam || null,
@@ -2376,10 +2628,14 @@ function serializeHeadSoccerRoom(room, viewerSocketId) {
       y: Math.round(player.y),
       vx: Math.round(player.vx),
       vy: Math.round(player.vy),
-      radius: player.radius,
+      radius: effectiveHeadSoccerPlayerRadius(player, now),
+      baseRadius: player.radius,
       faceX: Number.isFinite(player.faceX) ? player.faceX : player.side,
       faceY: Number.isFinite(player.faceY) ? player.faceY : 0,
       kickTimer: player.kickTimer,
+      slowMs: Math.max(0, Number(player.slowUntil || 0) - now),
+      smallMs: Math.max(0, Number(player.smallUntil || 0) - now),
+      powerKickMs: Math.max(0, Number(player.powerKickUntil || 0) - now),
       isHost: player.socketId === room.hostSocketId,
       isMe: player.socketId === viewerSocketId,
       order: index
@@ -2433,6 +2689,7 @@ function startHeadSoccerRound(room, requestedBet = room.bet) {
   room.lastTick = Date.now();
   room.message = "Partida iniciada. Cada pessoa controla um jogador.";
   resetHeadSoccerPositions(room);
+  resetHeadSoccerPowerState(room, room.lastTick);
 
   clearInterval(room.tickTimer);
   room.tickTimer = setInterval(() => tickHeadSoccerRoom(room), HEAD_SOCCER_TICK_MS);
@@ -2443,15 +2700,18 @@ function startHeadSoccerRound(room, requestedBet = room.bet) {
 }
 
 function updateHeadSoccerPlayer(player, dt) {
-  const acceleration = 3000;
-  const maxSpeed = 430;
+  const now = Date.now();
+  const slowed = player.slowUntil && player.slowUntil > now;
+  const stunned = player.stunUntil && player.stunUntil > now;
+  const acceleration = slowed ? 1650 : 3000;
+  const maxSpeed = slowed ? 235 : 430;
   const inputs = player.inputs || {};
 
   player.kickTimer = Math.max(0, Number(player.kickTimer || 0) - dt);
   player.kickCooldown = Math.max(0, Number(player.kickCooldown || 0) - dt);
 
-  let ax = (inputs.right ? 1 : 0) - (inputs.left ? 1 : 0);
-  let ay = (inputs.down ? 1 : 0) - ((inputs.up || inputs.jump) ? 1 : 0);
+  let ax = stunned ? 0 : (inputs.right ? 1 : 0) - (inputs.left ? 1 : 0);
+  let ay = stunned ? 0 : (inputs.down ? 1 : 0) - ((inputs.up || inputs.jump) ? 1 : 0);
   const inputLength = Math.hypot(ax, ay);
   if (inputLength > 0) {
     ax /= inputLength;
@@ -2483,6 +2743,8 @@ function resolveHeadSoccerPlayerCollisions(room) {
     for (let j = i + 1; j < room.players.length; j += 1) {
       const a = room.players[i];
       const b = room.players[j];
+      const radiusA = effectiveHeadSoccerPlayerRadius(a);
+      const radiusB = effectiveHeadSoccerPlayerRadius(b);
       const ax = a.x;
       const ay = a.y;
       const bx = b.x;
@@ -2490,7 +2752,7 @@ function resolveHeadSoccerPlayerCollisions(room) {
       const dx = bx - ax;
       const dy = by - ay;
       const dist = Math.hypot(dx, dy) || 1;
-      const minDist = a.radius + b.radius - 6;
+      const minDist = radiusA + radiusB - 6;
       if (dist >= minDist) continue;
 
       const nx = dx / dist;
@@ -2516,11 +2778,13 @@ function resolveHeadSoccerPlayerCollisions(room) {
 
 function collideHeadSoccerBallWithPlayer(room, player) {
   const ball = room.ball;
+  const now = Date.now();
+  const playerRadius = effectiveHeadSoccerPlayerRadius(player, now);
   const headX = player.x;
   const headY = player.y;
   const dx = ball.x - headX;
   const dy = ball.y - headY;
-  const minDist = ball.radius + player.radius;
+  const minDist = ball.radius + playerRadius;
   const dist = Math.hypot(dx, dy) || 1;
 
   if (dist < minDist) {
@@ -2530,6 +2794,10 @@ function collideHeadSoccerBallWithPlayer(room, player) {
     ball.y = headY + ny * minDist;
     ball.vx = nx * 380 + player.vx * 0.48;
     ball.vy = ny * 380 + player.vy * 0.48;
+    ball.frozenUntil = 0;
+    ball.lastTouchSocketId = player.socketId;
+    ball.lastTouchUsername = player.username;
+    ball.lastTouchTeam = player.team;
   }
 
   if (player.kickQueued && player.kickCooldown <= 0) {
@@ -2547,8 +2815,8 @@ function collideHeadSoccerBallWithPlayer(room, player) {
       dirY = ballDirY / ballDirLength;
     }
 
-    const footX = player.x + dirX * (player.radius + 18);
-    const footY = player.y + dirY * (player.radius + 18);
+    const footX = player.x + dirX * (playerRadius + 18);
+    const footY = player.y + dirY * (playerRadius + 18);
     const footDx = ball.x - footX;
     const footDy = ball.y - footY;
     const footDist = Math.hypot(footDx, footDy) || 1;
@@ -2558,17 +2826,47 @@ function collideHeadSoccerBallWithPlayer(room, player) {
     player.kickCooldown = 0.28;
     player.kickQueued = false;
 
-    if (inFront && footDist < ball.radius + player.radius + 50) {
+    if (inFront && footDist < ball.radius + playerRadius + 50) {
+      const strongKick = player.powerKickUntil && player.powerKickUntil > now;
+      const kickForce = strongKick ? 1480 : 980;
       ball.x = footX + dirX * (ball.radius + 10);
       ball.y = footY + dirY * (ball.radius + 10);
-      ball.vx = dirX * 980 + player.vx * 0.22;
-      ball.vy = dirY * 980 + player.vy * 0.22;
+      ball.vx = dirX * kickForce + player.vx * 0.22;
+      ball.vy = dirY * kickForce + player.vy * 0.22;
+      ball.frozenUntil = 0;
+      ball.lastTouchSocketId = player.socketId;
+      ball.lastTouchUsername = player.username;
+      ball.lastTouchTeam = player.team;
+
+      if (strongKick) {
+        player.powerKickUntil = 0;
+        room.players.forEach(target => {
+          if (target.socketId === player.socketId) return;
+          const relX = target.x - player.x;
+          const relY = target.y - player.y;
+          const forward = relX * dirX + relY * dirY;
+          const side = Math.abs(relX * -dirY + relY * dirX);
+          if (forward > -10 && forward < 210 && side < 82) {
+            target.vx += dirX * 520;
+            target.vy += dirY * 520;
+            target.stunUntil = now + 420;
+          }
+        });
+        setHeadSoccerPowerMessage(room, `${player.username} soltou um chute forte!`, now);
+      }
     }
   }
 }
 
 function updateHeadSoccerBall(room, dt) {
   const ball = room.ball;
+  const now = Date.now();
+  if (ball.frozenUntil && ball.frozenUntil > now) {
+    ball.vx = 0;
+    ball.vy = 0;
+    return null;
+  }
+
   ball.x += ball.vx * dt;
   ball.y += ball.vy * dt;
   ball.vx *= 0.986;
@@ -2585,6 +2883,7 @@ function updateHeadSoccerBall(room, dt) {
   }
 
   room.players.forEach(player => collideHeadSoccerBallWithPlayer(room, player));
+  defendHeadSoccerGoalEffects(room, now);
 
   if (ball.x - ball.radius <= 12 && ball.y > HEAD_SOCCER_FIELD.goalTop && ball.y < HEAD_SOCCER_FIELD.goalBottom) {
     return "red";
@@ -2603,15 +2902,18 @@ function updateHeadSoccerBall(room, dt) {
 }
 
 function scoreHeadSoccerGoal(room, team) {
+  const now = Date.now();
+  const scorerName = headSoccerGoalScorerName(room, team);
   room.scores[team] = Number(room.scores[team] || 0) + 1;
-  room.message = `Gol dos ${headSoccerTeamName(team)}!`;
-
-  if (room.scores[team] >= HEAD_SOCCER_GOALS_TO_WIN) {
-    finishHeadSoccerRoom(room, "Placar maximo atingido.");
-    return true;
-  }
-
-  resetHeadSoccerPositions(room);
+  room.message = `Gooollll do ${scorerName}!`;
+  room.goalBanner = {
+    text: `Gooollll do ${scorerName}!`,
+    team,
+    until: now + HEAD_SOCCER_GOAL_PAUSE_MS
+  };
+  room.goalPauseUntil = now + HEAD_SOCCER_GOAL_PAUSE_MS;
+  room.pendingAfterGoal = room.scores[team] >= HEAD_SOCCER_GOALS_TO_WIN ? "finish" : "reset";
+  if (room.gameEndsAt) room.gameEndsAt += HEAD_SOCCER_GOAL_PAUSE_MS;
   return false;
 }
 
@@ -2622,8 +2924,31 @@ function tickHeadSoccerRoom(room) {
   const dt = Math.min((now - (room.lastTick || now)) / 1000, 0.05);
   room.lastTick = now;
 
+  if (room.goalPauseUntil) {
+    if (now < room.goalPauseUntil) {
+      emitHeadSoccerUpdate(room);
+      return;
+    }
+
+    const pending = room.pendingAfterGoal;
+    room.goalPauseUntil = 0;
+    room.pendingAfterGoal = null;
+    room.goalBanner = null;
+
+    if (pending === "finish") {
+      finishHeadSoccerRoom(room, "Placar maximo atingido.");
+      return;
+    }
+
+    resetHeadSoccerPositions(room);
+    resetHeadSoccerPowerState(room, now);
+    emitHeadSoccerUpdate(room);
+    return;
+  }
+
   room.players.forEach(player => updateHeadSoccerPlayer(player, dt));
   resolveHeadSoccerPlayerCollisions(room);
+  updateHeadSoccerPowerUps(room, now);
   const scoringTeam = updateHeadSoccerBall(room, dt);
 
   if (scoringTeam && scoreHeadSoccerGoal(room, scoringTeam)) return;
@@ -6728,6 +7053,16 @@ io.on("connection", (socket) => {
       winnerTeam: null,
       tickTimer: null,
       lastTick: Date.now(),
+      powerUps: [],
+      iceWalls: [],
+      goalkeeper: null,
+      nextPowerAt: Date.now() + 2800,
+      powerSeq: 0,
+      powerMessage: "",
+      powerMessageUntil: 0,
+      goalPauseUntil: 0,
+      pendingAfterGoal: null,
+      goalBanner: null,
       spectators: new Set(),
       message: "Sala aberta. Cada pessoa que entrar vira um jogador.",
       players: [makeHeadSoccerPlayer(socket, 0, tableBet)]

@@ -53,6 +53,7 @@ const groundRayOrigin = new THREE.Vector3();
 const groundRayDirection = new THREE.Vector3(0, -1, 0);
 const localMoveVelocity = new THREE.Vector3();
 const localMoveTarget = new THREE.Vector3();
+const localViewTargetPosition = new THREE.Vector3();
 const thirdPersonRenderPosition = new THREE.Vector3();
 const thirdPersonRenderTarget = new THREE.Vector3();
 let thirdPersonCameraReady = false;
@@ -568,8 +569,19 @@ function updateLocalViewAvatar(delta) {
   }
   const yaw = new THREE.Euler().setFromQuaternion(camera.quaternion, "YXZ").y;
   localViewAvatar.root.visible = cameraMode === "third";
-  localViewAvatar.root.position.set(camera.position.x, local.jumpOffset, camera.position.z);
-  localViewAvatar.root.rotation.set(0, yaw, 0);
+  localViewTargetPosition.set(camera.position.x, local.jumpOffset, camera.position.z);
+  if (!localViewAvatar.visualReady || localViewAvatar.root.position.distanceTo(localViewTargetPosition) > 3) {
+    localViewAvatar.root.position.copy(localViewTargetPosition);
+    localViewAvatar.visualYaw = yaw;
+    localViewAvatar.visualReady = true;
+  } else {
+    localViewAvatar.root.position.lerp(localViewTargetPosition, Math.min(1, delta * 18));
+    localViewAvatar.visualYaw = lerpAngle(localViewAvatar.visualYaw ?? yaw, yaw, Math.min(1, delta * 12));
+  }
+  const feelSpeed = Math.max(1, WALK_SPEED * (room?.settings?.mapId === "sketchbook" ? 0.74 : 1) * (room?.settings?.moveSpeedMul || 1));
+  const targetLean = THREE.MathUtils.clamp(-localMoveVelocity.x / feelSpeed * 0.18, -0.18, 0.18);
+  const lean = THREE.MathUtils.lerp(localViewAvatar.root.rotation.z, targetLean, Math.min(1, delta * 9));
+  localViewAvatar.root.rotation.set(0, localViewAvatar.visualYaw, lean);
   localViewAvatar.alive = local.alive;
   localViewAvatar.moving = local.moving;
   localViewAvatar.sprinting = local.sprinting;
@@ -1432,7 +1444,8 @@ function updateMovement(delta) {
   const weapon = currentWeapon(local.slot);
   const sprinting = Boolean(keys.ShiftLeft || keys.ShiftRight);
   const crouching = Boolean(keys.ControlLeft || keys.ControlRight);
-  const speed = WALK_SPEED * (weapon.speedMul || 1) * room.settings.moveSpeedMul *
+  const sketchbookFeel = room.settings.mapId === "sketchbook";
+  const speed = WALK_SPEED * (sketchbookFeel ? 0.74 : 1) * (weapon.speedMul || 1) * room.settings.moveSpeedMul *
     (sprinting ? SPRINT_MUL : 1) * (crouching ? CROUCH_MUL : 1) *
     (local.abilityActive && CLASSES[local.classId].ability.id === "sprint_tatico" ? 1.8 : 1) *
     (local.abilityActive && CLASSES[local.classId].ability.id === "supressao" ? 0.5 : 1);
@@ -1447,7 +1460,9 @@ function updateMovement(delta) {
   const wantsMove = rawMoveInput.lengthSq() > 0;
   if (wantsMove) rawMoveInput.normalize();
   localMoveTarget.copy(rawMoveInput).multiplyScalar(wantsMove && !climbing ? speed : 0);
-  const response = wantsMove ? (sprinting ? 17 : 14) : 19;
+  const response = sketchbookFeel
+    ? (wantsMove ? (sprinting ? 10.5 : 9.2) : 11.5)
+    : (wantsMove ? (sprinting ? 17 : 14) : 19);
   localMoveVelocity.x = THREE.MathUtils.damp(localMoveVelocity.x, localMoveTarget.x, response, delta);
   localMoveVelocity.z = THREE.MathUtils.damp(localMoveVelocity.z, localMoveTarget.z, response, delta);
   if (Math.abs(localMoveVelocity.x) < 0.015) localMoveVelocity.x = 0;
@@ -1807,6 +1822,11 @@ export function attachSocket(activeSocket) {
     clearSceneObjects();
     room = roomState;
     selfId = socket.id;
+    if (room.settings.mapId === "sketchbook") {
+      cameraMode = "third";
+      thirdPersonCameraReady = false;
+      updateCameraToggle();
+    }
     mapWorld = buildMap(room.settings.mapId, scene);
     obstacles = mapWorld.obstacles;
     solidMeshesForRaycast = mapWorld.raycastMeshes || [];

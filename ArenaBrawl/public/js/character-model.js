@@ -7,6 +7,7 @@ const MODEL_ROOTS = {
   emberbound: "./assets/models/emberbound/",
   scout: "./assets/models/scout/"
 };
+const FPS_CHARACTER_PACK = "./assets/models/fps-characters/arena_brawl_fps_characters_enhanced_export.glb";
 const SHARED_ANIMATIONS = {
   idle: `${MODEL_ROOTS.emberbound}idle.gltf`,
   walk: `${MODEL_ROOTS.emberbound}walk.gltf`,
@@ -18,6 +19,7 @@ const SHARED_ANIMATIONS = {
 const characterModelPromises = new Map();
 let sharedClipsPromise = null;
 let sketchbookCharacterPromise = null;
+let fpsCharacterPackPromise = null;
 
 function loadTexture(loader, root, name) {
   return loader.loadAsync(`${root}${name}`).then((texture) => {
@@ -87,7 +89,139 @@ function sharedClips() {
   return sharedClipsPromise;
 }
 
+async function loadFpsCharacterPack() {
+  const loader = new GLTFLoader();
+  const gltf = await loader.loadAsync(FPS_CHARACTER_PACK);
+  gltf.scene.traverse((child) => {
+    if (!child.isMesh) return;
+    child.castShadow = true;
+    child.receiveShadow = true;
+    const materials = Array.isArray(child.material) ? child.material : [child.material];
+    const prepared = materials.map((source) => {
+      const material = source.clone();
+      material.roughness = Math.min(0.9, Math.max(0.42, material.roughness ?? 0.58));
+      material.metalness = Math.min(0.45, material.metalness ?? 0.08);
+      material.needsUpdate = true;
+      return material;
+    });
+    child.material = Array.isArray(child.material) ? prepared : prepared[0];
+  });
+  return { model: gltf.scene, animations: gltf.animations };
+}
+
+function animationClipMap(animations) {
+  return new Map(animations.map((clip) => [clip.name, clip]));
+}
+
+function applyTeamTint(model, team) {
+  const color = team === "red" ? new THREE.Color("#e05555") : new THREE.Color("#4d8fe0");
+  model.traverse((child) => {
+    if (!child.isMesh) return;
+    const materials = Array.isArray(child.material) ? child.material : [child.material];
+    materials.forEach((material) => {
+      const name = `${material.name || ""} ${child.name || ""}`.toLowerCase();
+      if (name.includes("team") || name.includes("accent") || name.includes("highlight")) {
+        material.color?.lerp(color, 0.72);
+        material.needsUpdate = true;
+      }
+    });
+  });
+}
+
+function prepareFpsCharacterScene(sourceModel, characterId, team) {
+  const model = cloneSkeleton(sourceModel);
+  model.name = `${characterId}-character`;
+  const isFemale = characterId === "fps_female";
+  const selectedName = isFemale ? "Character_FemaleSoldier" : "Character_MaleSoldier";
+  const hiddenName = isFemale ? "Character_MaleSoldier" : "Character_FemaleSoldier";
+  const selectedRoot = model.getObjectByName(selectedName);
+  const hiddenRoot = model.getObjectByName(hiddenName);
+  if (hiddenRoot) hiddenRoot.visible = false;
+  if (selectedRoot) selectedRoot.visible = true;
+
+  model.updateMatrixWorld(true);
+  const bounds = selectedRoot ? new THREE.Box3().setFromObject(selectedRoot) : new THREE.Box3().setFromObject(model);
+  const size = bounds.getSize(new THREE.Vector3());
+  const scale = size.y > 0 ? 1.82 / size.y : 1;
+  model.scale.multiplyScalar(scale);
+  model.position.y = -bounds.min.y * scale;
+  applyTeamTint(model, team);
+  return model;
+}
+
+function attachWeaponToFpsSocket(avatar, model, characterId) {
+  const prefix = characterId === "fps_female" ? "Female" : "Male";
+  const socket = model.getObjectByName(`${prefix}_socket_weapon_right_hand`);
+  if (socket) {
+    socket.add(avatar.gun);
+    avatar.gun.position.set(0, 0, 0);
+    avatar.gun.rotation.set(0, 0, 0);
+    avatar.gun.scale.setScalar(0.28);
+  } else {
+    avatar.root.attach(avatar.gun);
+    avatar.gun.position.set(0.3, 1.15, -0.38);
+    avatar.gun.rotation.set(-0.12, 0, 0);
+    avatar.gun.scale.setScalar(0.34);
+  }
+  avatar.gun.visible = true;
+}
+
+async function attachFpsCharacter(avatar, characterId) {
+  if (!fpsCharacterPackPromise) fpsCharacterPackPromise = loadFpsCharacterPack();
+  const { model: sourceModel, animations } = await fpsCharacterPackPromise;
+  if (!avatar.root.parent) return;
+
+  const model = prepareFpsCharacterScene(sourceModel, characterId, avatar.team);
+  avatar.root.add(model);
+
+  const mixer = new THREE.AnimationMixer(model);
+  const byName = animationClipMap(animations);
+  const aliases = {
+    idle: "Idle",
+    walk: "Walk",
+    run: "Run",
+    jump: "Jump",
+    drive: "DriveCar",
+    crouch: "AimIdle",
+    death: "Death",
+    dance: "Dance01"
+  };
+  const actions = {};
+  Object.entries(aliases).forEach(([name, clipName]) => {
+    const clip = byName.get(clipName) || byName.get("Idle");
+    if (!clip) return;
+    const action = mixer.clipAction(clip);
+    if (name === "death") {
+      action.setLoop(THREE.LoopOnce, 1);
+      action.clampWhenFinished = true;
+      action.timeScale = 1.35;
+    }
+    if (name === "dance") {
+      action.setLoop(THREE.LoopRepeat, Infinity);
+    }
+    actions[name] = action;
+  });
+
+  avatar.model = model;
+  avatar.mixer = mixer;
+  avatar.actions = actions;
+  avatar.fpsCharacter = true;
+  avatar.fallbackMeshes.forEach((mesh) => {
+    mesh.material = mesh.material.clone();
+    mesh.material.colorWrite = false;
+    mesh.material.depthWrite = false;
+  });
+  attachWeaponToFpsSocket(avatar, model, characterId);
+  avatar.setAnimation(avatar.desiredAnimation || "idle", true);
+}
+
 export async function attachAnimatedCharacter(avatar) {
+  const characterId = avatar.characterId || "fps_male";
+  if (characterId === "fps_male" || characterId === "fps_female") {
+    await attachFpsCharacter(avatar, characterId);
+    return;
+  }
+
   if ((avatar.characterId || "boxman") === "boxman") {
     if (!sketchbookCharacterPromise) sketchbookCharacterPromise = loadSketchbookCharacter();
     const { model: sourceModel, animations } = await sketchbookCharacterPromise;
@@ -191,6 +325,11 @@ export function setCharacterAnimation(avatar, name, immediate = false, speed = n
   let defaultSpeed = name === "death" ? 2.8 : 1;
   if (avatar.sketchbookCharacter && name === "walk") defaultSpeed = 0.68;
   if (avatar.sketchbookCharacter && name === "crouch") defaultSpeed = 0.9;
+  if (avatar.fpsCharacter && name === "walk") defaultSpeed = 1.12;
+  if (avatar.fpsCharacter && name === "run") defaultSpeed = 1.08;
+  if (avatar.fpsCharacter && name === "jump") defaultSpeed = 1.25;
+  if (avatar.fpsCharacter && name === "drive") defaultSpeed = 1;
+  if (avatar.fpsCharacter && name === "death") defaultSpeed = 1.35;
   const effectiveSpeed = Number.isFinite(Number(speed)) ? Number(speed) : defaultSpeed;
   next.setEffectiveTimeScale(effectiveSpeed);
   if (avatar.animationName === name) {

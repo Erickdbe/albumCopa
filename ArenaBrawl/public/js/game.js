@@ -432,7 +432,12 @@ function colorFromId(id) {
 }
 
 function characterIdForPlayer(player) {
-  return "boxman";
+  if (player?.team === "red") return "fps_female";
+  if (player?.team === "blue") return "fps_male";
+  const seed = String(player?.socketId || player?.username || "");
+  let hash = 0;
+  for (let i = 0; i < seed.length; i += 1) hash = (hash * 31 + seed.charCodeAt(i)) >>> 0;
+  return hash % 2 === 0 ? "fps_male" : "fps_female";
 }
 
 function animationForAvatar(avatar) {

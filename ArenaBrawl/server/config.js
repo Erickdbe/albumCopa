@@ -73,7 +73,7 @@ const MAP_META = {
   floresta: { id: "floresta", name: "Floresta" }
 };
 
-const MAP_HALF_SIZES = { sketchbook: 190, praia: 90, cidade: 78, floresta: 92 };
+const MAP_HALF_SIZES = { sketchbook: 190, praia: 128, cidade: 124, floresta: 136 };
 const SKETCHBOOK_GROUND_Y = 5.35;
 const SKETCHBOOK_PLAYABLE_AREAS = [
   { minX: -74, maxX: 74, minZ: -58, maxZ: 53 },
@@ -89,20 +89,23 @@ const VEHICLE_SPAWNS = {
     { id: "sketch-heli", type: "helicopter", x: -48, y: SKETCHBOOK_GROUND_Y + 0.85, z: -4, yaw: Math.PI / 2 }
   ],
   cidade: [
-    { id: "city-car-red", type: "car", x: -24, y: 0, z: -4, yaw: Math.PI / 2 },
-    { id: "city-car-blue", type: "car", x: 24, y: 0, z: 4, yaw: -Math.PI / 2 },
-    { id: "city-bike-east", type: "motorcycle", x: 5, y: 0, z: 24, yaw: Math.PI },
-    { id: "city-bike-west", type: "motorcycle", x: -5, y: 0, z: -24, yaw: 0 }
+    { id: "city-car-red", type: "car", x: -52, y: 0, z: -8, yaw: Math.PI / 2 },
+    { id: "city-car-blue", type: "car", x: 52, y: 0, z: 8, yaw: -Math.PI / 2 },
+    { id: "city-bike-east", type: "motorcycle", x: 18, y: 0, z: 58, yaw: Math.PI },
+    { id: "city-bike-west", type: "motorcycle", x: -18, y: 0, z: -58, yaw: 0 },
+    { id: "city-quad-park", type: "quad", x: -72, y: 0, z: 42, yaw: Math.PI / 2 }
   ],
   floresta: [
-    { id: "forest-plane", type: "plane", x: 0, y: 5, z: 66, yaw: Math.PI },
-    { id: "forest-cannon", type: "cannon", x: -44, y: 0, z: 8, yaw: Math.PI / 2 }
+    { id: "forest-plane", type: "plane", x: 0, y: 7, z: 98, yaw: Math.PI },
+    { id: "forest-cannon", type: "cannon", x: -82, y: 0, z: 14, yaw: Math.PI / 2 },
+    { id: "forest-bike-trail", type: "motorcycle", x: 62, y: 0, z: -72, yaw: -0.35 }
   ],
   praia: [
-    { id: "beach-jetski-a", type: "jetski", x: -14, y: 0.2, z: 48, yaw: Math.PI },
-    { id: "beach-jetski-b", type: "jetski", x: 14, y: 0.2, z: 54, yaw: Math.PI },
-    { id: "beach-quad", type: "quad", x: -30, y: 0, z: -12, yaw: Math.PI / 2 },
-    { id: "beach-plane", type: "plane", x: 38, y: 5, z: 24, yaw: -Math.PI / 2 }
+    { id: "beach-jetski-a", type: "jetski", x: -34, y: 0.2, z: 82, yaw: Math.PI },
+    { id: "beach-jetski-b", type: "jetski", x: 28, y: 0.2, z: 91, yaw: Math.PI },
+    { id: "beach-quad", type: "quad", x: -62, y: 0, z: -24, yaw: Math.PI / 2 },
+    { id: "beach-plane", type: "plane", x: 72, y: 7, z: 28, yaw: -Math.PI / 2 },
+    { id: "beach-car-dunes", type: "car", x: 54, y: 0, z: -64, yaw: -0.7 }
   ]
 };
 
@@ -148,38 +151,38 @@ const MAP_SPAWNS = {
   },
   praia: {
     ffa: [
-      { x: -30, y: 0, z: -30, yaw: 0.78 }, { x: 30, y: 0, z: -30, yaw: -0.78 },
-      { x: -30, y: 0, z: 30, yaw: 2.35 }, { x: 30, y: 0, z: 30, yaw: -2.35 },
-      { x: 0, y: 0, z: -34, yaw: 0 }, { x: 0, y: 0, z: 34, yaw: Math.PI },
-      { x: -34, y: 0, z: 0, yaw: Math.PI / 2 }, { x: 34, y: 0, z: 0, yaw: -Math.PI / 2 }
+      { x: -76, y: 0, z: -66, yaw: 0.78 }, { x: 76, y: 0, z: -66, yaw: -0.78 },
+      { x: -82, y: 0, z: 26, yaw: 2.1 }, { x: 82, y: 0, z: 30, yaw: -2.1 },
+      { x: -18, y: 0, z: -86, yaw: 0.15 }, { x: 18, y: 0, z: 52, yaw: Math.PI },
+      { x: -106, y: 0, z: -6, yaw: Math.PI / 2 }, { x: 106, y: 0, z: -4, yaw: -Math.PI / 2 }
     ],
     teams: {
-      red: [{ x: -32, y: 0, z: -32, yaw: 0.78 }, { x: -32, y: 0, z: -20, yaw: 0.6 }, { x: -20, y: 0, z: -32, yaw: 1 }, { x: -32, y: 0, z: 0, yaw: Math.PI / 2 }],
-      blue: [{ x: 32, y: 0, z: 32, yaw: -2.35 }, { x: 32, y: 0, z: 20, yaw: -2.6 }, { x: 20, y: 0, z: 32, yaw: -2 }, { x: 32, y: 0, z: 0, yaw: -Math.PI / 2 }]
+      red: [{ x: -82, y: 0, z: -66, yaw: 0.78 }, { x: -72, y: 0, z: -42, yaw: 0.6 }, { x: -48, y: 0, z: -84, yaw: 1 }, { x: -104, y: 0, z: -8, yaw: Math.PI / 2 }],
+      blue: [{ x: 82, y: 0, z: 36, yaw: -2.35 }, { x: 72, y: 0, z: 18, yaw: -2.6 }, { x: 48, y: 0, z: 52, yaw: -2 }, { x: 104, y: 0, z: -6, yaw: -Math.PI / 2 }]
     }
   },
   cidade: {
     ffa: [
-      { x: -28, y: 0, z: -28, yaw: 0.78 }, { x: 28, y: 0, z: -28, yaw: -0.78 },
-      { x: -28, y: 0, z: 28, yaw: 2.35 }, { x: 28, y: 0, z: 28, yaw: -2.35 },
-      { x: 0, y: 0, z: -32, yaw: 0 }, { x: 0, y: 0, z: 32, yaw: Math.PI },
-      { x: -32, y: 0, z: 0, yaw: Math.PI / 2 }, { x: 32, y: 0, z: 0, yaw: -Math.PI / 2 }
+      { x: -84, y: 0, z: -84, yaw: 0.78 }, { x: 84, y: 0, z: -84, yaw: -0.78 },
+      { x: -84, y: 0, z: 84, yaw: 2.35 }, { x: 84, y: 0, z: 84, yaw: -2.35 },
+      { x: 0, y: 0, z: -102, yaw: 0 }, { x: 0, y: 0, z: 102, yaw: Math.PI },
+      { x: -102, y: 0, z: 0, yaw: Math.PI / 2 }, { x: 102, y: 0, z: 0, yaw: -Math.PI / 2 }
     ],
     teams: {
-      red: [{ x: -30, y: 0, z: -30, yaw: 0.78 }, { x: -30, y: 0, z: -18, yaw: 0.6 }, { x: -18, y: 0, z: -30, yaw: 1 }, { x: -30, y: 0, z: 0, yaw: Math.PI / 2 }],
-      blue: [{ x: 30, y: 0, z: 30, yaw: -2.35 }, { x: 30, y: 0, z: 18, yaw: -2.6 }, { x: 18, y: 0, z: 30, yaw: -2 }, { x: 30, y: 0, z: 0, yaw: -Math.PI / 2 }]
+      red: [{ x: -86, y: 0, z: -86, yaw: 0.78 }, { x: -86, y: 0, z: -58, yaw: 0.6 }, { x: -58, y: 0, z: -86, yaw: 1 }, { x: -102, y: 0, z: 0, yaw: Math.PI / 2 }],
+      blue: [{ x: 86, y: 0, z: 86, yaw: -2.35 }, { x: 86, y: 0, z: 58, yaw: -2.6 }, { x: 58, y: 0, z: 86, yaw: -2 }, { x: 102, y: 0, z: 0, yaw: -Math.PI / 2 }]
     }
   },
   floresta: {
     ffa: [
-      { x: -30, y: 0, z: -30, yaw: 0.78 }, { x: 30, y: 0, z: -30, yaw: -0.78 },
-      { x: -30, y: 0, z: 30, yaw: 2.35 }, { x: 30, y: 0, z: 30, yaw: -2.35 },
-      { x: 0, y: 0, z: -34, yaw: 0 }, { x: 0, y: 0, z: 34, yaw: Math.PI },
-      { x: -34, y: 0, z: 0, yaw: Math.PI / 2 }, { x: 34, y: 0, z: 0, yaw: -Math.PI / 2 }
+      { x: -86, y: 0, z: -74, yaw: 0.78 }, { x: 86, y: 0, z: -74, yaw: -0.78 },
+      { x: -92, y: 0, z: 70, yaw: 2.35 }, { x: 92, y: 0, z: 70, yaw: -2.35 },
+      { x: 0, y: 0, z: -104, yaw: 0 }, { x: 0, y: 0, z: 98, yaw: Math.PI },
+      { x: -112, y: 0, z: 6, yaw: Math.PI / 2 }, { x: 112, y: 0, z: -6, yaw: -Math.PI / 2 }
     ],
     teams: {
-      red: [{ x: -32, y: 0, z: -32, yaw: 0.78 }, { x: -32, y: 0, z: -20, yaw: 0.6 }, { x: -20, y: 0, z: -32, yaw: 1 }, { x: -32, y: 0, z: 0, yaw: Math.PI / 2 }],
-      blue: [{ x: 32, y: 0, z: 32, yaw: -2.35 }, { x: 32, y: 0, z: 20, yaw: -2.6 }, { x: 20, y: 0, z: 32, yaw: -2 }, { x: 32, y: 0, z: 0, yaw: -Math.PI / 2 }]
+      red: [{ x: -92, y: 0, z: -74, yaw: 0.78 }, { x: -76, y: 0, z: -52, yaw: 0.6 }, { x: -52, y: 0, z: -86, yaw: 1 }, { x: -112, y: 0, z: 6, yaw: Math.PI / 2 }],
+      blue: [{ x: 92, y: 0, z: 70, yaw: -2.35 }, { x: 76, y: 0, z: 50, yaw: -2.6 }, { x: 52, y: 0, z: 88, yaw: -2 }, { x: 112, y: 0, z: -6, yaw: -Math.PI / 2 }]
     }
   }
 };

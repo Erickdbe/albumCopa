@@ -169,6 +169,30 @@ function addClimbableBuilding(world, options) {
 
   addLadder(world, { x, z, w, d, height: h, side: stairSide, color: 0x66533f });
 
+  const floors = Math.max(1, Math.floor(h / 3.1));
+  for (let floor = 0; floor < floors; floor++) {
+    const y = 2.1 + floor * 2.8;
+    const columns = Math.max(2, Math.floor(w / 3.2));
+    for (let column = 0; column < columns; column++) {
+      const px = x - w * 0.34 + (columns === 1 ? 0 : column * (w * 0.68 / (columns - 1)));
+      addMesh(world, new THREE.BoxGeometry(1.15, 1.05, 0.08), 0x78c6d8, px, y, z - d / 2 - 0.065, {
+        castShadow: false,
+        material: { emissive: 0x102a32, roughness: 0.35 }
+      });
+      addMesh(world, new THREE.BoxGeometry(1.15, 1.05, 0.08), 0x78c6d8, px, y, z + d / 2 + 0.065, {
+        castShadow: false,
+        material: { emissive: 0x102a32, roughness: 0.35 }
+      });
+    }
+  }
+
+  if (h > 7) {
+    addMesh(world, new THREE.BoxGeometry(w * 0.72, 0.22, 0.18), 0xffd56b, x, 1.15, z - d / 2 - 0.12, {
+      castShadow: false,
+      material: { emissive: 0x372400 }
+    });
+  }
+
   if (destructiblePrefix) {
     const pieces = [
       [-w * 0.28, h * 0.72, d / 2 + 0.05, 0], [w * 0.28, h * 0.72, d / 2 + 0.05, 0],
@@ -209,6 +233,52 @@ function addMountain(world, x, z, radius, height, color = 0x53604d) {
   const mesh = addMesh(world, new THREE.ConeGeometry(radius, height, 8), color, x, height / 2 - 0.1, z, { rotY: Math.PI / 8 });
   mesh.receiveShadow = true;
   world.obstacles.push(collisionBox(x, z, radius * 1.25, radius * 1.25, height * 0.72, true));
+}
+
+function addPalm(world, x, z, scale = 1) {
+  const trunkHeight = 5.5 * scale;
+  addMesh(world, new THREE.CylinderGeometry(0.32 * scale, 0.45 * scale, trunkHeight, 8), 0x8c5d2c, x, trunkHeight / 2, z, {
+    rotZ: 0.1 * Math.sin(x + z)
+  });
+  world.obstacles.push(collisionBox(x, z, 1.1 * scale, 1.1 * scale, trunkHeight, true));
+  for (let i = 0; i < 7; i++) {
+    const leaf = addMesh(world, new THREE.BoxGeometry(0.42 * scale, 0.16 * scale, 4.8 * scale), 0x3a9f42, x, trunkHeight + 0.55 * scale, z, {
+      rotY: i * Math.PI * 2 / 7,
+      rotX: 0.22,
+      castShadow: false
+    });
+    leaf.position.x += Math.sin(leaf.rotation.y) * 1.8 * scale;
+    leaf.position.z += Math.cos(leaf.rotation.y) * 1.8 * scale;
+  }
+}
+
+function addRoadStripe(world, x, z, w, d, color = 0xf3d45b) {
+  addMesh(world, new THREE.BoxGeometry(w, 0.035, d), color, x, 0.08, z, {
+    castShadow: false,
+    receiveShadow: false,
+    material: { emissive: 0x2c2400, roughness: 0.65 }
+  });
+}
+
+function addBeachCabana(world, x, z, rotation = 0) {
+  const group = new THREE.Group();
+  group.position.set(x, 0, z);
+  group.rotation.y = rotation;
+  world.root.add(group);
+  addMesh(world, new THREE.BoxGeometry(4.8, 0.35, 3.5), 0xd6a24a, x, 1.9, z, { rotY: rotation });
+  addMesh(world, new THREE.BoxGeometry(0.28, 2.2, 0.28), 0x835126, x - Math.cos(rotation) * 1.8, 1.1, z - Math.sin(rotation) * 1.8);
+  addMesh(world, new THREE.BoxGeometry(0.28, 2.2, 0.28), 0x835126, x + Math.cos(rotation) * 1.8, 1.1, z + Math.sin(rotation) * 1.8);
+  addMesh(world, new THREE.BoxGeometry(4.9, 0.16, 3.6), 0x3fb6df, x, 2.35, z, { rotY: rotation, rotZ: 0.08 });
+  world.obstacles.push(collisionBox(x, z, 5.2, 3.8, 2.45, true));
+}
+
+function addFlowerPatch(world, x, z, radius = 3, count = 12) {
+  for (let i = 0; i < count; i++) {
+    const angle = i * 2.399;
+    const distance = radius * (0.25 + ((i * 37) % 100) / 130);
+    addMesh(world, new THREE.IcosahedronGeometry(0.18 + (i % 3) * 0.04, 0), i % 2 ? 0xff70ac : 0xffd15e,
+      x + Math.cos(angle) * distance, 0.16, z + Math.sin(angle) * distance, { castShadow: false });
+  }
 }
 
 function addLampPost(world, id, x, z, rotY = 0) {
@@ -262,17 +332,17 @@ function buildPraia(scene) {
   const world = createWorld("praia", scene);
   const meta = MAP_META.praia;
   scene.background = new THREE.Color(meta.sky);
-  scene.fog = new THREE.Fog(meta.sky, 80, 210);
-  addGround(world, 0xffffff, "./assets/textures/beach-sand.jpg", 32);
+  scene.fog = new THREE.Fog(meta.sky, 105, 285);
+  addGround(world, 0xffffff, "./assets/textures/beach-sand.jpg", 26);
   addBoundary(world, 0x89764d);
 
-  world.water = addMesh(world, new THREE.PlaneGeometry(world.half * 2 - 2, 62, 28, 10), 0x238fd0, 0, 0.02, 58, {
+  world.water = addMesh(world, new THREE.PlaneGeometry(world.half * 2 - 2, 92, 36, 12), 0x238fd0, 0, 0.02, 79, {
     rotX: -Math.PI / 2, castShadow: false,
     material: { transparent: true, opacity: 0.82, metalness: 0.05, roughness: 0.24 }
   });
 
-  for (let i = 0; i < 7; i++) {
-    const wave = addMesh(world, new THREE.BoxGeometry(world.half * 1.9, 0.18, 0.8), 0x8edbf2, 0, 0.16, 31 + i * 8, {
+  for (let i = 0; i < 10; i++) {
+    const wave = addMesh(world, new THREE.BoxGeometry(world.half * 1.92, 0.18, 0.8), 0x8edbf2, 0, 0.16, 38 + i * 8.5, {
       castShadow: false, material: { transparent: true, opacity: 0.58 }
     });
     world.animated.waves.push({ mesh: wave, phase: i * 0.8 });
@@ -295,17 +365,28 @@ function buildPraia(scene) {
   });
   world.tsunami.visible = false;
 
-  addSolidBox(world, 0, -8, 15, 2.4, 15, 0xd8c16f);
-  addRamp(world, 0, -20, 9, 4, 2.4, "z", 0xd8c16f);
-  [[-48,-30],[46,-26],[-28,8],[30,4],[-58,18],[56,16],[0,-42]].forEach(([x,z],i)=>{
-    addTree(world,x,z,0.72 + (i%3)*0.1,false);
+  addSolidBox(world, 0, -10, 19, 2.4, 19, 0xd8c16f);
+  addRamp(world, 0, -25, 12, 5, 2.4, "z", 0xd8c16f);
+  addRamp(world, 0, 8, 10, 5, 2.1, "z", 0xd8c16f);
+
+  for (let i = 0; i < 28; i++) {
+    const side = i % 2 ? -1 : 1;
+    const x = side * (28 + (i % 7) * 13);
+    const z = -70 + Math.floor(i / 7) * 28 + Math.sin(i) * 3;
+    addPalm(world, x, z, 0.85 + (i % 4) * 0.12);
+  }
+
+  [[-84,-70],[-55,-88],[-22,-82],[24,-86],[58,-72],[92,-55],[-92,-18],[88,-16]].forEach(([x,z],i)=>{
+    addClimbableBuilding(world,{x,z,w:9,d:8,h:4.4,wallColor:i%2?0xd7e0d0:0xf1d6a2,roofColor:i%2?0x3975a9:0xb34d42,stairSide:i%2?"west":"east"});
   });
-  [[-58,-52],[56,-50],[-22,-58],[25,-60]].forEach(([x,z],i)=>{
-    addClimbableBuilding(world,{x,z,w:8,d:7,h:4,wallColor:i%2?0xd7e0d0:0xf1d6a2,roofColor:i%2?0x3975a9:0xb34d42,stairSide:i%2?"west":"east"});
-  });
-  addMeshyLandmark(world,"house",66,-34,{height:6.4,rotation:-0.45,collision:[8.5,8,6.4]});
-  [[-38,14],[38,18],[-62,-2],[62,-5]].forEach(([x,z])=>addSolidBox(world,x,z,3.2,2,3.2,0x888b8c));
-  for(let i=0;i<8;i++) addPlatform(world,-12+i*3,0.22,27+i*0.45,3.1,2.2,0x76502f);
+  addMeshyLandmark(world,"house",86,-38,{height:6.8,rotation:-0.45,collision:[8.5,8,6.8]});
+  addMeshyLandmark(world,"house",-94,-44,{height:6.2,rotation:0.35,collision:[8.2,7.8,6.2]});
+
+  [[-74,12],[74,18],[-96,3],[98,-6],[-34,30],[42,34]].forEach(([x,z])=>addSolidBox(world,x,z,3.2,2,3.2,0x888b8c));
+  for(let i=0;i<18;i++) addPlatform(world,-28+i*3.3,0.24,47+i*0.35,3.25,2.2,0x76502f);
+  for(let i=0;i<9;i++) addPlatform(world,-8+i*2.2,0.32,67,2.2,4.2,0x76502f);
+  [-72,-42,-12,18,48,78].forEach((x,i)=>addBeachCabana(world,x,-38 + (i % 2) * 12,i*0.18));
+  [[-62,-4],[62,-2],[-35,-55],[36,-58],[0,-72]].forEach(([x,z],i)=>addFlowerPatch(world,x,z,2.4+i%2,8));
   return world;
 }
 
@@ -313,38 +394,54 @@ function buildCidade(scene) {
   const world = createWorld("cidade", scene);
   const meta = MAP_META.cidade;
   scene.background = new THREE.Color(meta.sky);
-  scene.fog = new THREE.Fog(meta.sky, 85, 190);
+  scene.fog = new THREE.Fog(meta.sky, 115, 275);
   addGround(world, 0x62676c);
   addBoundary(world, 0x25292e);
 
   const roadMat = makeMaterial(0x30343a, { roughness: 0.94 });
-  [-34,0,34].forEach((x)=>{
+  [-78,-39,0,39,78].forEach((x)=>{
     const road=new THREE.Mesh(new THREE.PlaneGeometry(12,world.half*2),roadMat);road.rotation.x=-Math.PI/2;road.position.set(x,0.02,0);world.root.add(road);
+    for(let z=-100;z<=100;z+=16)addRoadStripe(world,x,z,0.5,5.5);
   });
-  [-34,0,34].forEach((z)=>{
+  [-78,-39,0,39,78].forEach((z)=>{
     const road=new THREE.Mesh(new THREE.PlaneGeometry(world.half*2,12),roadMat);road.rotation.x=-Math.PI/2;road.position.set(0,0.025,z);world.root.add(road);
+    for(let x=-100;x<=100;x+=16)addRoadStripe(world,x,z,5.5,0.5);
   });
 
   const buildings=[
-    [-55,-53,12,11,8],[-18,-53,13,11,13],[18,-53,13,11,9],[55,-53,12,11,15],
-    [-55,-18,12,13,12],[55,-18,12,13,10],[-55,18,12,13,9],[55,18,12,13,14],
-    [-55,53,12,11,14],[-18,53,13,11,9],[18,53,13,11,13],[55,53,12,11,10]
+    [-101,-100,13,12,16],[-58,-100,14,12,21],[-20,-100,13,12,13],[20,-100,14,12,19],[58,-100,13,12,14],[101,-100,12,12,22],
+    [-101,-58,13,14,11],[-58,-58,15,14,25],[58,-58,15,14,18],[101,-58,13,14,15],
+    [-101,-20,13,14,20],[-58,-20,15,14,14],[58,-20,15,14,24],[101,-20,13,14,12],
+    [-101,20,13,14,12],[-58,20,15,14,22],[58,20,15,14,13],[101,20,13,14,19],
+    [-101,58,13,14,18],[-58,58,15,14,15],[58,58,15,14,26],[101,58,13,14,14],
+    [-101,100,13,12,22],[-58,100,14,12,14],[-20,100,13,12,18],[20,100,14,12,13],[58,100,13,12,20],[101,100,12,12,16]
   ];
   buildings.forEach(([x,z,w,d,h],i)=>addClimbableBuilding(world,{
     x,z,w,d,h,wallColor:i%3===0?0x89939c:i%3===1?0xa28f78:0x77838d,roofColor:0x353a40,
     stairSide:i%2?"east":"west",destructiblePrefix:`city-building-${i}`
   }));
-  addMeshyLandmark(world,"house",-18,-18,{height:8.5,rotation:0.75,collision:[8,8,8.5]});
+  addMeshyLandmark(world,"house",-24,-24,{height:8.5,rotation:0.75,collision:[8,8,8.5]});
+  addMeshyLandmark(world,"house",24,24,{height:8.2,rotation:-0.4,collision:[8,8,8.2]});
+  addSolidBox(world, 0, 0, 22, 1.2, 22, 0x48613c);
+  addPlatform(world, 0, 1.05, 0, 16, 16, 0x567348);
+  addTree(world, -8, -8, 0.65, false);
+  addTree(world, 8, 8, 0.65, false);
+  addTree(world, -8, 8, 0.65, false);
+  addTree(world, 8, -8, 0.65, false);
 
   let lampIndex=0;
-  [-42,-26,-8,8,26,42].forEach((n)=>{
+  [-102,-82,-60,-42,-22,-8,8,22,42,60,82,102].forEach((n)=>{
     addLampPost(world,`city-lamp-${lampIndex++}`,n,-7,0);
     addLampPost(world,`city-lamp-${lampIndex++}`,n,7,Math.PI);
     if(Math.abs(n)>10){addLampPost(world,`city-lamp-${lampIndex++}`,-7,n,Math.PI/2);addLampPost(world,`city-lamp-${lampIndex++}`,7,n,-Math.PI/2);}
   });
-  [[-17,-17],[17,17],[-17,17],[17,-17]].forEach(([x,z],index)=>addSolidBox(
-    world,x,z,8,2.3,0.7,0x555b62,0,{id:`city-barrier-${index}`,kind:"barrier"}
+  [[-34,-34],[34,34],[-34,34],[34,-34],[-78,0],[78,0],[0,-78],[0,78]].forEach(([x,z],index)=>addSolidBox(
+    world,x,z,index<4?10:13,2.3,0.7,0x555b62,0,{id:`city-barrier-${index}`,kind:"barrier"}
   ));
+  addPlatform(world, -39, 10.8, -39, 27, 2.1, 0x46505a);
+  addPlatform(world, 39, 13.2, 39, 27, 2.1, 0x46505a);
+  addRamp(world, -39, -52, 18, 4, 5.8, "z", 0x4b555e);
+  addRamp(world, 39, 52, 18, 4, 5.8, "z", 0x4b555e);
   return world;
 }
 
@@ -352,34 +449,39 @@ function buildFloresta(scene) {
   const world = createWorld("floresta", scene);
   const meta = MAP_META.floresta;
   scene.background = new THREE.Color(meta.sky);
-  scene.fog = new THREE.Fog(meta.sky, 72, 205);
-  addGround(world, 0xffffff, "./assets/textures/forest-grass.jpg", 30);
+  scene.fog = new THREE.Fog(meta.sky, 95, 300);
+  addGround(world, 0xffffff, "./assets/textures/forest-grass.jpg", 24);
   addBoundary(world, 0x283526);
 
-  const mountains=[[-72,-68,20,28],[-35,-79,17,24],[10,-82,19,30],[52,-76,20,27],[77,-48,17,25],[80,5,20,31],[75,55,19,28],[42,79,18,25],[-5,82,20,29],[-52,76,21,31],[-78,45,18,25],[-82,-15,21,30]];
+  const mountains=[[-112,-110,25,38],[-72,-123,24,34],[-32,-128,22,36],[12,-126,25,42],[55,-122,24,36],[96,-112,27,40],[118,-70,23,36],[123,-22,24,40],[120,28,25,38],[110,78,24,35],[72,118,26,39],[26,126,23,34],[-22,124,26,42],[-70,116,25,37],[-112,92,27,40],[-126,42,23,36],[-124,-8,25,39],[-120,-62,24,35]];
   mountains.forEach(([x,z,r,h],i)=>addMountain(world,x,z,r,h,i%2?0x596653:0x4b5948));
 
-  const reserved=[[0,0],[-42,12],[42,-10],[0,58]];
-  for(let gx=-70;gx<=70;gx+=14){
-    for(let gz=-65;gz<=65;gz+=13){
+  const reserved=[[0,0],[-58,18],[58,-18],[0,84],[-82,-54],[84,52]];
+  for(let gx=-112;gx<=112;gx+=13){
+    for(let gz=-106;gz<=106;gz+=12){
       const x=gx+Math.sin(gz*0.31)*4,z=gz+Math.cos(gx*0.27)*4;
-      if(reserved.some(([rx,rz])=>Math.hypot(x-rx,z-rz)<14))continue;
-      addTree(world,x,z,0.72+((Math.abs(gx+gz)%5)*0.05),false);
+      if(reserved.some(([rx,rz])=>Math.hypot(x-rx,z-rz)<16))continue;
+      addTree(world,x,z,0.68+((Math.abs(gx+gz)%5)*0.055),Math.abs(gx)>84||Math.abs(gz)>82);
     }
   }
   [
-    [-58,-38,"unknown-a",10.5,0.2],[57,34,"unknown-b",10,-0.5],[-31,-50,"unknown-b",9.2,0.8],
-    [31,50,"unknown-a",11,-0.25],[-64,18,"unknown-a",9.6,0.55],[63,-24,"unknown-b",10.4,-0.8]
+    [-88,-58,"unknown-a",11.5,0.2],[86,56,"unknown-b",11,-0.5],[-48,-82,"unknown-b",10.2,0.8],
+    [48,84,"unknown-a",12,-0.25],[-96,26,"unknown-a",10.6,0.55],[94,-38,"unknown-b",11.4,-0.8],
+    [-26,104,"unknown-a",10.8,0.35],[25,-104,"unknown-b",11.2,-0.45]
   ].forEach(([x,z,asset,height,rotation])=>{
     addMeshyLandmark(world,asset,x,z,{height,rotation,collision:[1.5,1.5,height*0.72]});
   });
-  addMeshyLandmark(world,"unknown-c",0,-54,{height:7.2,rotation:0.18,collision:[7.5,7,7.2]});
-  addTreeHouse(world,-38,14,0);
-  addTreeHouse(world,38,-12,Math.PI);
-  addTreeHouse(world,3,48,-Math.PI/2);
+  addMeshyLandmark(world,"unknown-c",0,-78,{height:7.2,rotation:0.18,collision:[7.5,7,7.2]});
+  addTreeHouse(world,-58,18,0);
+  addTreeHouse(world,58,-18,Math.PI);
+  addTreeHouse(world,3,78,-Math.PI/2);
+  addTreeHouse(world,-82,-54,Math.PI/3);
+  addTreeHouse(world,84,52,-Math.PI/4);
 
-  [[-18,-8],[18,8],[-10,24],[12,-28],[0,4]].forEach(([x,z],i)=>addSolidBox(world,x,z,3+i%2,1.8,3+i%2,0x6f746e));
-  for(let i=0;i<11;i++)addPlatform(world,-15+i*3,0.2,-2+Math.sin(i)*1.2,3.2,2.1,0x68462a);
+  [[-28,-12],[28,12],[-14,36],[16,-40],[0,4],[-62,64],[66,-64],[-88,0],[88,0]].forEach(([x,z],i)=>addSolidBox(world,x,z,3+i%2,1.8,3+i%2,0x6f746e));
+  for(let i=0;i<19;i++)addPlatform(world,-30+i*3.4,0.2,-2+Math.sin(i)*1.2,3.4,2.1,0x68462a);
+  for(let i=0;i<16;i++)addPlatform(world,-82+i*4.2,0.18,-58+i*7.2,3.6,2.1,0x6d5430);
+  [[-42,48],[46,-48],[0,32],[-74,-18],[72,18],[-24,-74],[24,74]].forEach(([x,z],i)=>addFlowerPatch(world,x,z,3.2 + (i%3)*0.4,14));
 
   world.tornado = new THREE.Group();
   for(let i=0;i<9;i++){
@@ -403,6 +505,23 @@ function buildSketchbook(scene) {
   world.obstacles.push(collisionBox(0, -2, 148, 112, SKETCHBOOK_GROUND_Y, false));
 
   attachSketchbookWorld(world, { scale: 0.36, y: -0.04, usePhysicsCollisions: true, usePhysicsGround: true });
+  addPlatform(world, 0, SKETCHBOOK_GROUND_Y + 0.18, -38, 78, 2.8, 0x38424d);
+  addPlatform(world, 0, SKETCHBOOK_GROUND_Y + 0.22, 38, 78, 2.8, 0x38424d);
+  addPlatform(world, -42, SKETCHBOOK_GROUND_Y + 0.2, 0, 2.8, 76, 0x38424d);
+  addPlatform(world, 42, SKETCHBOOK_GROUND_Y + 0.2, 0, 2.8, 76, 0x38424d);
+  for (let i = 0; i < 8; i++) {
+    const angle = i * Math.PI / 4;
+    const x = Math.cos(angle) * 36;
+    const z = Math.sin(angle) * 32;
+    addSolidBox(world, x, z, 2.6, 2.4 + (i % 3) * 0.7, 2.6, i % 2 ? 0x5d6b78 : 0xc9863b, SKETCHBOOK_GROUND_Y);
+  }
+  [-56, -28, 0, 28, 56].forEach((x, i) => {
+    addMesh(world, new THREE.TorusGeometry(3.2 + i * 0.22, 0.16, 8, 26), i % 2 ? 0xf2c94c : 0x47c6ff, x, SKETCHBOOK_GROUND_Y + 5.2, 64, {
+      rotX: Math.PI / 2,
+      castShadow: false,
+      material: { emissive: i % 2 ? 0x442d00 : 0x003047 }
+    });
+  });
   return world;
 }
 
@@ -509,7 +628,7 @@ function updateForest(world, elapsed, event) {
   if(!event||event.type!=="tornado"||event.phase!=="active"){world.tornado.visible=false;return;}
   world.tornado.visible=true;
   const p=Math.max(0,Math.min(1,event.progress||0));
-  world.tornado.position.set(-70+p*140,0,Math.sin(p*Math.PI*3)*30);
+  world.tornado.position.set(-108+p*216,0,Math.sin(p*Math.PI*3)*48);
   world.tornado.rotation.y=elapsed*2.8;
 }
 

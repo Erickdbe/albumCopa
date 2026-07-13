@@ -67,7 +67,7 @@ export const MAP_META = {
 };
 export const MAP_ORDER = ["sketchbook", "praia", "cidade", "floresta"];
 
-export const MAP_HALF_SIZES = { sketchbook: 190, praia: 90, cidade: 78, floresta: 92 };
+export const MAP_HALF_SIZES = { sketchbook: 190, praia: 128, cidade: 124, floresta: 136 };
 export const SKETCHBOOK_GROUND_Y = 5.35;
 
 export const VEHICLE_SPAWNS = {
@@ -78,20 +78,23 @@ export const VEHICLE_SPAWNS = {
     { id: "sketch-heli", type: "helicopter", x: -48, y: SKETCHBOOK_GROUND_Y + 0.85, z: -4, yaw: Math.PI / 2 }
   ],
   cidade: [
-    { id: "city-car-red", type: "car", x: -24, y: 0, z: -4, yaw: Math.PI / 2 },
-    { id: "city-car-blue", type: "car", x: 24, y: 0, z: 4, yaw: -Math.PI / 2 },
-    { id: "city-bike-east", type: "motorcycle", x: 5, y: 0, z: 24, yaw: Math.PI },
-    { id: "city-bike-west", type: "motorcycle", x: -5, y: 0, z: -24, yaw: 0 }
+    { id: "city-car-red", type: "car", x: -52, y: 0, z: -8, yaw: Math.PI / 2 },
+    { id: "city-car-blue", type: "car", x: 52, y: 0, z: 8, yaw: -Math.PI / 2 },
+    { id: "city-bike-east", type: "motorcycle", x: 18, y: 0, z: 58, yaw: Math.PI },
+    { id: "city-bike-west", type: "motorcycle", x: -18, y: 0, z: -58, yaw: 0 },
+    { id: "city-quad-park", type: "quad", x: -72, y: 0, z: 42, yaw: Math.PI / 2 }
   ],
   floresta: [
-    { id: "forest-plane", type: "plane", x: 0, y: 5, z: 66, yaw: Math.PI },
-    { id: "forest-cannon", type: "cannon", x: -44, y: 0, z: 8, yaw: Math.PI / 2 }
+    { id: "forest-plane", type: "plane", x: 0, y: 7, z: 98, yaw: Math.PI },
+    { id: "forest-cannon", type: "cannon", x: -82, y: 0, z: 14, yaw: Math.PI / 2 },
+    { id: "forest-bike-trail", type: "motorcycle", x: 62, y: 0, z: -72, yaw: -0.35 }
   ],
   praia: [
-    { id: "beach-jetski-a", type: "jetski", x: -14, y: 0.2, z: 48, yaw: Math.PI },
-    { id: "beach-jetski-b", type: "jetski", x: 14, y: 0.2, z: 54, yaw: Math.PI },
-    { id: "beach-quad", type: "quad", x: -30, y: 0, z: -12, yaw: Math.PI / 2 },
-    { id: "beach-plane", type: "plane", x: 38, y: 5, z: 24, yaw: -Math.PI / 2 }
+    { id: "beach-jetski-a", type: "jetski", x: -34, y: 0.2, z: 82, yaw: Math.PI },
+    { id: "beach-jetski-b", type: "jetski", x: 28, y: 0.2, z: 91, yaw: Math.PI },
+    { id: "beach-quad", type: "quad", x: -62, y: 0, z: -24, yaw: Math.PI / 2 },
+    { id: "beach-plane", type: "plane", x: 72, y: 7, z: 28, yaw: -Math.PI / 2 },
+    { id: "beach-car-dunes", type: "car", x: 54, y: 0, z: -64, yaw: -0.7 }
   ]
 };
 

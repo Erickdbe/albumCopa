@@ -389,8 +389,8 @@ function createRoomsModule(io) {
       });
     }
     if (event.type === "tornado" && event.phase === "active") {
-      const tornadoX = -70 + event.progress * 140;
-      const tornadoZ = Math.sin(event.progress * Math.PI * 3) * 30;
+      const tornadoX = -108 + event.progress * 216;
+      const tornadoZ = Math.sin(event.progress * Math.PI * 3) * 48;
       room.players.forEach((player) => {
         if (!player.alive || now - player.lastWorldForceAt < 1400) return;
         const distance = Math.hypot(player.x - tornadoX, player.z - tornadoZ);
@@ -536,8 +536,8 @@ function createRoomsModule(io) {
         vehicle.x = Math.max(-half + 3, Math.min(half - 3, vehicle.x));
         vehicle.z = Math.max(-half + 3, Math.min(half - 3, vehicle.z));
       }
-      if (vehicle.type === "jetski" && room.settings.mapId === "praia" && vehicle.z < 29) {
-        vehicle.z = 29;
+      if (vehicle.type === "jetski" && room.settings.mapId === "praia" && vehicle.z < 39) {
+        vehicle.z = 39;
         vehicle.speed = Math.max(0, vehicle.speed * 0.45);
       }
       if (driver) {

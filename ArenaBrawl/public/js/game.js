@@ -456,7 +456,7 @@ function animationForAvatar(avatar) {
 }
 
 function vehicleAnimationForType(type) {
-  if (type === "bike" || type === "moto") return "driveBike";
+  if (type === "bike" || type === "moto" || type === "motorcycle") return "driveBike";
   if (type === "plane" || type === "helicopter") return "drivePlane";
   if (type === "jetski") return "driveJetski";
   return "drive";

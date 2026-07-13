@@ -121,6 +121,53 @@ function firstClip(byName, names) {
   return null;
 }
 
+function clipForFpsCharacter(sourceClip, characterId, targetRoot = null) {
+  if (!sourceClip) return null;
+  if (targetRoot) {
+    const nodeNames = new Set();
+    targetRoot.traverse((object) => {
+      if (object.name) nodeNames.add(object.name);
+    });
+    const tracks = sourceClip.tracks
+      .filter((track) => nodeNames.has(track.name.split(".")[0]))
+      .map((track) => track.clone());
+    if (tracks.length > 0) {
+      return new THREE.AnimationClip(`${sourceClip.name}_${characterId}`, sourceClip.duration, tracks);
+    }
+  }
+
+  const useSecondRigTracks = characterId === "fps_female";
+  const hasAutoSuffixedRigTracks = sourceClip.tracks.some((track) => /_\d+\./.test(track.name));
+  if (hasAutoSuffixedRigTracks) {
+    const tracks = sourceClip.tracks
+      .filter((track) => {
+        const nodeName = track.name.split(".")[0];
+        const isSuffixed = /_\d+$/.test(nodeName);
+        return useSecondRigTracks ? isSuffixed : !isSuffixed;
+      })
+      .map((track) => track.clone());
+    return new THREE.AnimationClip(`${sourceClip.name}_${characterId}`, sourceClip.duration, tracks);
+  }
+
+  const totals = new Map();
+  sourceClip.tracks.forEach((track) => {
+    totals.set(track.name, (totals.get(track.name) || 0) + 1);
+  });
+
+  const seen = new Map();
+  const tracks = [];
+  sourceClip.tracks.forEach((track) => {
+    const index = seen.get(track.name) || 0;
+    seen.set(track.name, index + 1);
+    const total = totals.get(track.name) || 1;
+    if (total === 1 || index === (useSecondRigTracks ? 1 : 0)) {
+      tracks.push(track.clone());
+    }
+  });
+
+  return new THREE.AnimationClip(`${sourceClip.name}_${characterId}`, sourceClip.duration, tracks);
+}
+
 function applyTeamTint(model, team) {
   const color = team === "red" ? new THREE.Color("#e05555") : new THREE.Color("#4d8fe0");
   model.traverse((child) => {
@@ -137,24 +184,36 @@ function applyTeamTint(model, team) {
 }
 
 function prepareFpsCharacterScene(sourceModel, characterId, team) {
-  const model = cloneSkeleton(sourceModel);
-  model.name = `${characterId}-character`;
   const isFemale = characterId === "fps_female";
   const selectedName = isFemale ? "Character_FemaleSoldier" : "Character_MaleSoldier";
-  const hiddenName = isFemale ? "Character_MaleSoldier" : "Character_FemaleSoldier";
-  const selectedRoot = model.getObjectByName(selectedName);
-  const hiddenRoot = model.getObjectByName(hiddenName);
-  if (hiddenRoot) hiddenRoot.visible = false;
-  if (selectedRoot) selectedRoot.visible = true;
+  const selectedSource = sourceModel.getObjectByName(selectedName) || sourceModel;
+  const selectedRoot = cloneSkeleton(selectedSource);
+  selectedRoot.visible = true;
+
+  const model = new THREE.Group();
+  model.name = `${characterId}-character`;
+  model.add(selectedRoot);
 
   model.updateMatrixWorld(true);
-  const bounds = selectedRoot ? new THREE.Box3().setFromObject(selectedRoot) : new THREE.Box3().setFromObject(model);
+  const bounds = new THREE.Box3().setFromObject(model);
   const size = bounds.getSize(new THREE.Vector3());
   const scale = size.y > 0 ? 1.82 / size.y : 1;
-  model.scale.multiplyScalar(scale);
-  model.position.y = -bounds.min.y * scale;
-  applyTeamTint(model, team);
-  return model;
+  model.scale.setScalar(scale);
+  model.updateMatrixWorld(true);
+
+  const scaledBounds = new THREE.Box3().setFromObject(model);
+  model.position.x -= (scaledBounds.min.x + scaledBounds.max.x) / 2;
+  model.position.y -= scaledBounds.min.y;
+  model.position.z -= (scaledBounds.min.z + scaledBounds.max.z) / 2;
+
+  // Blender exports the soldier facing the opposite direction from Arena Brawl's avatar yaw.
+  // Keep this as an outer transform so animation tracks cannot overwrite it.
+  const facingGroup = new THREE.Group();
+  facingGroup.name = `${characterId}-character-facing`;
+  facingGroup.rotation.y = Math.PI;
+  facingGroup.add(model);
+  applyTeamTint(facingGroup, team);
+  return facingGroup;
 }
 
 function attachWeaponToFpsSocket(avatar, model, characterId) {
@@ -204,7 +263,7 @@ async function attachFpsCharacter(avatar, characterId) {
   };
   const actions = {};
   Object.entries(aliases).forEach(([name, clipNames]) => {
-    const clip = firstClip(byName, clipNames) || byName.get("Idle");
+    const clip = clipForFpsCharacter(firstClip(byName, clipNames) || byName.get("Idle"), characterId, model);
     if (!clip) return;
     const action = mixer.clipAction(clip);
     if (name === "death") {

@@ -113,6 +113,14 @@ function animationClipMap(animations) {
   return new Map(animations.map((clip) => [clip.name, clip]));
 }
 
+function firstClip(byName, names) {
+  for (const name of names) {
+    const clip = byName.get(name);
+    if (clip) return clip;
+  }
+  return null;
+}
+
 function applyTeamTint(model, team) {
   const color = team === "red" ? new THREE.Color("#e05555") : new THREE.Color("#4d8fe0");
   model.traverse((child) => {
@@ -177,18 +185,26 @@ async function attachFpsCharacter(avatar, characterId) {
   const mixer = new THREE.AnimationMixer(model);
   const byName = animationClipMap(animations);
   const aliases = {
-    idle: "Idle",
-    walk: "Walk",
-    run: "Run",
-    jump: "Jump",
-    drive: "DriveCar",
-    crouch: "AimIdle",
-    death: "Death",
-    dance: "Dance01"
+    idle: ["Idle"],
+    walk: ["Walk", "AimWalk"],
+    run: ["Sprint", "Run"],
+    jump: ["JumpStart", "JumpLoop", "Jump"],
+    fall: ["Fall", "JumpLoop", "JumpStart"],
+    land: ["Land", "Idle"],
+    crouch: ["CrouchIdle", "AimIdle"],
+    crouchWalk: ["CrouchWalk", "CrouchIdle", "AimWalk"],
+    drive: ["DriveCar"],
+    driveBike: ["RideBike", "DriveCar"],
+    drivePlane: ["PilotPlane", "DriveCar"],
+    driveJetski: ["DriveJetSki", "DriveCar"],
+    death: ["Death"],
+    dance: ["Dance01"],
+    dance_fast: ["Dance02", "Dance01"],
+    dance_slow: ["Dance03", "Dance01"]
   };
   const actions = {};
-  Object.entries(aliases).forEach(([name, clipName]) => {
-    const clip = byName.get(clipName) || byName.get("Idle");
+  Object.entries(aliases).forEach(([name, clipNames]) => {
+    const clip = firstClip(byName, clipNames) || byName.get("Idle");
     if (!clip) return;
     const action = mixer.clipAction(clip);
     if (name === "death") {
@@ -196,7 +212,7 @@ async function attachFpsCharacter(avatar, characterId) {
       action.clampWhenFinished = true;
       action.timeScale = 1.35;
     }
-    if (name === "dance") {
+    if (name.startsWith("dance")) {
       action.setLoop(THREE.LoopRepeat, Infinity);
     }
     actions[name] = action;
@@ -328,7 +344,11 @@ export function setCharacterAnimation(avatar, name, immediate = false, speed = n
   if (avatar.fpsCharacter && name === "walk") defaultSpeed = 1.12;
   if (avatar.fpsCharacter && name === "run") defaultSpeed = 1.08;
   if (avatar.fpsCharacter && name === "jump") defaultSpeed = 1.25;
+  if (avatar.fpsCharacter && name === "fall") defaultSpeed = 1;
+  if (avatar.fpsCharacter && name === "land") defaultSpeed = 1.2;
+  if (avatar.fpsCharacter && name === "crouchWalk") defaultSpeed = 0.95;
   if (avatar.fpsCharacter && name === "drive") defaultSpeed = 1;
+  if (avatar.fpsCharacter && (name === "driveBike" || name === "drivePlane" || name === "driveJetski")) defaultSpeed = 1;
   if (avatar.fpsCharacter && name === "death") defaultSpeed = 1.35;
   const effectiveSpeed = Number.isFinite(Number(speed)) ? Number(speed) : defaultSpeed;
   next.setEffectiveTimeScale(effectiveSpeed);

@@ -22,8 +22,8 @@ const WORLD_TICK_MS = 50;
 const WORLD_EVENT_TIME_SCALE = Math.max(0.02, Number(process.env.ARENA_EVENT_TIME_SCALE) || 1);
 const EMOTES = {
   dance: { animation: "dance", speed: 1, durationMs: 6200 },
-  dance_fast: { animation: "dance", speed: 1.35, durationMs: 4800 },
-  dance_slow: { animation: "dance", speed: 0.72, durationMs: 7600 }
+  dance_fast: { animation: "dance_fast", speed: 1.35, durationMs: 4800 },
+  dance_slow: { animation: "dance_slow", speed: 0.72, durationMs: 7600 }
 };
 
 function normalizeClassId(value) {

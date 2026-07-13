@@ -22,9 +22,9 @@ const JUMP_HEIGHT_BASE = 1.5; // altura de pulo de referencia (multiplicada por 
 const DEFAULT_FOV = 78;
 const LADDER_SPEED = 4.8;
 const DANCE_OPTIONS = {
-  dance: { label: "Passinho", speed: 1 },
-  dance_fast: { label: "Energia", speed: 1.35 },
-  dance_slow: { label: "Flow", speed: 0.72 }
+  dance: { label: "Passinho", speed: 1, animation: "dance" },
+  dance_fast: { label: "Energia", speed: 1.35, animation: "dance_fast" },
+  dance_slow: { label: "Flow", speed: 0.72, animation: "dance_slow" }
 };
 
 let scene, camera, renderer, composer, controls, clock, raycaster;
@@ -84,6 +84,9 @@ const local = {
   pendingFallDamage: 0,
   lastVehicleShotAt: 0,
   emoteActive: false,
+  emoteUntil: 0,
+  emoteSpeed: 1,
+  emoteAnimation: "dance",
   climbing: false,
   moving: false,
   sprinting: false,
@@ -442,13 +445,21 @@ function characterIdForPlayer(player) {
 
 function animationForAvatar(avatar) {
   if (!avatar.alive) return "death";
-  if (avatar.inVehicle) return "drive";
-  if (avatar.emoteUntil > performance.now() && !avatar.moving && !avatar.jumping) return "dance";
+  if (avatar.inVehicle) return avatar.vehicleAnimation || "drive";
+  if (avatar.emoteUntil > performance.now() && !avatar.moving && !avatar.jumping) return avatar.emoteAnimation || "dance";
+  if (avatar.crouching && avatar.moving) return "crouchWalk";
   if (avatar.crouching) return "crouch";
   if (avatar.jumping) return "jump";
   if (avatar.sprinting) return "run";
   if (avatar.moving) return "walk";
   return "idle";
+}
+
+function vehicleAnimationForType(type) {
+  if (type === "bike" || type === "moto") return "driveBike";
+  if (type === "plane" || type === "helicopter") return "drivePlane";
+  if (type === "jetski") return "driveJetski";
+  return "drive";
 }
 
 function buildAvatar(p) {
@@ -537,7 +548,8 @@ function buildAvatar(p) {
     alive: p.alive !== false,
     moving: Boolean(p.moving), sprinting: Boolean(p.sprinting), jumping: Boolean(p.jumping), crouching: Boolean(p.crouching),
     model: null, mixer: null, actions: null, animationName: null, desiredAnimation: "idle",
-    characterId: characterIdForPlayer(p), emoteUntil: 0, emoteSpeed: 1, inVehicle: Boolean(p.vehicleId),
+    characterId: characterIdForPlayer(p), emoteUntil: 0, emoteSpeed: 1, emoteAnimation: "dance",
+    inVehicle: Boolean(p.vehicleId), vehicleAnimation: "drive",
     targetPosition: new THREE.Vector3(p.x || 0, p.y || 0, p.z || 0),
     targetYaw: Number.isFinite(Number(p.yaw)) ? Number(p.yaw) : 0,
     hasNetworkTarget: false
@@ -593,9 +605,12 @@ function updateLocalViewAvatar(delta) {
   localViewAvatar.jumping = local.jumping;
   localViewAvatar.crouching = local.crouching;
   localViewAvatar.inVehicle = false;
+  localViewAvatar.emoteUntil = local.emoteActive ? local.emoteUntil : 0;
+  localViewAvatar.emoteSpeed = local.emoteSpeed || 1;
+  localViewAvatar.emoteAnimation = local.emoteAnimation || "dance";
   if (localViewAvatar.mixer) {
     const animation = animationForAvatar(localViewAvatar);
-    localViewAvatar.setAnimation(animation);
+    localViewAvatar.setAnimation(animation, false, animation.startsWith("dance") ? localViewAvatar.emoteSpeed : null);
     localViewAvatar.mixer.update(delta);
   }
 }
@@ -737,10 +752,11 @@ function updateVehiclePresentation(delta) {
       driverAvatar.root.rotation.z = (entry.state.roll || 0) * 0.35;
       driverAvatar.root.visible = true;
       driverAvatar.inVehicle = true;
+      driverAvatar.vehicleAnimation = vehicleAnimationForType(entry.target.type);
       driverAvatar.moving = false;
       driverAvatar.jumping = false;
       driverAvatar.emoteUntil = 0;
-      driverAvatar.setAnimation("drive");
+      driverAvatar.setAnimation(driverAvatar.vehicleAnimation);
     }
 
     if (entry.target.destroyed && !entry.destroyedStyled) {
@@ -917,6 +933,9 @@ function selectDance(emote) {
 function stopLocalEmote() {
   if (!local.emoteActive || !socket) return;
   local.emoteActive = false;
+  local.emoteUntil = 0;
+  local.emoteSpeed = 1;
+  local.emoteAnimation = "dance";
   socket.emit("match:emote-stop");
 }
 
@@ -1607,7 +1626,7 @@ function animateAvatars(delta) {
     }
     if (avatar.mixer) {
       const animation = animationForAvatar(avatar);
-      avatar.setAnimation(animation, false, animation === "dance" ? avatar.emoteSpeed : null);
+      avatar.setAnimation(animation, false, animation.startsWith("dance") ? avatar.emoteSpeed : null);
       avatar.mixer.update(delta);
       return;
     }
@@ -1864,6 +1883,9 @@ export function attachSocket(activeSocket) {
     local.chargeStartedAt = 0;
     local.vehicleId = null;
     local.emoteActive = false;
+    local.emoteUntil = 0;
+    local.emoteSpeed = 1;
+    local.emoteAnimation = "dance";
     local.climbing = false;
     local.moving = false;
     local.sprinting = false;
@@ -1913,6 +1935,9 @@ export function attachSocket(activeSocket) {
     localMoveVelocity.set(0, 0, 0);
     localMoveTarget.set(0, 0, 0);
     local.emoteActive = false;
+    local.emoteUntil = 0;
+    local.emoteSpeed = 1;
+    local.emoteAnimation = "dance";
     local.moving = false;
     local.sprinting = false;
     local.crouching = false;
@@ -1989,9 +2014,10 @@ export function attachSocket(activeSocket) {
     if (avatar.moving || avatar.jumping) {
       avatar.emoteUntil = 0;
       avatar.emoteSpeed = 1;
+      avatar.emoteAnimation = "dance";
     }
     const animation = animationForAvatar(avatar);
-    avatar.setAnimation(animation, false, animation === "dance" ? avatar.emoteSpeed : null);
+    avatar.setAnimation(animation, false, animation.startsWith("dance") ? avatar.emoteSpeed : null);
   });
 
   socket.on("match:shot-fired", ({ socketId, weaponId, origin, direction, ballistics }) => {
@@ -2032,6 +2058,9 @@ export function attachSocket(activeSocket) {
       thirdPersonCameraReady = false;
       local.mouseDown = false;
       local.emoteActive = false;
+      local.emoteUntil = 0;
+      local.emoteSpeed = 1;
+      local.emoteAnimation = "dance";
       local.moving = false;
       local.sprinting = false;
       local.crouching = false;
@@ -2057,6 +2086,7 @@ export function attachSocket(activeSocket) {
         a.moving = false;
         a.emoteUntil = 0;
         a.emoteSpeed = 1;
+        a.emoteAnimation = "dance";
         a.setAnimation("death", true);
       }
     }
@@ -2075,6 +2105,9 @@ export function attachSocket(activeSocket) {
       local.vehicleId = null;
       local.mouseDown = false;
       local.emoteActive = false;
+      local.emoteUntil = 0;
+      local.emoteSpeed = 1;
+      local.emoteAnimation = "dance";
       local.climbing = false;
       local.moving = false;
       local.sprinting = false;
@@ -2120,6 +2153,8 @@ export function attachSocket(activeSocket) {
         a.jumping = false;
         a.crouching = false;
         a.emoteUntil = 0;
+        a.emoteSpeed = 1;
+        a.emoteAnimation = "dance";
         a.setAnimation("idle", true);
       }
     }
@@ -2136,6 +2171,9 @@ export function attachSocket(activeSocket) {
     if (!DANCE_OPTIONS[emote]) return;
     if (socketId === selfId) {
       local.emoteActive = true;
+      local.emoteUntil = performance.now() + Math.max(1000, Number(durationMs) || 5200);
+      local.emoteSpeed = Number(speed) || DANCE_OPTIONS[emote].speed || 1;
+      local.emoteAnimation = animation || DANCE_OPTIONS[emote].animation || "dance";
       return;
     }
     const avatar = remotePlayers.get(socketId);
@@ -2143,18 +2181,23 @@ export function attachSocket(activeSocket) {
     avatar.moving = false;
     avatar.emoteUntil = performance.now() + Math.max(1000, Number(durationMs) || 5200);
     avatar.emoteSpeed = Number(speed) || 1;
+    avatar.emoteAnimation = animation || DANCE_OPTIONS[emote].animation || "dance";
     avatar.setAnimation(animation || "dance", true, avatar.emoteSpeed);
   });
 
   socket.on("match:emote-stop", ({ socketId }) => {
     if (socketId === selfId) {
       local.emoteActive = false;
+      local.emoteUntil = 0;
+      local.emoteSpeed = 1;
+      local.emoteAnimation = "dance";
       return;
     }
     const avatar = remotePlayers.get(socketId);
     if (!avatar) return;
     avatar.emoteUntil = 0;
     avatar.emoteSpeed = 1;
+    avatar.emoteAnimation = "dance";
     avatar.setAnimation(animationForAvatar(avatar), true);
   });
   socket.on("match:ability-state", ({ cooldownUntil }) => {

@@ -127,7 +127,7 @@ el("maxPlayersRange").addEventListener("input", (e) => { el("maxPlayersLabel").t
 el("speedRange").addEventListener("input", (e) => { el("speedLabel").textContent = `${Math.round(e.target.value * 100)}%`; });
 
 el("createRoomBtn").addEventListener("click", () => {
-  socket.emit("room:create", {
+  socket.emit("arena-brawl:open", {
     username: state.username,
     settings: readSettingsFromForm(),
     classId: state.classId,
@@ -170,15 +170,7 @@ socket.on("connect", () => {
       classId: state.classId,
       secondaryId: state.secondaryId
     });
-    return;
   }
-
-  socket.emit("arena-brawl:open", {
-    username: state.username,
-    settings: state.settings,
-    classId: state.classId,
-    secondaryId: state.secondaryId
-  });
 });
 
 /* ── Tela de sala ───────────────────────────────────────────────────── */

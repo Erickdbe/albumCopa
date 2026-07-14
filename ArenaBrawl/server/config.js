@@ -177,14 +177,14 @@ const MAP_SPAWNS = {
   },
   floresta: {
     ffa: [
-      { x: -112, y: 0, z: -104, yaw: 0.78 }, { x: 112, y: 0, z: -104, yaw: -0.78 },
-      { x: -118, y: 0, z: 100, yaw: 2.35 }, { x: 118, y: 0, z: 100, yaw: -2.35 },
-      { x: 0, y: 0, z: -134, yaw: 0 }, { x: 0, y: 0, z: 132, yaw: Math.PI },
-      { x: -142, y: 0, z: 0, yaw: Math.PI / 2 }, { x: 142, y: 0, z: 0, yaw: -Math.PI / 2 }
+      { x: -54, y: 0, z: -78, yaw: 0.62 }, { x: 54, y: 0, z: 78, yaw: -2.52 },
+      { x: -76, y: 0, z: 34, yaw: 1.35 }, { x: 76, y: 0, z: -34, yaw: -1.8 },
+      { x: 0, y: 0, z: -106, yaw: 0 }, { x: 0, y: 0, z: 106, yaw: Math.PI },
+      { x: -102, y: 0, z: 0, yaw: Math.PI / 2 }, { x: 102, y: 0, z: 0, yaw: -Math.PI / 2 }
     ],
     teams: {
-      red: [{ x: -116, y: 0, z: -104, yaw: 0.78 }, { x: -106, y: 0, z: -78, yaw: 0.6 }, { x: -76, y: 0, z: -118, yaw: 1 }, { x: -142, y: 0, z: 0, yaw: Math.PI / 2 }],
-      blue: [{ x: 116, y: 0, z: 100, yaw: -2.35 }, { x: 106, y: 0, z: 74, yaw: -2.6 }, { x: 76, y: 0, z: 118, yaw: -2 }, { x: 142, y: 0, z: 0, yaw: -Math.PI / 2 }]
+      red: [{ x: -64, y: 0, z: -72, yaw: 0.7 }, { x: -84, y: 0, z: -28, yaw: 1.2 }, { x: -38, y: 0, z: -92, yaw: 0.35 }, { x: -96, y: 0, z: 12, yaw: Math.PI / 2 }],
+      blue: [{ x: 64, y: 0, z: 72, yaw: -2.45 }, { x: 84, y: 0, z: 28, yaw: -1.95 }, { x: 38, y: 0, z: 92, yaw: -2.8 }, { x: 96, y: 0, z: -12, yaw: -Math.PI / 2 }]
     }
   }
 };

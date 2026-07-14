@@ -361,7 +361,8 @@ function createRoomsModule(io) {
 
   function worldTimeForRoom(room, now) {
     const lengthMs = room.settings.mapId === "cidade" ? 210000 : room.settings.mapId === "floresta" ? 240000 : 195000;
-    const progress = ((now - room.startedAt) % lengthMs) / lengthMs;
+    const rawProgress = ((now - room.startedAt) % lengthMs) / lengthMs;
+    const progress = (rawProgress + 0.44) % 1;
     const sun = Math.sin(progress * Math.PI * 2 - Math.PI * 0.42) * 0.5 + 0.5;
     const moon = 1 - sun;
     const phase = sun > 0.72 ? "day" : sun > 0.38 ? (progress < 0.55 ? "dawn" : "dusk") : "night";

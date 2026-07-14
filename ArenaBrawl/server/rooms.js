@@ -121,6 +121,7 @@ function createRoomsModule(io) {
       team: null,
       x: 0, y: 0, z: 0, yaw: 0, pitch: 0,
       moving: false, sprinting: false, jumping: false, crouching: false,
+      moveForward: 0, moveStrafe: 0,
       health: 100,
       alive: true,
       kills: 0,
@@ -934,13 +935,16 @@ function createRoomsModule(io) {
       player.sprinting = Boolean(state.sprinting);
       player.jumping = Boolean(state.jumping);
       player.crouching = Boolean(state.crouching);
+      player.moveForward = Math.max(-1, Math.min(1, num(state.moveForward, 0)));
+      player.moveStrafe = Math.max(-1, Math.min(1, num(state.moveStrafe, 0)));
       if ((player.moving || player.jumping) && player.emoteId) {
         player.emoteId = null;
         io.to(room.roomId).emit("match:emote-stop", { socketId: socket.id });
       }
       socket.to(room.roomId).volatile.emit("match:player-move", {
         socketId: socket.id, x: player.x, y: player.y, z: player.z, yaw: player.yaw, pitch: player.pitch,
-        moving: player.moving, sprinting: player.sprinting, jumping: player.jumping, crouching: player.crouching
+        moving: player.moving, sprinting: player.sprinting, jumping: player.jumping, crouching: player.crouching,
+        moveForward: player.moveForward, moveStrafe: player.moveStrafe
       });
     });
 
@@ -1037,6 +1041,12 @@ function createRoomsModule(io) {
       const weapon = weaponFor(player, slot === "secondary" ? "secondary" : "primary");
       if (!weapon || weapon.kind === "melee") return;
       player.reloadUntil[slot === "secondary" ? "secondary" : "primary"] = Date.now() + weapon.reloadMs;
+      socket.to(room.roomId).emit("match:reload-started", {
+        socketId: socket.id,
+        weaponId: weapon.id,
+        slot: slot === "secondary" ? "secondary" : "primary",
+        durationMs: weapon.reloadMs
+      });
     });
 
     socket.on("match:ability", () => {

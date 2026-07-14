@@ -4,7 +4,12 @@ import { BloomEffect, EffectComposer, EffectPass, RenderPass, VignetteEffect } f
 import { buildMap } from "./maps.js";
 import { buildWeaponModel, setBowChargeVisual } from "./weapon-models.js";
 import { buildVehicleModel, createCannonProjectile, createExplosion } from "./vehicle-models.js";
-import { attachAnimatedCharacter, setCharacterAnimation } from "./character-model.js";
+import {
+  attachAnimatedCharacter,
+  playCharacterAction,
+  playCharacterWeaponAction,
+  setCharacterAnimation
+} from "./character-model.js";
 import { attachMeshyModel } from "./meshy-assets.js";
 import {
   unlockAudio, playWeaponSound, playImpactSound, playExplosionSound, playReloadSound,
@@ -89,6 +94,8 @@ const local = {
   emoteAnimation: "dance",
   climbing: false,
   moving: false,
+  moveForward: 0,
+  moveStrafe: 0,
   sprinting: false,
   crouching: false,
   jumping: false
@@ -444,6 +451,19 @@ function characterIdForPlayer(player) {
   return hash % 2 === 0 ? "fps_male" : "fps_female";
 }
 
+function directionalMoveAnimation(avatar, prefix) {
+  const forward = Math.sign(Number(avatar.moveForward) || 0);
+  const strafe = Math.sign(Number(avatar.moveStrafe) || 0);
+  if (forward > 0 && strafe < 0) return `${prefix}_forward_left`;
+  if (forward > 0 && strafe > 0) return `${prefix}_forward_right`;
+  if (forward < 0 && strafe < 0) return `${prefix}_back_left`;
+  if (forward < 0 && strafe > 0) return `${prefix}_back_right`;
+  if (forward < 0) return `${prefix}_back`;
+  if (strafe < 0) return `${prefix}_left`;
+  if (strafe > 0) return `${prefix}_right`;
+  return `${prefix}_forward`;
+}
+
 function animationForAvatar(avatar) {
   if (!avatar.alive) return "death";
   if (avatar.inVehicle) return avatar.vehicleAnimation || "drive";
@@ -451,8 +471,8 @@ function animationForAvatar(avatar) {
   if (avatar.crouching && avatar.moving) return "crouchWalk";
   if (avatar.crouching) return "crouch";
   if (avatar.jumping) return "jump";
-  if (avatar.sprinting) return "run";
-  if (avatar.moving) return "walk";
+  if (avatar.sprinting) return directionalMoveAnimation(avatar, "run");
+  if (avatar.moving) return directionalMoveAnimation(avatar, "walk");
   return "idle";
 }
 
@@ -548,6 +568,7 @@ function buildAvatar(p) {
     username: p.username, classId: p.classId, kills: p.kills || 0, deaths: p.deaths || 0, team: p.team,
     alive: p.alive !== false,
     moving: Boolean(p.moving), sprinting: Boolean(p.sprinting), jumping: Boolean(p.jumping), crouching: Boolean(p.crouching),
+    moveForward: Number(p.moveForward) || 0, moveStrafe: Number(p.moveStrafe) || 0,
     model: null, mixer: null, actions: null, animationName: null, desiredAnimation: "idle",
     characterId: characterIdForPlayer(p), emoteUntil: 0, emoteSpeed: 1, emoteAnimation: "dance",
     inVehicle: Boolean(p.vehicleId), vehicleAnimation: "drive",
@@ -605,6 +626,8 @@ function updateLocalViewAvatar(delta) {
   localViewAvatar.sprinting = local.sprinting;
   localViewAvatar.jumping = local.jumping;
   localViewAvatar.crouching = local.crouching;
+  localViewAvatar.moveForward = local.moveForward;
+  localViewAvatar.moveStrafe = local.moveStrafe;
   localViewAvatar.inVehicle = false;
   localViewAvatar.emoteUntil = local.emoteActive ? local.emoteUntil : 0;
   localViewAvatar.emoteSpeed = local.emoteSpeed || 1;
@@ -637,6 +660,8 @@ function spawnOrUpdateRemote(p) {
   avatar.sprinting = Boolean(p.sprinting);
   avatar.jumping = Boolean(p.jumping);
   avatar.crouching = Boolean(p.crouching);
+  avatar.moveForward = Number(p.moveForward) || 0;
+  avatar.moveStrafe = Number(p.moveStrafe) || 0;
   avatar.setAnimation(animationForAvatar(avatar));
   avatar.kills = p.kills || 0;
   avatar.deaths = p.deaths || 0;
@@ -1228,6 +1253,7 @@ function shoot(charge = 1) {
   if (weapon.kind === "hitscan") playMuzzleFlash();
   playWeaponSound(weapon.id);
   recoilKick();
+  playCharacterWeaponAction(localViewAvatar, weapon.id, "shoot");
 
   if (weapon.kind === "projectile") fireProjectile(weapon, slot, charge);
   else fireHitscan(weapon, slot);
@@ -1267,6 +1293,7 @@ function reload() {
   playReloadSound();
   local.reloadUntil[local.slot] = performance.now() + weapon.reloadMs;
   socket.emit("match:reload", { slot: local.slot });
+  playCharacterWeaponAction(localViewAvatar, weapon.id, "reload");
   setTimeout(() => { local.ammo[local.slot] = weapon.magSize; updateAmmoHud(); }, weapon.reloadMs);
 }
 
@@ -1293,6 +1320,7 @@ function throwGrenade() {
   socket.emit("match:grenadeThrow", {
     grenadeId: id, x: origin.x, y: origin.y, z: origin.z, dirX: dir.x, dirY: dir.y, dirZ: dir.z
   });
+  playCharacterAction(localViewAvatar, "grenade");
 
   simulateGrenadeArc(id, origin, dir, true);
 }
@@ -1477,6 +1505,8 @@ function updateMovement(delta) {
 
   const forward = Number(Boolean(keys.KeyW)) - Number(Boolean(keys.KeyS));
   const strafe = Number(Boolean(keys.KeyD)) - Number(Boolean(keys.KeyA));
+  local.moveForward = forward;
+  local.moveStrafe = strafe;
   const ladder = findLadderAt(camera.position.x, camera.position.z, local.jumpOffset);
   const climbing = Boolean(ladder && forward !== 0 && !keys.Space);
   local.climbing = climbing;
@@ -1599,7 +1629,8 @@ function updateMovement(delta) {
     socket.emit("match:move", {
       x: camera.position.x, y: Math.max(0, local.jumpOffset), z: camera.position.z,
       yaw: _readEuler.y, pitch: _readEuler.x,
-      moving, sprinting, jumping: !local.onGround || climbing, crouching
+      moving, sprinting, jumping: !local.onGround || climbing, crouching,
+      moveForward: forward, moveStrafe: strafe
     });
   }
 }
@@ -2012,6 +2043,8 @@ export function attachSocket(activeSocket) {
     avatar.sprinting = Boolean(p.sprinting);
     avatar.jumping = Boolean(p.jumping);
     avatar.crouching = Boolean(p.crouching);
+    avatar.moveForward = Number(p.moveForward) || 0;
+    avatar.moveStrafe = Number(p.moveStrafe) || 0;
     if (avatar.moving || avatar.jumping) {
       avatar.emoteUntil = 0;
       avatar.emoteSpeed = 1;
@@ -2025,6 +2058,7 @@ export function attachSocket(activeSocket) {
     const avatar = remotePlayers.get(socketId);
     if (!avatar) return;
     avatar.revealedUntil = performance.now() + 1800;
+    playCharacterWeaponAction(avatar, weaponId, "shoot");
     const flash = new THREE.PointLight(0xffddaa, 5, 4);
     avatar.gun.add(flash);
     setTimeout(() => avatar.gun.remove(flash), 60);
@@ -2041,9 +2075,21 @@ export function attachSocket(activeSocket) {
     spawnBallisticVisual(trace, speed, profile.kind, true);
   });
 
+  socket.on("match:reload-started", ({ socketId, weaponId }) => {
+    const avatar = remotePlayers.get(socketId);
+    if (avatar) playCharacterWeaponAction(avatar, weaponId, "reload");
+  });
+
   socket.on("match:damage", ({ targetSocketId, health, byId, headshot }) => {
     if (byId === selfId && targetSocketId !== selfId) showHitMarker({ headshot: Boolean(headshot) });
-    if (targetSocketId === selfId) { local.health = health; updateHealthHud(); }
+    if (targetSocketId === selfId) {
+      local.health = health;
+      updateHealthHud();
+      playCharacterAction(localViewAvatar, "damage", 1.15);
+    } else {
+      const avatar = remotePlayers.get(targetSocketId);
+      if (avatar) playCharacterAction(avatar, "damage", 1.15);
+    }
   });
 
   socket.on("match:kill", ({ killerId, killerName, victimId, victimName, headshot }) => {
@@ -2212,6 +2258,8 @@ export function attachSocket(activeSocket) {
 
   socket.on("match:grenadeThrow", ({ socketId, grenadeId, x, y, z, dirX, dirY, dirZ }) => {
     if (socketId === selfId) return;
+    const avatar = remotePlayers.get(socketId);
+    if (avatar) playCharacterAction(avatar, "grenade");
     simulateGrenadeArc(grenadeId, new THREE.Vector3(x, y, z), new THREE.Vector3(dirX, dirY, dirZ), false, socketId);
   });
 

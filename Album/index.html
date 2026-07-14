@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Álbum Copa Online</title>
+  <title>Click Jogos</title>
   <!-- Socket.io client (carregado do próprio servidor) -->
   <script src="/socket.io/socket.io.js"></script>
   <style>
@@ -5664,6 +5664,213 @@
       58% { transform: scale(1.08) rotate(1deg); }
       100% { transform: scale(1) rotate(0); filter: brightness(1); }
     }
+
+    /* Central de jogos */
+    body {
+      background:
+        radial-gradient(circle at 18% 12%, rgba(54, 191, 250, 0.18), transparent 28rem),
+        radial-gradient(circle at 86% 18%, rgba(248, 196, 75, 0.20), transparent 24rem),
+        linear-gradient(135deg, #09131d 0%, #0d2427 46%, #121625 100%);
+      background-color: #09131d;
+    }
+
+    body::before {
+      inset: 18px;
+      border-radius: 22px;
+      border-color: rgba(255, 255, 255, 0.08);
+    }
+
+    .app {
+      width: min(1480px, 100%);
+      padding: 22px clamp(14px, 2vw, 28px) 28px;
+    }
+
+    .topbar {
+      grid-template-columns: minmax(0, 1fr);
+      align-items: start;
+    }
+
+    .brand h1 {
+      font-size: clamp(2rem, 4vw, 4rem);
+      text-transform: none;
+    }
+
+    .brand span {
+      color: rgba(255, 249, 232, 0.76);
+      font-size: 1rem;
+    }
+
+    .page-controls,
+    .progress-card,
+    .sidebar {
+      display: none;
+    }
+
+    .workspace {
+      grid-template-columns: minmax(0, 1fr);
+      min-height: auto;
+    }
+
+    .games-home {
+      min-height: 0;
+      overflow: visible;
+      padding: 0;
+      background: transparent;
+      border: 0;
+      box-shadow: none;
+    }
+
+    .games-hero {
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      gap: 22px;
+      margin-bottom: 18px;
+      padding: clamp(18px, 3vw, 30px);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 8px;
+      background:
+        linear-gradient(135deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.04)),
+        radial-gradient(circle at 80% 20%, rgba(216, 173, 63, 0.22), transparent 20rem);
+      box-shadow: 0 22px 70px rgba(0, 0, 0, 0.26);
+      color: #fff9e8;
+      backdrop-filter: blur(16px);
+    }
+
+    .games-kicker {
+      margin: 0 0 8px;
+      color: #f1c84f;
+      font-size: 0.78rem;
+      font-weight: 950;
+      text-transform: uppercase;
+    }
+
+    .games-hero h2 {
+      max-width: 780px;
+      margin: 0;
+      font-size: clamp(1.9rem, 4vw, 3.8rem);
+      line-height: 0.98;
+      letter-spacing: 0;
+    }
+
+    .games-hero p:not(.games-kicker) {
+      max-width: 760px;
+      margin: 12px 0 0;
+      color: rgba(255, 249, 232, 0.76);
+      font-size: clamp(0.96rem, 1.5vw, 1.08rem);
+      line-height: 1.55;
+    }
+
+    .games-lobby-btn,
+    .game-card button {
+      border: 0;
+      border-radius: 8px;
+      color: #101820;
+      background: #f1c84f;
+      cursor: pointer;
+      font-weight: 950;
+      box-shadow: 0 12px 28px rgba(241, 200, 79, 0.24);
+      transition: transform 160ms ease, filter 160ms ease;
+    }
+
+    .games-lobby-btn {
+      flex: 0 0 auto;
+      min-height: 46px;
+      padding: 0 18px;
+    }
+
+    .games-lobby-btn:hover,
+    .game-card button:hover {
+      transform: translateY(-1px);
+      filter: brightness(1.06);
+    }
+
+    .games-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+      gap: 14px;
+    }
+
+    .game-card {
+      min-width: 0;
+      overflow: hidden;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 8px;
+      background: rgba(10, 18, 28, 0.84);
+      color: #fff9e8;
+      box-shadow: 0 18px 46px rgba(0, 0, 0, 0.24);
+    }
+
+    .game-card.featured {
+      grid-column: span 2;
+    }
+
+    .game-card img {
+      display: block;
+      width: 100%;
+      aspect-ratio: 16 / 10;
+      object-fit: cover;
+      background: #17211f;
+    }
+
+    .game-card-body {
+      display: grid;
+      gap: 8px;
+      padding: 14px;
+    }
+
+    .game-card-body span {
+      color: #f1c84f;
+      font-size: 0.72rem;
+      font-weight: 950;
+      text-transform: uppercase;
+    }
+
+    .game-card h3 {
+      margin: 0;
+      font-size: 1.12rem;
+      line-height: 1.15;
+    }
+
+    .game-card p {
+      min-height: 42px;
+      margin: 0;
+      color: rgba(255, 249, 232, 0.70);
+      font-size: 0.86rem;
+      line-height: 1.38;
+    }
+
+    .game-card button {
+      min-height: 40px;
+      width: 100%;
+      margin-top: 4px;
+      padding: 0 12px;
+      font-size: 0.92rem;
+    }
+
+    .legacy-album-shell {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    @media (max-width: 760px) {
+      .games-hero {
+        align-items: stretch;
+        flex-direction: column;
+      }
+
+      .games-lobby-btn {
+        width: 100%;
+      }
+
+      .game-card.featured {
+        grid-column: span 1;
+      }
+    }
   </style>
 </head>
 <body>
@@ -5672,8 +5879,8 @@
       <div class="brand">
         <div class="crest" aria-hidden="true"></div>
         <div>
-          <h1>Álbum da Copa</h1>
-          <span>Figurinhas online</span>
+          <h1>Click Jogos</h1>
+          <span>Central multiplayer</span>
         </div>
       </div>
 
@@ -5855,8 +6062,199 @@
         </div>
       </aside>
 
-      <section class="album-area" aria-label="Páginas do álbum">
-        <div class="album-scroll">
+      <section class="album-area games-home" aria-label="Jogos disponiveis">
+        <div class="games-hero">
+          <div>
+            <p class="games-kicker">Escolha a partida</p>
+            <h2>Jogos online do Click Jogos</h2>
+            <p>Entre com sua conta, veja quem esta online e abra salas para jogar junto. Os convites continuam chegando para quem estiver logado.</p>
+          </div>
+          <button class="games-lobby-btn" id="openGamesLobby" type="button" onclick="openLobby()">Ver lobby online</button>
+        </div>
+
+        <div class="games-grid" id="gamesGrid">
+          <article class="game-card featured">
+            <img src="/assets/game-covers/arena-brawl.jpg" alt="" loading="eager">
+            <div class="game-card-body">
+              <span>FPS online</span>
+              <h3>Arena Brawl</h3>
+              <p>Arena 3D com armas, veiculos, lobby e partidas online.</p>
+              <button type="button" onclick="window.location.href='/ArenaBrawl/'">Jogar</button>
+            </div>
+          </article>
+
+          <article class="game-card featured">
+            <img src="/assets/game-covers/deck-heroes.jpg" alt="" loading="eager">
+            <div class="game-card-body">
+              <span>Deck battle</span>
+              <h3>Deck Heroes</h3>
+              <p>Arena 3D com personagens, torres, cartas e habilidades.</p>
+              <button type="button" onclick="window.location.href='/DeckHeroes/'">Jogar</button>
+            </div>
+          </article>
+
+          <article class="game-card">
+            <img src="/assets/game-covers/retro-arena.jpg" alt="" loading="lazy">
+            <div class="game-card-body">
+              <span>Retro FPS</span>
+              <h3>Retro Arena</h3>
+              <p>Tiro arcade para partidas rapidas no navegador.</p>
+              <button type="button" onclick="window.location.href='/RetroArena/'">Jogar</button>
+            </div>
+          </article>
+
+          <article class="game-card">
+            <img src="/assets/game-covers/card-wars.jpg" alt="" loading="lazy">
+            <div class="game-card-body">
+              <span>Cartas</span>
+              <h3>Card Wars</h3>
+              <p>Monte seu deck e desafie outros jogadores online.</p>
+              <button type="button" onclick="createCardWarsRoom()">Criar sala</button>
+            </div>
+          </article>
+
+          <article class="game-card">
+            <img src="/assets/game-covers/casa-sombria.jpg" alt="" loading="lazy">
+            <div class="game-card-body">
+              <span>Terror</span>
+              <h3>Casa Sombria</h3>
+              <p>Explore a casa, esconda-se e sobreviva ao pesadelo.</p>
+              <button type="button" onclick="window.location.href='/casaSombria/'">Jogar</button>
+            </div>
+          </article>
+
+          <article class="game-card">
+            <img src="/assets/game-covers/aventura-pvp.jpg" alt="" loading="lazy">
+            <div class="game-card-body">
+              <span>PVP pixel</span>
+              <h3>Aventura PVP</h3>
+              <p>Arena pixel online com combate direto entre jogadores.</p>
+              <button type="button" onclick="window.location.href='/pvpAventura/'">Jogar</button>
+            </div>
+          </article>
+
+          <article class="game-card">
+            <img src="/assets/game-covers/aventura-3d.jpg" alt="" loading="lazy">
+            <div class="game-card-body">
+              <span>Mundo 3D</span>
+              <h3>Aventura 3D</h3>
+              <p>Prototipo 3D com exploracao em mundo aberto.</p>
+              <button type="button" onclick="window.location.href='/aventura3d/'">Jogar</button>
+            </div>
+          </article>
+
+          <article class="game-card">
+            <img src="/assets/game-covers/arena-fps.jpg" alt="" loading="lazy">
+            <div class="game-card-body">
+              <span>FPS</span>
+              <h3>Arena FPS</h3>
+              <p>Combate em primeira pessoa com mira e movimentacao rapida.</p>
+              <button type="button" onclick="window.location.href='/FPSArena/'">Jogar</button>
+            </div>
+          </article>
+
+          <article class="game-card">
+            <img src="/assets/game-covers/cs16.jpg" alt="" loading="lazy">
+            <div class="game-card-body">
+              <span>Tatico</span>
+              <h3>CS 1.6 Browser</h3>
+              <p>Experiencia FPS tatica direto pelo navegador.</p>
+              <button type="button" onclick="openCs16Picker()">Abrir</button>
+            </div>
+          </article>
+
+          <article class="game-card">
+            <img src="/assets/game-covers/head-soccer.jpg" alt="" loading="lazy">
+            <div class="game-card-body">
+              <span>Futebol</span>
+              <h3>Head Soccer</h3>
+              <p>Futebol arcade online com aposta e convite.</p>
+              <button type="button" onclick="document.getElementById('openBetGame').click()">Jogar</button>
+            </div>
+          </article>
+
+          <article class="game-card">
+            <img src="/assets/game-covers/futebol-botao.jpg" alt="" loading="lazy">
+            <div class="game-card-body">
+              <span>Turnos</span>
+              <h3>Futebol de Botao</h3>
+              <p>Mire, carregue a forca e marque gols por turno.</p>
+              <button type="button" onclick="document.getElementById('openButtonSoccerGame').click()">Jogar</button>
+            </div>
+          </article>
+
+          <article class="game-card">
+            <img src="/assets/game-covers/slither.jpg" alt="" loading="lazy">
+            <div class="game-card-body">
+              <span>Arcade</span>
+              <h3>Slither</h3>
+              <p>Cobrinhas online com crescimento, turbo e espectador.</p>
+              <button type="button" onclick="document.getElementById('openSlitherGame').click()">Jogar</button>
+            </div>
+          </article>
+
+          <article class="game-card">
+            <img src="/assets/game-covers/canhao-arena.jpg" alt="" loading="lazy">
+            <div class="game-card-body">
+              <span>Artilharia</span>
+              <h3>Canhao Arena</h3>
+              <p>Duelo de angulo, forca e explosoes em arena online.</p>
+              <button type="button" onclick="document.getElementById('openArtilleryGame').click()">Jogar</button>
+            </div>
+          </article>
+
+          <article class="game-card">
+            <img src="/assets/game-covers/relic-rush.jpg" alt="" loading="lazy">
+            <div class="game-card-body">
+              <span>Coleta</span>
+              <h3>Relic Rush</h3>
+              <p>Corra pelos portais, pegue reliquias e dispute pontos.</p>
+              <button type="button" onclick="document.getElementById('openRelicGame').click()">Jogar</button>
+            </div>
+          </article>
+
+          <article class="game-card">
+            <img src="/assets/game-covers/pirate-bomb.jpg" alt="" loading="lazy">
+            <div class="game-card-body">
+              <span>Bombas</span>
+              <h3>Pirate Bomb</h3>
+              <p>Conves pirata com bombas, caos e rodadas rapidas.</p>
+              <button type="button" onclick="document.getElementById('openPirateGame').click()">Jogar</button>
+            </div>
+          </article>
+
+          <article class="game-card">
+            <img src="/assets/game-covers/mesa-21.jpg" alt="" loading="lazy">
+            <div class="game-card-body">
+              <span>Cartas</span>
+              <h3>Mesa 21</h3>
+              <p>Blackjack multiplayer com aposta entre jogadores.</p>
+              <button type="button" onclick="document.getElementById('openBlackjackGame').click()">Jogar</button>
+            </div>
+          </article>
+
+          <article class="game-card">
+            <img src="/assets/game-covers/corrida-cavalos.jpg" alt="" loading="lazy">
+            <div class="game-card-body">
+              <span>Corrida</span>
+              <h3>Corrida de Cavalos</h3>
+              <p>Escolha seu cavalo, aposte e torca ate a linha final.</p>
+              <button type="button" onclick="createHorseRoom()">Jogar</button>
+            </div>
+          </article>
+
+          <article class="game-card">
+            <img src="/assets/game-covers/crash.jpg" alt="" loading="lazy">
+            <div class="game-card-body">
+              <span>Risco</span>
+              <h3>Crash</h3>
+              <p>Acompanhe a subida e saia antes da queda.</p>
+              <button type="button" onclick="document.getElementById('openCrashGame').click()">Jogar</button>
+            </div>
+          </article>
+        </div>
+
+        <div class="album-scroll legacy-album-shell" aria-hidden="true">
           <div class="book" id="book">
             <article class="page left" id="leftPage"></article>
             <article class="page right" id="rightPage"></article>
@@ -5871,8 +6269,8 @@
   <!-- ── Modal Login / Registro ─────────────────────────────────────────── -->
   <div class="mp-overlay" id="authOverlay">
     <div class="mp-card">
-      <h2>🏆 Álbum da Copa — Online</h2>
-      <p class="mp-sub">Entre para salvar suas figurinhas e desafiar outros jogadores ao vivo.</p>
+      <h2>Click Jogos Online</h2>
+      <p class="mp-sub">Entre para ver jogadores online, receber convites e salvar seu progresso nas partidas.</p>
       <div class="mp-tabs">
         <button class="mp-tab active" id="tabLogin"  onclick="switchAuthTab('login')">Entrar</button>
         <button class="mp-tab"        id="tabReg"    onclick="switchAuthTab('register')">Criar conta</button>
@@ -14954,3 +15352,4 @@
   </script>
 </body>
 </html>
+

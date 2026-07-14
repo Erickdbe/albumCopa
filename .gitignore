@@ -60,6 +60,14 @@ ArenaBrawlUnity/UserSettings/
 ArenaBrawlUnity/obj/
 ArenaBrawlUnity/Build/
 
+# Click Jogos Unity project
+ClickJogos-EH/Library/
+ClickJogos-EH/Temp/
+ClickJogos-EH/Logs/
+ClickJogos-EH/UserSettings/
+ClickJogos-EH/obj/
+ClickJogos-EH/Build/
+
 # Local browser smoke-test profiles
 .browser-test/
 .chrome-casa-test/

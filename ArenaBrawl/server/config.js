@@ -73,7 +73,7 @@ const MAP_META = {
   floresta: { id: "floresta", name: "Floresta" }
 };
 
-const MAP_HALF_SIZES = { sketchbook: 190, praia: 128, cidade: 124, floresta: 136 };
+const MAP_HALF_SIZES = { sketchbook: 190, praia: 128, cidade: 124, floresta: 168 };
 const SKETCHBOOK_GROUND_Y = 5.35;
 const SKETCHBOOK_PLAYABLE_AREAS = [
   { minX: -74, maxX: 74, minZ: -58, maxZ: 53 },
@@ -96,9 +96,11 @@ const VEHICLE_SPAWNS = {
     { id: "city-quad-park", type: "quad", x: -72, y: 0, z: 42, yaw: Math.PI / 2 }
   ],
   floresta: [
-    { id: "forest-plane", type: "plane", x: 0, y: 7, z: 98, yaw: Math.PI },
-    { id: "forest-cannon", type: "cannon", x: -82, y: 0, z: 14, yaw: Math.PI / 2 },
-    { id: "forest-bike-trail", type: "motorcycle", x: 62, y: 0, z: -72, yaw: -0.35 }
+    { id: "forest-plane", type: "plane", x: 0, y: 7, z: 132, yaw: Math.PI },
+    { id: "forest-cannon-west", type: "cannon", x: -118, y: 0, z: -18, yaw: Math.PI / 2 },
+    { id: "forest-cannon-east", type: "cannon", x: 118, y: 0, z: 18, yaw: -Math.PI / 2 },
+    { id: "forest-bike-trail", type: "motorcycle", x: 64, y: 0, z: -110, yaw: -0.35 },
+    { id: "forest-quad-lodge", type: "quad", x: -58, y: 0, z: 92, yaw: 0.7 }
   ],
   praia: [
     { id: "beach-jetski-a", type: "jetski", x: -34, y: 0.2, z: 82, yaw: Math.PI },
@@ -175,14 +177,14 @@ const MAP_SPAWNS = {
   },
   floresta: {
     ffa: [
-      { x: -86, y: 0, z: -74, yaw: 0.78 }, { x: 86, y: 0, z: -74, yaw: -0.78 },
-      { x: -92, y: 0, z: 70, yaw: 2.35 }, { x: 92, y: 0, z: 70, yaw: -2.35 },
-      { x: 0, y: 0, z: -104, yaw: 0 }, { x: 0, y: 0, z: 98, yaw: Math.PI },
-      { x: -112, y: 0, z: 6, yaw: Math.PI / 2 }, { x: 112, y: 0, z: -6, yaw: -Math.PI / 2 }
+      { x: -112, y: 0, z: -104, yaw: 0.78 }, { x: 112, y: 0, z: -104, yaw: -0.78 },
+      { x: -118, y: 0, z: 100, yaw: 2.35 }, { x: 118, y: 0, z: 100, yaw: -2.35 },
+      { x: 0, y: 0, z: -134, yaw: 0 }, { x: 0, y: 0, z: 132, yaw: Math.PI },
+      { x: -142, y: 0, z: 0, yaw: Math.PI / 2 }, { x: 142, y: 0, z: 0, yaw: -Math.PI / 2 }
     ],
     teams: {
-      red: [{ x: -92, y: 0, z: -74, yaw: 0.78 }, { x: -76, y: 0, z: -52, yaw: 0.6 }, { x: -52, y: 0, z: -86, yaw: 1 }, { x: -112, y: 0, z: 6, yaw: Math.PI / 2 }],
-      blue: [{ x: 92, y: 0, z: 70, yaw: -2.35 }, { x: 76, y: 0, z: 50, yaw: -2.6 }, { x: 52, y: 0, z: 88, yaw: -2 }, { x: 112, y: 0, z: -6, yaw: -Math.PI / 2 }]
+      red: [{ x: -116, y: 0, z: -104, yaw: 0.78 }, { x: -106, y: 0, z: -78, yaw: 0.6 }, { x: -76, y: 0, z: -118, yaw: 1 }, { x: -142, y: 0, z: 0, yaw: Math.PI / 2 }],
+      blue: [{ x: 116, y: 0, z: 100, yaw: -2.35 }, { x: 106, y: 0, z: 74, yaw: -2.6 }, { x: 76, y: 0, z: 118, yaw: -2 }, { x: 142, y: 0, z: 0, yaw: -Math.PI / 2 }]
     }
   }
 };

@@ -67,7 +67,7 @@ export const MAP_META = {
 };
 export const MAP_ORDER = ["sketchbook", "praia", "cidade", "floresta"];
 
-export const MAP_HALF_SIZES = { sketchbook: 190, praia: 128, cidade: 124, floresta: 136 };
+export const MAP_HALF_SIZES = { sketchbook: 190, praia: 128, cidade: 124, floresta: 168 };
 export const SKETCHBOOK_GROUND_Y = 5.35;
 
 export const VEHICLE_SPAWNS = {
@@ -85,9 +85,11 @@ export const VEHICLE_SPAWNS = {
     { id: "city-quad-park", type: "quad", x: -72, y: 0, z: 42, yaw: Math.PI / 2 }
   ],
   floresta: [
-    { id: "forest-plane", type: "plane", x: 0, y: 7, z: 98, yaw: Math.PI },
-    { id: "forest-cannon", type: "cannon", x: -82, y: 0, z: 14, yaw: Math.PI / 2 },
-    { id: "forest-bike-trail", type: "motorcycle", x: 62, y: 0, z: -72, yaw: -0.35 }
+    { id: "forest-plane", type: "plane", x: 0, y: 7, z: 132, yaw: Math.PI },
+    { id: "forest-cannon-west", type: "cannon", x: -118, y: 0, z: -18, yaw: Math.PI / 2 },
+    { id: "forest-cannon-east", type: "cannon", x: 118, y: 0, z: 18, yaw: -Math.PI / 2 },
+    { id: "forest-bike-trail", type: "motorcycle", x: 64, y: 0, z: -110, yaw: -0.35 },
+    { id: "forest-quad-lodge", type: "quad", x: -58, y: 0, z: 92, yaw: 0.7 }
   ],
   praia: [
     { id: "beach-jetski-a", type: "jetski", x: -34, y: 0.2, z: 82, yaw: Math.PI },

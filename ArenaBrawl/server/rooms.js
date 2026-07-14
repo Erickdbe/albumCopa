@@ -389,8 +389,8 @@ function createRoomsModule(io) {
       });
     }
     if (event.type === "tornado" && event.phase === "active") {
-      const tornadoX = -108 + event.progress * 216;
-      const tornadoZ = Math.sin(event.progress * Math.PI * 3) * 48;
+      const tornadoX = -134 + event.progress * 268;
+      const tornadoZ = Math.sin(event.progress * Math.PI * 3) * 62;
       room.players.forEach((player) => {
         if (!player.alive || now - player.lastWorldForceAt < 1400) return;
         const distance = Math.hypot(player.x - tornadoX, player.z - tornadoZ);

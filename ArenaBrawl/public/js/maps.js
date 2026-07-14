@@ -235,6 +235,96 @@ function addMountain(world, x, z, radius, height, color = 0x53604d) {
   world.obstacles.push(collisionBox(x, z, radius * 1.25, radius * 1.25, height * 0.72, true));
 }
 
+function addForestTrail(world, x, z, w, d, rotation = 0, color = 0x7f6a42) {
+  const trail = addMesh(world, new THREE.PlaneGeometry(w, d), color, x, 0.012, z, {
+    rotX: -Math.PI / 2,
+    rotZ: rotation,
+    castShadow: false,
+    receiveShadow: true,
+    material: { roughness: 0.96 }
+  });
+  trail.renderOrder = -1;
+  return trail;
+}
+
+function addPineTree(world, x, z, scale = 1) {
+  const trunkHeight = 4.2 * scale;
+  const trunk = addMesh(world, new THREE.CylinderGeometry(0.45 * scale, 0.62 * scale, trunkHeight, 8), 0x674423, x, trunkHeight / 2, z);
+  const tiers = 3 + Math.floor(scale);
+  for (let i = 0; i < tiers; i++) {
+    addMesh(world, new THREE.ConeGeometry((2.9 - i * 0.35) * scale, 3.4 * scale, 8), i % 2 ? 0x2f713a : 0x276334,
+      x, trunkHeight + 0.7 * scale + i * 1.45 * scale, z, { rotY: (i * Math.PI) / 8 });
+  }
+  world.obstacles.push(collisionBox(x, z, 1.5 * scale, 1.5 * scale, trunkHeight + tiers * 1.35 * scale, true));
+  world.animated.trees.push({ trunk, crown: trunk, phase: (x * 0.11 + z * 0.09) % Math.PI });
+}
+
+function addForestCabin(world, x, z, rotation = 0, id = "") {
+  const prefix = id || `forest-cabin-${Math.round(x)}-${Math.round(z)}`;
+  const body = addSolidBox(world, x, z, 10, 5.2, 8, 0x9c6a3b, 0, { id: `${prefix}-body`, kind: "building" });
+  body.rotation.y = rotation;
+  const roof = addMesh(world, new THREE.ConeGeometry(7.4, 3.6, 4), 0x4b2d1c, x, 6.95, z, { rotY: rotation + Math.PI / 4 });
+  const core = world.destructibles.get(`${prefix}-body`);
+  if (core) core.linkedMeshes.push(roof);
+  addMesh(world, new THREE.BoxGeometry(1.9, 2.6, 0.16), 0x2d1f17, x + Math.sin(rotation) * 4.08, 1.45, z + Math.cos(rotation) * 4.08, {
+    rotY: rotation,
+    castShadow: false
+  });
+  [-2.7, 2.7].forEach((offset) => {
+    addMesh(world, new THREE.BoxGeometry(1.45, 1.15, 0.14), 0xffd77a,
+      x + Math.cos(rotation) * offset - Math.sin(rotation) * 4.12,
+      2.75,
+      z - Math.sin(rotation) * offset + Math.cos(rotation) * 4.12,
+      { rotY: rotation, castShadow: false, material: { emissive: 0x332000, roughness: 0.5 } });
+  });
+  addLadder(world, { x, z, w: 10, d: 8, height: 5.4, side: Math.cos(rotation) > 0 ? "west" : "east", color: 0x6d4a2f });
+}
+
+function addWatchTower(world, x, z, rotation = 0, id = "") {
+  const topY = 8.6;
+  const legGeometry = new THREE.CylinderGeometry(0.18, 0.28, topY, 7);
+  [-1, 1].forEach((sx) => [-1, 1].forEach((sz) => {
+    addMesh(world, legGeometry.clone(), 0x6b4a2d, x + sx * 2.4, topY / 2, z + sz * 2.4, { rotZ: sx * 0.06, rotX: sz * 0.06 });
+  }));
+  addPlatform(world, x, topY, z, 7.4, 7.4, 0x76502f);
+  addMesh(world, new THREE.ConeGeometry(5.6, 2.8, 4), 0x3f2a1a, x, topY + 2.0, z, { rotY: rotation + Math.PI / 4 });
+  addLadder(world, { x, z, w: 7.4, d: 7.4, height: topY, side: "south", color: 0x6d4a2f });
+  const obstacle = collisionBox(x, z, 4.4, 4.4, topY, true);
+  world.obstacles.push(obstacle);
+  if (id) registerDestructible(world, id, world.root.children[world.root.children.length - 1], "tower", obstacle);
+}
+
+function addFenceLine(world, x1, z1, x2, z2, count, color = 0x6f4b2d) {
+  const angle = Math.atan2(z2 - z1, x2 - x1);
+  for (let i = 0; i <= count; i++) {
+    const t = count ? i / count : 0;
+    const x = x1 + (x2 - x1) * t;
+    const z = z1 + (z2 - z1) * t;
+    addMesh(world, new THREE.BoxGeometry(3.4, 1.25, 0.18), color, x, 0.72, z, { rotY: -angle, castShadow: true });
+  }
+}
+
+function addForestRockCluster(world, x, z, scale = 1) {
+  const colors = [0x72766e, 0x5d655c, 0x83877f];
+  for (let i = 0; i < 4; i++) {
+    const angle = i * Math.PI * 0.55;
+    const distance = (i ? 1.5 : 0.1) * scale;
+    addMesh(world, new THREE.DodecahedronGeometry((1.2 + (i % 2) * 0.45) * scale, 0), colors[i % colors.length],
+      x + Math.cos(angle) * distance, 0.85 * scale, z + Math.sin(angle) * distance, { rotY: i * 0.4 });
+  }
+  world.obstacles.push(collisionBox(x, z, 4.4 * scale, 3.8 * scale, 2.5 * scale, true));
+}
+
+function addFallenLog(world, x, z, length = 8, rotation = 0) {
+  addMesh(world, new THREE.CylinderGeometry(0.7, 0.85, length, 9), 0x6b4426, x, 0.75, z, {
+    rotZ: Math.PI / 2,
+    rotY: rotation
+  });
+  const width = Math.abs(Math.cos(rotation)) * length + Math.abs(Math.sin(rotation)) * 1.8 + 1.4;
+  const depth = Math.abs(Math.sin(rotation)) * length + Math.abs(Math.cos(rotation)) * 1.8 + 1.4;
+  world.obstacles.push(collisionBox(x, z, width, depth, 1.55, true));
+}
+
 function addPalm(world, x, z, scale = 1) {
   const trunkHeight = 5.5 * scale;
   addMesh(world, new THREE.CylinderGeometry(0.32 * scale, 0.45 * scale, trunkHeight, 8), 0x8c5d2c, x, trunkHeight / 2, z, {
@@ -449,39 +539,91 @@ function buildFloresta(scene) {
   const world = createWorld("floresta", scene);
   const meta = MAP_META.floresta;
   scene.background = new THREE.Color(meta.sky);
-  scene.fog = new THREE.Fog(meta.sky, 95, 300);
-  addGround(world, 0xffffff, "./assets/textures/forest-grass.jpg", 24);
-  addBoundary(world, 0x283526);
+  scene.fog = new THREE.Fog(meta.sky, 108, 350);
+  addGround(world, 0xffffff, "./assets/textures/forest-grass.jpg", 20);
+  addBoundary(world, 0x243421);
 
-  const mountains=[[-112,-110,25,38],[-72,-123,24,34],[-32,-128,22,36],[12,-126,25,42],[55,-122,24,36],[96,-112,27,40],[118,-70,23,36],[123,-22,24,40],[120,28,25,38],[110,78,24,35],[72,118,26,39],[26,126,23,34],[-22,124,26,42],[-70,116,25,37],[-112,92,27,40],[-126,42,23,36],[-124,-8,25,39],[-120,-62,24,35]];
-  mountains.forEach(([x,z,r,h],i)=>addMountain(world,x,z,r,h,i%2?0x596653:0x4b5948));
+  // Forest floor: a readable set of trails, with a playable clearing in the middle.
+  addForestTrail(world, 0, 0, 230, 18, 0, 0x7d6642);
+  addForestTrail(world, 0, 0, 18, 230, 0, 0x7d6642);
+  addForestTrail(world, -48, -48, 150, 12, Math.PI / 4, 0x6f5d3e);
+  addForestTrail(world, 50, 50, 150, 12, Math.PI / 4, 0x6f5d3e);
+  addForestTrail(world, -50, 50, 128, 10, -Math.PI / 4, 0x74623e);
+  addForestTrail(world, 50, -50, 128, 10, -Math.PI / 4, 0x74623e);
+  addForestTrail(world, 0, 0, 42, 42, 0, 0x8b7449);
 
-  const reserved=[[0,0],[-58,18],[58,-18],[0,84],[-82,-54],[84,52]];
-  for(let gx=-112;gx<=112;gx+=13){
-    for(let gz=-106;gz<=106;gz+=12){
-      const x=gx+Math.sin(gz*0.31)*4,z=gz+Math.cos(gx*0.27)*4;
-      if(reserved.some(([rx,rz])=>Math.hypot(x-rx,z-rz)<16))continue;
-      addTree(world,x,z,0.68+((Math.abs(gx+gz)%5)*0.055),Math.abs(gx)>84||Math.abs(gz)>82);
+  // Mountains and hills frame the arena instead of cluttering the combat lanes.
+  const mountainRing = [
+    [-150,-148,30,48],[-98,-160,26,40],[-42,-164,25,38],[22,-162,31,52],[82,-156,28,42],[142,-138,34,50],
+    [160,-86,29,43],[164,-24,31,50],[158,40,28,41],[132,102,34,49],[76,150,30,45],[10,162,28,40],
+    [-56,156,32,50],[-118,126,29,42],[-156,72,33,48],[-164,10,27,40],[-158,-62,32,46]
+  ];
+  mountainRing.forEach(([x,z,r,h],i)=>addMountain(world,x,z,r,h,i%3===0?0x53624f:i%3===1?0x607057:0x475846));
+  [
+    [-116,-78,13,7],[-100,72,14,7],[-64,118,12,6],[62,-118,13,7],[116,-60,15,8],[108,82,13,7],
+    [-28,-128,12,6],[28,130,12,6],[-134,18,10,5],[136,-16,10,5]
+  ].forEach(([x,z,w,h],i)=>{
+    addMesh(world,new THREE.SphereGeometry(w,8,5),i%2?0x4d6b3f:0x557549,x,h*0.35,z,{rotY:i*0.3,material:{roughness:0.92}});
+    world.obstacles.push(collisionBox(x,z,w*1.15,w*1.05,h,true));
+  });
+
+  // Cabins and elevated points mirror each side, so the map feels fair in team modes.
+  addForestCabin(world, -66, -42, 0.45, "forest-red-cabin-a");
+  addForestCabin(world, 66, 42, Math.PI + 0.45, "forest-blue-cabin-a");
+  addForestCabin(world, -78, 48, -0.35, "forest-red-cabin-b");
+  addForestCabin(world, 78, -48, Math.PI - 0.35, "forest-blue-cabin-b");
+  addForestCabin(world, 0, -88, 0, "forest-south-lodge");
+  addForestCabin(world, 0, 88, Math.PI, "forest-north-lodge");
+  addWatchTower(world, -112, -22, Math.PI / 4);
+  addWatchTower(world, 112, 22, -Math.PI * 0.75);
+  addWatchTower(world, -34, 116, Math.PI);
+  addWatchTower(world, 34, -116, 0);
+
+  addTreeHouse(world, -102, -70, Math.PI / 4);
+  addTreeHouse(world, 102, 70, -Math.PI * 0.75);
+  addTreeHouse(world, -98, 78, -Math.PI / 3);
+  addTreeHouse(world, 98, -78, Math.PI * 0.66);
+
+  // Wooden bridges and ramps stitch the high positions into the central flow.
+  for(let i=-13;i<=13;i++) addPlatform(world,i*4.3,0.23,0+Math.sin(i*0.5)*0.6,4.15,2.25,0x6f4b2d);
+  for(let i=-11;i<=11;i++) addPlatform(world,0+Math.cos(i*0.4)*0.6,0.24,i*4.7,2.25,4.35,0x75502f);
+  for(let i=0;i<18;i++) addPlatform(world,-82+i*4.9,0.22,-76+i*8.7,3.8,2.1,0x68462a);
+  for(let i=0;i<18;i++) addPlatform(world,82-i*4.9,0.22,76-i*8.7,3.8,2.1,0x68462a);
+  addRamp(world, -42, -74, 15, 4.5, 3.8, "z", 0x75502f);
+  addRamp(world, 42, 74, 15, 4.5, 3.8, "z", 0x75502f);
+
+  addFenceLine(world,-86,-26,-28,-26,11);
+  addFenceLine(world,28,26,86,26,11);
+  addFenceLine(world,-30,26,-86,26,10,0x775433);
+  addFenceLine(world,30,-26,86,-26,10,0x775433);
+
+  // Tree density is heavy around the edges but leaves intentional sightlines on the trails.
+  const reserved = [[0,0],[-66,-42],[66,42],[-78,48],[78,-48],[0,-88],[0,88],[-112,-22],[112,22],[-34,116],[34,-116],[-102,-70],[102,70],[-98,78],[98,-78]];
+  for(let ring=0;ring<5;ring++){
+    const radius=48+ring*24;
+    const count=26+ring*10;
+    for(let i=0;i<count;i++){
+      const angle=i/count*Math.PI*2+ring*0.22;
+      const x=Math.cos(angle)*radius+Math.sin(i*1.71)*5;
+      const z=Math.sin(angle)*radius+Math.cos(i*1.37)*5;
+      if(Math.abs(x)<18||Math.abs(z)<18||reserved.some(([rx,rz])=>Math.hypot(x-rx,z-rz)<14))continue;
+      const scale=0.64+(i%5)*0.07+ring*0.02;
+      if(i%4===0)addPineTree(world,x,z,scale*1.18);
+      else addTree(world,x,z,scale,ring>=3||i%7===0);
     }
   }
-  [
-    [-88,-58,"unknown-a",11.5,0.2],[86,56,"unknown-b",11,-0.5],[-48,-82,"unknown-b",10.2,0.8],
-    [48,84,"unknown-a",12,-0.25],[-96,26,"unknown-a",10.6,0.55],[94,-38,"unknown-b",11.4,-0.8],
-    [-26,104,"unknown-a",10.8,0.35],[25,-104,"unknown-b",11.2,-0.45]
-  ].forEach(([x,z,asset,height,rotation])=>{
-    addMeshyLandmark(world,asset,x,z,{height,rotation,collision:[1.5,1.5,height*0.72]});
-  });
-  addMeshyLandmark(world,"unknown-c",0,-78,{height:7.2,rotation:0.18,collision:[7.5,7,7.2]});
-  addTreeHouse(world,-58,18,0);
-  addTreeHouse(world,58,-18,Math.PI);
-  addTreeHouse(world,3,78,-Math.PI/2);
-  addTreeHouse(world,-82,-54,Math.PI/3);
-  addTreeHouse(world,84,52,-Math.PI/4);
 
-  [[-28,-12],[28,12],[-14,36],[16,-40],[0,4],[-62,64],[66,-64],[-88,0],[88,0]].forEach(([x,z],i)=>addSolidBox(world,x,z,3+i%2,1.8,3+i%2,0x6f746e));
-  for(let i=0;i<19;i++)addPlatform(world,-30+i*3.4,0.2,-2+Math.sin(i)*1.2,3.4,2.1,0x68462a);
-  for(let i=0;i<16;i++)addPlatform(world,-82+i*4.2,0.18,-58+i*7.2,3.6,2.1,0x6d5430);
-  [[-42,48],[46,-48],[0,32],[-74,-18],[72,18],[-24,-74],[24,74]].forEach(([x,z],i)=>addFlowerPatch(world,x,z,3.2 + (i%3)*0.4,14));
+  [
+    [-48,86,1.1], [48,-86,1.1], [-92,-6,1.0], [92,6,1.0], [-16,-118,0.9], [16,118,0.9],
+    [-126,36,1.0], [126,-36,1.0], [-38,34,0.78], [38,-34,0.78]
+  ].forEach(([x,z,s])=>addForestRockCluster(world,x,z,s));
+  [
+    [-54,-8,8,0.25],[54,8,8,0.25],[-18,54,9,1.1],[18,-54,9,1.1],
+    [-118,-42,10,-0.45],[118,42,10,-0.45],[-70,104,8,0.75],[70,-104,8,0.75]
+  ].forEach(([x,z,l,r])=>addFallenLog(world,x,z,l,r));
+
+  [[-42,48],[46,-48],[0,32],[-74,-18],[72,18],[-24,-74],[24,74],[-116,58],[116,-58],[0,-34]].forEach(([x,z],i)=>addFlowerPatch(world,x,z,3.4 + (i%3)*0.4,16));
+  addMeshyLandmark(world,"unknown-c",0,-126,{height:6.6,rotation:0.18,collision:[8,7,6.6]});
 
   world.tornado = new THREE.Group();
   for(let i=0;i<9;i++){
@@ -628,7 +770,7 @@ function updateForest(world, elapsed, event) {
   if(!event||event.type!=="tornado"||event.phase!=="active"){world.tornado.visible=false;return;}
   world.tornado.visible=true;
   const p=Math.max(0,Math.min(1,event.progress||0));
-  world.tornado.position.set(-108+p*216,0,Math.sin(p*Math.PI*3)*48);
+  world.tornado.position.set(-134+p*268,0,Math.sin(p*Math.PI*3)*62);
   world.tornado.rotation.y=elapsed*2.8;
 }
 

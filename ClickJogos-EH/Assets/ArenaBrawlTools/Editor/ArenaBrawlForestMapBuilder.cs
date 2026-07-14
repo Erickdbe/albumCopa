@@ -122,7 +122,7 @@ public static class ArenaBrawlForestMapBuilder
         };
         for (var i = 0; i < hills.Length; i++)
         {
-            Spawn(parent, i % 2 == 0 ? hillA : hillB, hills[i], new Vector3(0, i * 31, 0), Vector3.one * (1.9f + (i % 3) * 0.25f), "playable_relief_hill");
+            Spawn(parent, i % 2 == 0 ? hillA : hillB, hills[i], new Vector3(0, i * 31, 0), Vector3.one * (0.2f + (i % 3) * 0.035f), "playable_relief_hill");
         }
     }
 
@@ -137,7 +137,7 @@ public static class ArenaBrawlForestMapBuilder
         };
         for (var i = 0; i < points.Length; i++)
         {
-            Spawn(parent, mountain, points[i], new Vector3(0, i * 23, 0), Vector3.one * (4.0f + (i % 4) * 0.45f), "mountain_border");
+            Spawn(parent, mountain, points[i], new Vector3(0, i * 23, 0), Vector3.one * (0.34f + (i % 4) * 0.04f), "mountain_border");
         }
     }
 
@@ -178,15 +178,15 @@ public static class ArenaBrawlForestMapBuilder
         };
         for (var i = 0; i < positions.Length; i++)
         {
-            Spawn(structures, buildings[i % buildings.Length], positions[i], new Vector3(0, i * 37 + 18, 0), Vector3.one * 2.15f, "forest_cabin");
+            Spawn(structures, buildings[i % buildings.Length], positions[i], new Vector3(0, i * 37 + 18, 0), Vector3.one * 1.08f, "forest_cabin");
         }
 
         var well = "Assets/RPGPP_LT/Prefabs/Props/Misc/rpgpp_lt_well_01.prefab";
         var wagon = "Assets/RPGPP_LT/Prefabs/Props/Misc/rpgpp_lt_wagon_01.prefab";
         var barrel = "Assets/RPGPP_LT/Prefabs/Props/Containers/rpgpp_lt_barrel_01.prefab";
         var crate = "Assets/RPGPP_LT/Prefabs/Props/Containers/rpgpp_lt_crate_01.prefab";
-        Spawn(props, well, new Vector3(-16, 0, 18), Vector3.zero, Vector3.one * 1.8f, "village_well");
-        Spawn(props, wagon, new Vector3(22, 0, -22), new Vector3(0, -35, 0), Vector3.one * 1.65f, "wagon_cover");
+        Spawn(props, well, new Vector3(-16, 0, 18), Vector3.zero, Vector3.one * 1.2f, "village_well");
+        Spawn(props, wagon, new Vector3(22, 0, -22), new Vector3(0, -35, 0), Vector3.one * 1.2f, "wagon_cover");
         for (var i = 0; i < 12; i++)
         {
             var a = i * 31f * Mathf.Deg2Rad;
@@ -208,9 +208,9 @@ public static class ArenaBrawlForestMapBuilder
         for (var i = 0; i < sites.Length; i++)
         {
             var site = sites[i];
-            Spawn(structures, tree, site, Vector3.zero, Vector3.one * 4.2f, "treehouse_support_tree");
-            Spawn(structures, i % 2 == 0 ? shedA : shedB, site + Vector3.up * 8.5f, new Vector3(0, i * 90, 0), Vector3.one * 1.75f, "treehouse_platform");
-            Spawn(structures, ladder, site + new Vector3(3, 1.7f, 3), new Vector3(0, 45 + i * 90, 15), Vector3.one * 2.4f, "treehouse_ladder");
+            Spawn(structures, tree, site, Vector3.zero, Vector3.one * 2.35f, "treehouse_support_tree");
+            Spawn(structures, i % 2 == 0 ? shedA : shedB, site + Vector3.up * 7.2f, new Vector3(0, i * 90, 0), Vector3.one * 1.35f, "treehouse_platform");
+            Spawn(structures, ladder, site + new Vector3(2.8f, 1.35f, 2.8f), new Vector3(0, 45 + i * 90, 15), Vector3.one * 1.85f, "treehouse_ladder");
         }
     }
 

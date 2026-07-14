@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { MAP_HALF_SIZES, MAP_META, SKETCHBOOK_GROUND_Y } from "./config.js";
 import { attachMeshyModel } from "./meshy-assets.js";
+import { attachRpgPolyForest, registerRpgPolyForestCollisions } from "./rpg-poly-assets.js";
 import { attachSketchbookWorld } from "./sketchbook-assets.js";
 
 const textureLoader = new THREE.TextureLoader();
@@ -540,90 +541,10 @@ function buildFloresta(scene) {
   const meta = MAP_META.floresta;
   scene.background = new THREE.Color(meta.sky);
   scene.fog = new THREE.Fog(meta.sky, 108, 350);
-  addGround(world, 0xffffff, "./assets/textures/forest-grass.jpg", 20);
+  addGround(world, 0x4d6b3f);
   addBoundary(world, 0x243421);
-
-  // Forest floor: a readable set of trails, with a playable clearing in the middle.
-  addForestTrail(world, 0, 0, 230, 18, 0, 0x7d6642);
-  addForestTrail(world, 0, 0, 18, 230, 0, 0x7d6642);
-  addForestTrail(world, -48, -48, 150, 12, Math.PI / 4, 0x6f5d3e);
-  addForestTrail(world, 50, 50, 150, 12, Math.PI / 4, 0x6f5d3e);
-  addForestTrail(world, -50, 50, 128, 10, -Math.PI / 4, 0x74623e);
-  addForestTrail(world, 50, -50, 128, 10, -Math.PI / 4, 0x74623e);
-  addForestTrail(world, 0, 0, 42, 42, 0, 0x8b7449);
-
-  // Mountains and hills frame the arena instead of cluttering the combat lanes.
-  const mountainRing = [
-    [-150,-148,30,48],[-98,-160,26,40],[-42,-164,25,38],[22,-162,31,52],[82,-156,28,42],[142,-138,34,50],
-    [160,-86,29,43],[164,-24,31,50],[158,40,28,41],[132,102,34,49],[76,150,30,45],[10,162,28,40],
-    [-56,156,32,50],[-118,126,29,42],[-156,72,33,48],[-164,10,27,40],[-158,-62,32,46]
-  ];
-  mountainRing.forEach(([x,z,r,h],i)=>addMountain(world,x,z,r,h,i%3===0?0x53624f:i%3===1?0x607057:0x475846));
-  [
-    [-116,-78,13,7],[-100,72,14,7],[-64,118,12,6],[62,-118,13,7],[116,-60,15,8],[108,82,13,7],
-    [-28,-128,12,6],[28,130,12,6],[-134,18,10,5],[136,-16,10,5]
-  ].forEach(([x,z,w,h],i)=>{
-    addMesh(world,new THREE.SphereGeometry(w,8,5),i%2?0x4d6b3f:0x557549,x,h*0.35,z,{rotY:i*0.3,material:{roughness:0.92}});
-    world.obstacles.push(collisionBox(x,z,w*1.15,w*1.05,h,true));
-  });
-
-  // Cabins and elevated points mirror each side, so the map feels fair in team modes.
-  addForestCabin(world, -66, -42, 0.45, "forest-red-cabin-a");
-  addForestCabin(world, 66, 42, Math.PI + 0.45, "forest-blue-cabin-a");
-  addForestCabin(world, -78, 48, -0.35, "forest-red-cabin-b");
-  addForestCabin(world, 78, -48, Math.PI - 0.35, "forest-blue-cabin-b");
-  addForestCabin(world, 0, -88, 0, "forest-south-lodge");
-  addForestCabin(world, 0, 88, Math.PI, "forest-north-lodge");
-  addWatchTower(world, -112, -22, Math.PI / 4);
-  addWatchTower(world, 112, 22, -Math.PI * 0.75);
-  addWatchTower(world, -34, 116, Math.PI);
-  addWatchTower(world, 34, -116, 0);
-
-  addTreeHouse(world, -102, -70, Math.PI / 4);
-  addTreeHouse(world, 102, 70, -Math.PI * 0.75);
-  addTreeHouse(world, -98, 78, -Math.PI / 3);
-  addTreeHouse(world, 98, -78, Math.PI * 0.66);
-
-  // Wooden bridges and ramps stitch the high positions into the central flow.
-  for(let i=-13;i<=13;i++) addPlatform(world,i*4.3,0.23,0+Math.sin(i*0.5)*0.6,4.15,2.25,0x6f4b2d);
-  for(let i=-11;i<=11;i++) addPlatform(world,0+Math.cos(i*0.4)*0.6,0.24,i*4.7,2.25,4.35,0x75502f);
-  for(let i=0;i<18;i++) addPlatform(world,-82+i*4.9,0.22,-76+i*8.7,3.8,2.1,0x68462a);
-  for(let i=0;i<18;i++) addPlatform(world,82-i*4.9,0.22,76-i*8.7,3.8,2.1,0x68462a);
-  addRamp(world, -42, -74, 15, 4.5, 3.8, "z", 0x75502f);
-  addRamp(world, 42, 74, 15, 4.5, 3.8, "z", 0x75502f);
-
-  addFenceLine(world,-86,-26,-28,-26,11);
-  addFenceLine(world,28,26,86,26,11);
-  addFenceLine(world,-30,26,-86,26,10,0x775433);
-  addFenceLine(world,30,-26,86,-26,10,0x775433);
-
-  // Tree density is heavy around the edges but leaves intentional sightlines on the trails.
-  const reserved = [[0,0],[-66,-42],[66,42],[-78,48],[78,-48],[0,-88],[0,88],[-112,-22],[112,22],[-34,116],[34,-116],[-102,-70],[102,70],[-98,78],[98,-78]];
-  for(let ring=0;ring<5;ring++){
-    const radius=48+ring*24;
-    const count=26+ring*10;
-    for(let i=0;i<count;i++){
-      const angle=i/count*Math.PI*2+ring*0.22;
-      const x=Math.cos(angle)*radius+Math.sin(i*1.71)*5;
-      const z=Math.sin(angle)*radius+Math.cos(i*1.37)*5;
-      if(Math.abs(x)<18||Math.abs(z)<18||reserved.some(([rx,rz])=>Math.hypot(x-rx,z-rz)<14))continue;
-      const scale=0.64+(i%5)*0.07+ring*0.02;
-      if(i%4===0)addPineTree(world,x,z,scale*1.18);
-      else addTree(world,x,z,scale,ring>=3||i%7===0);
-    }
-  }
-
-  [
-    [-48,86,1.1], [48,-86,1.1], [-92,-6,1.0], [92,6,1.0], [-16,-118,0.9], [16,118,0.9],
-    [-126,36,1.0], [126,-36,1.0], [-38,34,0.78], [38,-34,0.78]
-  ].forEach(([x,z,s])=>addForestRockCluster(world,x,z,s));
-  [
-    [-54,-8,8,0.25],[54,8,8,0.25],[-18,54,9,1.1],[18,-54,9,1.1],
-    [-118,-42,10,-0.45],[118,42,10,-0.45],[-70,104,8,0.75],[70,-104,8,0.75]
-  ].forEach(([x,z,l,r])=>addFallenLog(world,x,z,l,r));
-
-  [[-42,48],[46,-48],[0,32],[-74,-18],[72,18],[-24,-74],[24,74],[-116,58],[116,-58],[0,-34]].forEach(([x,z],i)=>addFlowerPatch(world,x,z,3.4 + (i%3)*0.4,16));
-  addMeshyLandmark(world,"unknown-c",0,-126,{height:6.6,rotation:0.18,collision:[8,7,6.6]});
+  registerRpgPolyForestCollisions(world);
+  attachRpgPolyForest(world);
 
   world.tornado = new THREE.Group();
   for(let i=0;i<9;i++){

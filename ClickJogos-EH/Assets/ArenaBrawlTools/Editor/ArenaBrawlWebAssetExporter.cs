@@ -15,6 +15,7 @@ public static class ArenaBrawlWebAssetExporter
     private const string TexturePath = "Assets/RPGPP_LT/Textures/rpgpp_lt_tex_a.tga";
     private const string ModelsSearchPath = "Assets/RPGPP_LT/Models";
     private const int TerrainResolution = 97;
+    private static readonly string[] GroundSurfaceTokens = { "rpgpp_lt_terrain_", "rpgpp_lt_hill_", "rpgpp_lt_mountain_" };
 
     private static readonly CultureInfo Invariant = CultureInfo.InvariantCulture;
 
@@ -133,6 +134,65 @@ public static class ArenaBrawlWebAssetExporter
         Debug.Log($"Exported {items.Count} RPG Poly forest items, {colliders.Count} colliders, {terrains.Count} terrains and {copiedAssets.Count} FBX assets to Arena Brawl.");
     }
 
+    [MenuItem("Tools/Arena Brawl/Snap Forest Objects To Ground")]
+    public static void SnapForestObjectsToGround()
+    {
+        var activeScene = SceneManager.GetActiveScene();
+        if (!activeScene.IsValid() || string.IsNullOrEmpty(activeScene.path))
+        {
+            activeScene = EditorSceneManager.OpenScene(ResolveExportScenePath(), OpenSceneMode.Single);
+        }
+
+        var groundColliders = new List<Collider>();
+        var candidates = new List<Transform>();
+        foreach (var root in SceneManager.GetActiveScene().GetRootGameObjects())
+        {
+            foreach (var transform in root.GetComponentsInChildren<Transform>(true))
+            {
+                var gameObject = transform.gameObject;
+                if (gameObject.GetComponent<Terrain>() != null) continue;
+                if (PrefabUtility.GetNearestPrefabInstanceRoot(gameObject) != gameObject) continue;
+
+                var source = PrefabUtility.GetCorrespondingObjectFromSource(gameObject);
+                var prefabPath = source ? AssetDatabase.GetAssetPath(source) : "";
+                if (!prefabPath.StartsWith("Assets/RPGPP_LT/", StringComparison.OrdinalIgnoreCase)) continue;
+
+                var assetName = Path.GetFileNameWithoutExtension(prefabPath);
+                if (IsGroundSurfaceAsset(assetName))
+                {
+                    groundColliders.AddRange(gameObject.GetComponentsInChildren<Collider>(true));
+                }
+                else
+                {
+                    candidates.Add(transform);
+                }
+            }
+        }
+
+        Physics.SyncTransforms();
+        var snapped = 0;
+        foreach (var transform in candidates)
+        {
+            if (!TryFindGroundY(transform.position, groundColliders, out var groundY)) continue;
+
+            var position = transform.position;
+            var desiredY = groundY + 0.015f;
+            if (desiredY <= position.y + 0.04f && position.y >= groundY - 0.12f) continue;
+
+            Undo.RecordObject(transform, "Snap Arena Brawl object to ground");
+            transform.position = new Vector3(position.x, desiredY, position.z);
+            snapped++;
+        }
+
+        if (snapped > 0)
+        {
+            EditorSceneManager.MarkSceneDirty(SceneManager.GetActiveScene());
+            EditorSceneManager.SaveScene(SceneManager.GetActiveScene());
+        }
+
+        Debug.Log($"Arena Brawl forest snap complete. Adjusted {snapped} objects using {groundColliders.Count} ground colliders.");
+    }
+
     private static Dictionary<string, string> BuildModelPathMap()
     {
         return AssetDatabase.FindAssets("t:Model", new[] { ModelsSearchPath })
@@ -154,6 +214,31 @@ public static class ArenaBrawlWebAssetExporter
             .Select(scene => scene.path)
             .FirstOrDefault();
         return string.IsNullOrEmpty(buildScene) ? ScenePath : buildScene;
+    }
+
+    private static bool IsGroundSurfaceAsset(string assetName)
+    {
+        var lower = assetName.ToLowerInvariant();
+        return GroundSurfaceTokens.Any(token => lower.Contains(token));
+    }
+
+    private static bool TryFindGroundY(Vector3 position, IReadOnlyList<Collider> groundColliders, out float groundY)
+    {
+        groundY = 0;
+        if (groundColliders.Count == 0) return false;
+
+        var ray = new Ray(new Vector3(position.x, Mathf.Max(96f, position.y + 48f), position.z), Vector3.down);
+        var best = float.NegativeInfinity;
+        foreach (var collider in groundColliders)
+        {
+            if (collider == null || !collider.enabled) continue;
+            if (!collider.Raycast(ray, out var hit, 180f)) continue;
+            if (hit.point.y > best) best = hit.point.y;
+        }
+
+        if (float.IsNegativeInfinity(best)) return false;
+        groundY = best;
+        return true;
     }
 
     private static void ExportTextureAtlas(string outputPath)

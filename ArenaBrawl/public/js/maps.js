@@ -154,6 +154,8 @@ function addGround(world, color, textureUrl = null, tileSize = 28) {
     { rotX: -Math.PI / 2, castShadow: false, material }
   );
   ground.receiveShadow = true;
+  world.groundRaycastMeshes = world.groundRaycastMeshes || [];
+  world.groundRaycastMeshes.push(ground);
 }
 
 function addClimbableBuilding(world, options) {
@@ -397,6 +399,7 @@ function createWorld(mapId, scene) {
   scene.add(root);
   return {
     mapId, scene, root, half: MAP_HALF_SIZES[mapId], obstacles: [], ladders: [], destructibles: new Map(),
+    groundRaycastMeshes: [], safeSpawn: { x: 0, y: 0, z: 0, yaw: 0 },
     animated: { trees: [], waves: [], sharks: [], debris: [], elapsed: 0 },
     water: null, tsunami: null, tornado: null, event: null
   };
@@ -539,13 +542,16 @@ function buildCidade(scene) {
 function buildFloresta(scene) {
   const world = createWorld("floresta", scene);
   const meta = MAP_META.floresta;
+  world.requireExplicitGround = true;
+  world.safeSpawn = { x: -54, y: 0, z: -78, yaw: 0.62 };
   scene.background = new THREE.Color(meta.sky);
   scene.fog = new THREE.Fog(meta.sky, 108, 350);
   const hasUnityTerrain = attachRpgPolyForestTerrain(world);
   if (!hasUnityTerrain) addGround(world, 0x4d6b3f);
   addBoundary(world, 0x243421);
-  registerRpgPolyForestCollisions(world);
-  attachRpgPolyForest(world);
+  attachRpgPolyForest(world, {
+    onReady: () => registerRpgPolyForestCollisions(world)
+  });
 
   world.tornado = new THREE.Group();
   for(let i=0;i<9;i++){

@@ -20,6 +20,20 @@ const fbxLoader = new FBXLoader(assetLoadingManager);
 const textureLoader = new THREE.TextureLoader();
 const modelCache = new Map();
 let texturePromise = null;
+const snapRaycaster = new THREE.Raycaster();
+const snapRayOrigin = new THREE.Vector3();
+const snapRayDirection = new THREE.Vector3(0, -1, 0);
+
+const GROUND_SURFACE_ASSETS = [
+  "rpgpp_lt_terrain_",
+  "rpgpp_lt_hill_",
+  "rpgpp_lt_mountain_"
+];
+
+const NON_SNAPPING_ASSETS = [
+  "rpgpp_lt_cloud",
+  "rpgpp_lt_sky"
+];
 
 function resolveAssetUrl(path) {
   const moduleRelativePath = path.startsWith("./assets/")
@@ -84,6 +98,67 @@ function applyUnityTransform(object, item) {
     THREE.MathUtils.degToRad(item.rotation[2])
   );
   object.scale.set(item.scale[0], item.scale[1], item.scale[2]);
+}
+
+function isGroundSurfaceAsset(assetName) {
+  const lower = assetName.toLowerCase();
+  return GROUND_SURFACE_ASSETS.some((token) => lower.includes(token));
+}
+
+function shouldSnapToGround(assetName) {
+  const lower = assetName.toLowerCase();
+  if (isGroundSurfaceAsset(lower)) return false;
+  return !NON_SNAPPING_ASSETS.some((token) => lower.includes(token));
+}
+
+function registerGroundSurfaceMeshes(root, world) {
+  world.groundRaycastMeshes = world.groundRaycastMeshes || [];
+  root.traverse((child) => {
+    if (!child.isMesh) return;
+    child.updateMatrixWorld(true);
+    if (!world.groundRaycastMeshes.includes(child)) world.groundRaycastMeshes.push(child);
+  });
+}
+
+function raycastGroundHeight(world, x, z, startY = 96) {
+  const meshes = world.groundRaycastMeshes || [];
+  if (!meshes.length) return null;
+
+  snapRayOrigin.set(x, startY, z);
+  snapRaycaster.set(snapRayOrigin, snapRayDirection);
+  snapRaycaster.far = startY + 12;
+  const hits = snapRaycaster.intersectObjects(meshes, false);
+  return hits.length ? hits[0].point.y : null;
+}
+
+function snapInstanceToGround(instance, item, world) {
+  const x = item.position[0];
+  const z = item.position[2];
+  const currentY = item.position[1] || 0;
+  const groundY = raycastGroundHeight(world, x, z, Math.max(96, currentY + 48));
+  if (groundY == null) return;
+
+  const desiredY = groundY + 0.015;
+  if (desiredY > instance.position.y + 0.04 || instance.position.y < groundY - 0.12) {
+    instance.position.y = desiredY;
+  }
+}
+
+function adjustedCollider(collider, world) {
+  const centerX = (collider.minX + collider.maxX) / 2;
+  const centerZ = (collider.minZ + collider.maxZ) / 2;
+  const groundY = raycastGroundHeight(world, centerX, centerZ);
+  if (groundY == null) return collider;
+
+  const baseY = Math.max(0, collider.minY);
+  const offsetY = groundY > baseY + 0.12 ? groundY - baseY : 0;
+  if (offsetY <= 0) return collider;
+
+  return {
+    ...collider,
+    minY: collider.minY + offsetY,
+    maxY: collider.maxY + offsetY
+  };
 }
 
 function terrainHeightAt(terrain, x, z) {
@@ -198,7 +273,8 @@ export function registerRpgPolyForestCollisions(world) {
   world.userData = world.userData || {};
   world.userData.rpgPolyCollisionsRegistered = true;
 
-  RPG_POLY_FOREST_COLLIDERS.forEach((collider) => {
+  RPG_POLY_FOREST_COLLIDERS.forEach((rawCollider) => {
+    const collider = adjustedCollider(rawCollider, world);
     if (collider.kind === "ladder") {
       const centerX = (collider.minX + collider.maxX) / 2;
       const centerZ = (collider.minZ + collider.maxZ) / 2;
@@ -245,11 +321,26 @@ export function attachRpgPolyForest(world, options = {}) {
     batches.get(item.asset).push(item);
   });
 
-  let loadedAssets = 0;
-  const totalAssets = batches.size;
-  batches.forEach((items, assetName) => {
-    loadRpgPolyModel(assetName).then((source) => {
-      if (!anchor.parent) return;
+  Promise.allSettled(
+    [...batches.entries()].map(([assetName, items]) => (
+      loadRpgPolyModel(assetName).then((source) => ({ assetName, items, source }))
+    ))
+  ).then((results) => {
+    if (!anchor.parent) return;
+
+    const loaded = [];
+    results.forEach((result) => {
+      if (result.status === "fulfilled") {
+        loaded.push(result.value);
+      } else {
+        console.warn("Nao foi possivel carregar asset RPG Poly:", result.reason);
+      }
+    });
+
+    const terrainBatches = loaded.filter(({ assetName }) => isGroundSurfaceAsset(assetName));
+    const objectBatches = loaded.filter(({ assetName }) => !isGroundSurfaceAsset(assetName));
+
+    terrainBatches.forEach(({ assetName, items, source }) => {
       const group = new THREE.Group();
       group.name = `rpg-poly-${assetName}`;
       items.forEach((item) => {
@@ -257,13 +348,31 @@ export function attachRpgPolyForest(world, options = {}) {
         instance.name = item.name || assetName;
         applyUnityTransform(instance, item);
         group.add(instance);
+        registerGroundSurfaceMeshes(instance, world);
       });
       anchor.add(group);
-      loadedAssets += 1;
-      if (loadedAssets === totalAssets) options.onReady?.(anchor);
-    }).catch((error) => {
-      console.warn(`Nao foi possivel carregar asset RPG Poly ${assetName}:`, error);
     });
+
+    world.root.updateMatrixWorld(true);
+    const safeY = raycastGroundHeight(world, world.safeSpawn?.x || 0, world.safeSpawn?.z || 0);
+    if (safeY != null) {
+      world.safeSpawn = { ...(world.safeSpawn || {}), y: safeY + 0.08 };
+    }
+
+    objectBatches.forEach(({ assetName, items, source }) => {
+      const group = new THREE.Group();
+      group.name = `rpg-poly-${assetName}`;
+      items.forEach((item) => {
+        const instance = source.clone(true);
+        instance.name = item.name || assetName;
+        applyUnityTransform(instance, item);
+        if (shouldSnapToGround(assetName)) snapInstanceToGround(instance, item, world);
+        group.add(instance);
+      });
+      anchor.add(group);
+    });
+
+    options.onReady?.(anchor);
   });
 
   return anchor;

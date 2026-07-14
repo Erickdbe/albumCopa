@@ -121,6 +121,13 @@ public static class ArenaBrawlWebAssetExporter
             }
         }
 
+        if (items.Count == 0 && terrains.Count == 0)
+        {
+            throw new InvalidOperationException(
+                $"No RPG Poly prefabs or Unity terrains found in scene '{SceneManager.GetActiveScene().path}'. Save the map scene or open the correct scene before exporting."
+            );
+        }
+
         WriteDataModule(jsOutput, items, colliders, terrains);
         AssetDatabase.Refresh();
         Debug.Log($"Exported {items.Count} RPG Poly forest items, {colliders.Count} colliders, {terrains.Count} terrains and {copiedAssets.Count} FBX assets to Arena Brawl.");
@@ -137,6 +144,11 @@ public static class ArenaBrawlWebAssetExporter
 
     private static string ResolveExportScenePath()
     {
+        if (File.Exists(Path.Combine(Application.dataPath, ScenePath.Substring("Assets/".Length))))
+        {
+            return ScenePath;
+        }
+
         var buildScene = EditorBuildSettings.scenes
             .Where(scene => scene.enabled && !string.IsNullOrEmpty(scene.path))
             .Select(scene => scene.path)

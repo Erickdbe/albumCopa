@@ -889,6 +889,7 @@ app.use(
   "/DeckHeroes/vendor/postprocessing",
   express.static(path.join(__dirname, "node_modules", "postprocessing"))
 );
+app.get("/ArenaBrawl", (req, res) => res.redirect(301, "/ArenaBrawl/"));
 app.use("/ArenaBrawl", express.static(path.join(__dirname, "ArenaBrawl", "public")));
 app.use("/DeckHeroes", express.static(path.join(__dirname, "DeckHeroes", "public")));
 app.use("/RetroArena", express.static(path.join(__dirname, "RetroArena", "public")));

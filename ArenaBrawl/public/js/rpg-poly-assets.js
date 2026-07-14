@@ -8,14 +8,29 @@ import {
   RPG_POLY_FOREST_TERRAINS
 } from "./forest-rpg-poly-data.js";
 
-const fbxLoader = new FBXLoader();
+const assetLoadingManager = new THREE.LoadingManager();
+assetLoadingManager.setURLModifier((url) => {
+  if (/rpgpp_lt_tex_a\.tga$/i.test(url)) {
+    return resolveAssetUrl(`${RPG_POLY_BASE_PATH}${RPG_POLY_TEXTURE}`);
+  }
+  return url;
+});
+
+const fbxLoader = new FBXLoader(assetLoadingManager);
 const textureLoader = new THREE.TextureLoader();
 const modelCache = new Map();
 let texturePromise = null;
 
+function resolveAssetUrl(path) {
+  const moduleRelativePath = path.startsWith("./assets/")
+    ? `../${path.slice(2)}`
+    : path;
+  return new URL(moduleRelativePath, import.meta.url).href;
+}
+
 function loadAtlasTexture() {
   if (!texturePromise) {
-    texturePromise = textureLoader.loadAsync(`${RPG_POLY_BASE_PATH}${RPG_POLY_TEXTURE}`).then((texture) => {
+    texturePromise = textureLoader.loadAsync(resolveAssetUrl(`${RPG_POLY_BASE_PATH}${RPG_POLY_TEXTURE}`)).then((texture) => {
       texture.colorSpace = THREE.SRGBColorSpace;
       texture.flipY = true;
       texture.wrapS = THREE.RepeatWrapping;
@@ -32,7 +47,7 @@ function loadAtlasTexture() {
 function loadRpgPolyModel(assetName) {
   if (!modelCache.has(assetName)) {
     const promise = Promise.all([
-      fbxLoader.loadAsync(`${RPG_POLY_BASE_PATH}models/${assetName}.fbx`),
+      fbxLoader.loadAsync(resolveAssetUrl(`${RPG_POLY_BASE_PATH}models/${assetName}.fbx`)),
       loadAtlasTexture()
     ]).then(([model, atlas]) => prepareRpgPolyModel(model, atlas));
     modelCache.set(assetName, promise);

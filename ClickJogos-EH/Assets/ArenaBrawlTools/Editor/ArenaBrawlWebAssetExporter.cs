@@ -52,7 +52,7 @@ public static class ArenaBrawlWebAssetExporter
         var activeScene = SceneManager.GetActiveScene();
         if (!activeScene.IsValid() || string.IsNullOrEmpty(activeScene.path))
         {
-            activeScene = EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Single);
+            activeScene = EditorSceneManager.OpenScene(ResolveExportScenePath(), OpenSceneMode.Single);
         }
         Debug.Log($"Exporting Arena Brawl forest from Unity scene: {activeScene.path}");
 
@@ -133,6 +133,15 @@ public static class ArenaBrawlWebAssetExporter
             .Where(path => path.EndsWith(".fbx", StringComparison.OrdinalIgnoreCase))
             .GroupBy(path => Path.GetFileNameWithoutExtension(path), StringComparer.OrdinalIgnoreCase)
             .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static string ResolveExportScenePath()
+    {
+        var buildScene = EditorBuildSettings.scenes
+            .Where(scene => scene.enabled && !string.IsNullOrEmpty(scene.path))
+            .Select(scene => scene.path)
+            .FirstOrDefault();
+        return string.IsNullOrEmpty(buildScene) ? ScenePath : buildScene;
     }
 
     private static void ExportTextureAtlas(string outputPath)

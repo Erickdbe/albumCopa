@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { MAP_HALF_SIZES, MAP_META, SKETCHBOOK_GROUND_Y } from "./config.js";
 import { attachMeshyModel } from "./meshy-assets.js";
-import { attachRpgPolyForest, registerRpgPolyForestCollisions } from "./rpg-poly-assets.js";
+import { attachRpgPolyForest, attachRpgPolyForestTerrain, registerRpgPolyForestCollisions } from "./rpg-poly-assets.js";
 import { attachSketchbookWorld } from "./sketchbook-assets.js";
 
 const textureLoader = new THREE.TextureLoader();
@@ -541,7 +541,8 @@ function buildFloresta(scene) {
   const meta = MAP_META.floresta;
   scene.background = new THREE.Color(meta.sky);
   scene.fog = new THREE.Fog(meta.sky, 108, 350);
-  addGround(world, 0x4d6b3f);
+  const hasUnityTerrain = attachRpgPolyForestTerrain(world);
+  if (!hasUnityTerrain) addGround(world, 0x4d6b3f);
   addBoundary(world, 0x243421);
   registerRpgPolyForestCollisions(world);
   attachRpgPolyForest(world);

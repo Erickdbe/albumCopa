@@ -2,6 +2,7 @@
 // Do not edit placements by hand; edit the Unity scene/generator and export again.
 export const RPG_POLY_BASE_PATH = "./assets/models/rpg-poly-lite/";
 export const RPG_POLY_TEXTURE = "rpgpp_lt_tex_a.png";
+export const RPG_POLY_FOREST_TERRAINS = [];
 export const RPG_POLY_FOREST_ITEMS = [
   { asset: "rpgpp_lt_hill_small_01", name: "playable_relief_hill", group: "01_Terrain_Relief", position: [-118, 0, -72], rotation: [0, 0, 0], scale: [0.2, 0.2, 0.2] },
   { asset: "rpgpp_lt_hill_small_01", name: "playable_relief_hill", group: "01_Terrain_Relief", position: [-58, 0, 116], rotation: [0, 62, 0], scale: [0.27, 0.27, 0.27] },

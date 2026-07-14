@@ -5,13 +5,16 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using UnityEditor;
+using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
 public static class ArenaBrawlWebAssetExporter
 {
+    private const string ScenePath = "Assets/Scenes/ArenaBrawl_Forest_RPGPoly.unity";
     private const string TexturePath = "Assets/RPGPP_LT/Textures/rpgpp_lt_tex_a.tga";
     private const string ModelsSearchPath = "Assets/RPGPP_LT/Models";
+    private const int TerrainResolution = 97;
 
     private static readonly CultureInfo Invariant = CultureInfo.InvariantCulture;
 
@@ -32,10 +35,26 @@ public static class ArenaBrawlWebAssetExporter
         public Bounds bounds;
     }
 
+    private sealed class ExportTerrain
+    {
+        public string name;
+        public Vector3 position;
+        public Vector3 size;
+        public int resolution;
+        public float minY;
+        public float maxY;
+        public float[] heights;
+    }
+
     [MenuItem("Tools/Arena Brawl/Export RPG Poly Forest To Web")]
     public static void ExportForestToArenaBrawl()
     {
-        ArenaBrawlForestMapBuilder.BuildForestScene();
+        var activeScene = SceneManager.GetActiveScene();
+        if (!activeScene.IsValid() || string.IsNullOrEmpty(activeScene.path))
+        {
+            activeScene = EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Single);
+        }
+        Debug.Log($"Exporting Arena Brawl forest from Unity scene: {activeScene.path}");
 
         var projectDir = Directory.GetParent(Application.dataPath)?.FullName;
         if (string.IsNullOrEmpty(projectDir)) throw new InvalidOperationException("Could not resolve Unity project directory.");
@@ -54,12 +73,20 @@ public static class ArenaBrawlWebAssetExporter
         var copiedAssets = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
         var items = new List<ExportItem>();
         var colliders = new List<ExportCollider>();
+        var terrains = new List<ExportTerrain>();
 
         foreach (var root in SceneManager.GetActiveScene().GetRootGameObjects())
         {
+            foreach (var terrain in root.GetComponentsInChildren<Terrain>(true))
+            {
+                var exported = BuildTerrainExport(terrain);
+                if (exported != null) terrains.Add(exported);
+            }
+
             foreach (var transform in root.GetComponentsInChildren<Transform>(true))
             {
                 var gameObject = transform.gameObject;
+                if (gameObject.GetComponent<Terrain>() != null) continue;
                 if (PrefabUtility.GetNearestPrefabInstanceRoot(gameObject) != gameObject) continue;
 
                 var source = PrefabUtility.GetCorrespondingObjectFromSource(gameObject);
@@ -94,9 +121,9 @@ public static class ArenaBrawlWebAssetExporter
             }
         }
 
-        WriteDataModule(jsOutput, items, colliders);
+        WriteDataModule(jsOutput, items, colliders, terrains);
         AssetDatabase.Refresh();
-        Debug.Log($"Exported {items.Count} RPG Poly forest items, {colliders.Count} colliders and {copiedAssets.Count} FBX assets to Arena Brawl.");
+        Debug.Log($"Exported {items.Count} RPG Poly forest items, {colliders.Count} colliders, {terrains.Count} terrains and {copiedAssets.Count} FBX assets to Arena Brawl.");
     }
 
     private static Dictionary<string, string> BuildModelPathMap()
@@ -172,13 +199,72 @@ public static class ArenaBrawlWebAssetExporter
         return bounds;
     }
 
-    private static void WriteDataModule(string path, IReadOnlyList<ExportItem> items, IReadOnlyList<ExportCollider> colliders)
+    private static ExportTerrain BuildTerrainExport(Terrain terrain)
+    {
+        var data = terrain.terrainData;
+        if (data == null) return null;
+
+        var resolution = TerrainResolution;
+        var heights = new float[resolution * resolution];
+        var minY = float.PositiveInfinity;
+        var maxY = float.NegativeInfinity;
+        var origin = terrain.transform.position;
+        var size = data.size;
+
+        for (var z = 0; z < resolution; z++)
+        {
+            var nz = z / (float)(resolution - 1);
+            for (var x = 0; x < resolution; x++)
+            {
+                var nx = x / (float)(resolution - 1);
+                var worldX = origin.x + nx * size.x;
+                var worldZ = origin.z + nz * size.z;
+                var worldY = terrain.SampleHeight(new Vector3(worldX, origin.y + 100f, worldZ)) + origin.y;
+                var index = z * resolution + x;
+                heights[index] = worldY;
+                minY = Mathf.Min(minY, worldY);
+                maxY = Mathf.Max(maxY, worldY);
+            }
+        }
+
+        return new ExportTerrain
+        {
+            name = terrain.name,
+            position = origin,
+            size = size,
+            resolution = resolution,
+            minY = minY,
+            maxY = maxY,
+            heights = heights
+        };
+    }
+
+    private static void WriteDataModule(string path, IReadOnlyList<ExportItem> items, IReadOnlyList<ExportCollider> colliders, IReadOnlyList<ExportTerrain> terrains)
     {
         var builder = new StringBuilder();
         builder.AppendLine("// Auto-generated by Unity: Tools > Arena Brawl > Export RPG Poly Forest To Web");
-        builder.AppendLine("// Do not edit placements by hand; edit the Unity scene/generator and export again.");
+        builder.AppendLine("// Do not edit placements by hand; edit the Unity scene and export again.");
         builder.AppendLine("export const RPG_POLY_BASE_PATH = \"./assets/models/rpg-poly-lite/\";");
         builder.AppendLine("export const RPG_POLY_TEXTURE = \"rpgpp_lt_tex_a.png\";");
+        builder.AppendLine("export const RPG_POLY_FOREST_TERRAINS = [");
+        foreach (var terrain in terrains.OrderBy(terrain => terrain.name))
+        {
+            builder.Append("  ");
+            builder.Append("{ name: ").Append(Q(terrain.name));
+            builder.Append(", position: ").Append(Vec(terrain.position));
+            builder.Append(", size: ").Append(Vec(terrain.size));
+            builder.Append(", resolution: ").Append(terrain.resolution);
+            builder.Append(", minY: ").Append(F(terrain.minY));
+            builder.Append(", maxY: ").Append(F(terrain.maxY));
+            builder.Append(", heights: [");
+            for (var i = 0; i < terrain.heights.Length; i++)
+            {
+                if (i > 0) builder.Append(", ");
+                builder.Append(F(terrain.heights[i]));
+            }
+            builder.AppendLine("] },");
+        }
+        builder.AppendLine("];");
         builder.AppendLine("export const RPG_POLY_FOREST_ITEMS = [");
         foreach (var item in items.OrderBy(item => item.group).ThenBy(item => item.asset).ThenBy(item => item.name))
         {

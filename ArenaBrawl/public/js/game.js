@@ -304,7 +304,8 @@ function groundInfoAt(x, z, feetY) {
     const hits = groundRaycaster.intersectObjects(groundMeshes, false);
     for (const hit of hits) {
       const y = hit.point.y;
-      if (y <= feetY + STEP_TOLERANCE && y > best) {
+      const initialTerrainSnap = mapWorld?.requireExplicitGround && feetY <= STEP_TOLERANCE && y >= feetY;
+      if ((y <= feetY + STEP_TOLERANCE || initialTerrainSnap) && y > best) {
         best = y;
         found = true;
         break;

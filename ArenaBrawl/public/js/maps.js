@@ -3,6 +3,7 @@ import { MAP_HALF_SIZES, MAP_META, SKETCHBOOK_GROUND_Y } from "./config.js";
 import { attachMeshyModel } from "./meshy-assets.js";
 import { attachRpgPolyForest, attachRpgPolyForestTerrain, registerRpgPolyForestCollisions, updateRpgPolyForest } from "./rpg-poly-assets.js";
 import { attachSketchbookWorld } from "./sketchbook-assets.js";
+import { buildUnifiedMap } from "./unified-map.js";
 
 const textureLoader = new THREE.TextureLoader();
 const groundTextureCache = new Map();
@@ -642,7 +643,7 @@ function groundImpactPoint(world, x, z) {
 }
 
 function spawnExplosionCrater(world, x, z, strength = 1) {
-  if (world.mapId !== "floresta") return;
+  if (world.mapId !== "floresta" && world.mapId !== "mundo") return;
   const point = groundImpactPoint(world, x, z);
   const radius = THREE.MathUtils.clamp(1.35 + strength * 0.42, 1.6, 3.4);
   const group = new THREE.Group();
@@ -813,6 +814,7 @@ function applyObjectState(world, state) {
 
   object.destroyed=true;
   if(object.obstacle)object.obstacle.active=false;
+  if(object.waterBridge)object.waterBridge.active=false;
   object.linkedObstacles.forEach((obstacle)=>{obstacle.active=false;});
   object.linkedMeshes.forEach((mesh)=>{mesh.visible=false;});
   if(object.kind==="building"){
@@ -835,12 +837,13 @@ function updateWorld(world, delta, event = null) {
   updateDestructibles(world,delta);
   if(world.mapId==="praia")updateWater(world,world.animated.elapsed,event);
   if(world.mapId==="floresta")updateForest(world,world.animated.elapsed,event);
+  if(world.mapId==="mundo")world.updateUnified?.(world.animated.elapsed,delta,event);
 }
 
-const BUILDERS={sketchbook:buildSketchbook,praia:buildPraia,cidade:buildCidade,floresta:buildFloresta};
+const BUILDERS={mundo:buildUnifiedMap,sketchbook:buildSketchbook,praia:buildPraia,cidade:buildCidade,floresta:buildFloresta};
 
 export function buildMap(mapId, scene) {
-  const world=(BUILDERS[mapId]||BUILDERS.praia)(scene);
+  const world=(BUILDERS[mapId]||BUILDERS.mundo)(scene);
   world.update=(delta,event)=>updateWorld(world,delta,event);
   world.applyObjectState=(state)=>applyObjectState(world,state);
   world.showImpact=(point,strength=1)=>spawnDebris(world,point,Math.max(2,Math.round(4*strength)),strength,0x9a927f);

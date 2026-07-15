@@ -4,6 +4,8 @@ import { BloomEffect, EffectComposer, EffectPass, RenderPass, VignetteEffect } f
 import { buildMap } from "./maps.js";
 import { buildWeaponModel, setBowChargeVisual } from "./weapon-models.js";
 import { buildVehicleModel, createAirBomb, createCannonProjectile, createExplosion } from "./vehicle-models.js";
+import { emitExplosionFx, emitImpactFx, emitMuzzleFx, preloadWarFx } from "./war-fx.js";
+import { UNIFIED_RIVER_POINTS } from "./water-world.js";
 import {
   attachAnimatedCharacter,
   playCharacterAction,
@@ -139,7 +141,7 @@ function ensureScene() {
   if (scene) return;
   cacheDom();
   scene = new THREE.Scene();
-  camera = new THREE.PerspectiveCamera(78, window.innerWidth / window.innerHeight, 0.1, 220);
+  camera = new THREE.PerspectiveCamera(78, window.innerWidth / window.innerHeight, 0.1, 720);
   renderer = new THREE.WebGLRenderer({ canvas: dom.gameCanvas, antialias: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.setSize(window.innerWidth, window.innerHeight);
@@ -166,6 +168,7 @@ function ensureScene() {
 
   muzzleFlash = new THREE.PointLight(0xffddaa, 0, 6);
   weaponRig.add(muzzleFlash);
+  preloadWarFx();
 
   raycaster = new THREE.Raycaster();
   clock = new THREE.Clock();
@@ -436,6 +439,12 @@ function setViewWeapon(color, kind) {
 function playMuzzleFlash() {
   muzzleFlash.intensity = 6;
   setTimeout(() => { muzzleFlash.intensity = 0; }, 60);
+  if (!currentWeaponMesh) return;
+  scene.updateMatrixWorld(true);
+  const localMuzzle = (currentWeaponMesh.userData.muzzlePosition || new THREE.Vector3(0, 0, -0.9)).clone();
+  const origin = currentWeaponMesh.localToWorld(localMuzzle);
+  const direction = camera.getWorldDirection(new THREE.Vector3());
+  emitMuzzleFx(scene, origin, direction, currentWeapon()?.id === "heavy_mg" ? 1.18 : 1);
 }
 function recoilKick() {
   if (!currentWeaponMesh) return;
@@ -1244,6 +1253,7 @@ function updateBallistics(delta) {
       activeBallistics.splice(i, 1);
       if (shot.impact) {
         mapWorld?.showImpact?.(shot.impact, shot.kind === "arrow" ? 0.55 : 1);
+        emitImpactFx(scene, shot.impact, shot.kind === "arrow" ? 0.55 : 1);
         if (shot.audibleImpact) playImpactSound(shot.impact, shot.kind !== "arrow");
       }
     }
@@ -1548,6 +1558,14 @@ function detonateGrenade(state) {
 
 function renderGrenadeExplosionVisual(grenadeId, x, z) {
   const grenade = GRENADES[grenadeId];
+  if (grenadeId === "explosive" || grenadeId === "impact") {
+    emitExplosionFx(
+      scene,
+      new THREE.Vector3(x, 0.55, z),
+      grenadeId === "impact" ? 0xffb04d : 0xff6b28,
+      grenadeId === "impact" ? 0.72 : 1
+    );
+  }
   const flashMesh = new THREE.Mesh(new THREE.SphereGeometry(grenade.radius * (grenadeId === "explosive" || grenadeId === "impact" ? 0.6 : 1), 12, 12), new THREE.MeshBasicMaterial({ color: grenade.color, transparent: true, opacity: 0.65 }));
   flashMesh.position.set(x, 1, z);
   scene.add(flashMesh);
@@ -1778,6 +1796,11 @@ function updateMovement(delta) {
   camera.position.z = Math.max(-mapHalf + 1, Math.min(mapHalf - 1, camera.position.z));
 
   const feetY = local.jumpOffset;
+  if (mapWorld?.isWaterAt?.(camera.position.x, camera.position.z)) {
+    camera.position.x = prevX;
+    camera.position.z = prevZ;
+    localMoveVelocity.multiplyScalar(0.35);
+  }
   if (isBlockedAt(camera.position.x, camera.position.z, feetY)) {
     const movedX = camera.position.x;
     const movedZ = camera.position.z;
@@ -2004,12 +2027,45 @@ function drawMinimap() {
   const size = canvas.width;
   const half = MAP_HALF_SIZES[room.settings.mapId] || ARENA_HALF;
   const point = (x, z) => ({ x: (x / half * 0.5 + 0.5) * size, y: (z / half * 0.5 + 0.5) * size });
-  const mapColors = { sketchbook: "#b8b2a5", praia: "#d7bd68", cidade: "#555d64", floresta: "#375c36" };
+  const mapColors = { mundo: "#436d3d", sketchbook: "#b8b2a5", praia: "#d7bd68", cidade: "#555d64", floresta: "#375c36" };
   ctx.clearRect(0, 0, size, size);
   ctx.fillStyle = mapColors[room.settings.mapId] || "#3d4d46";
   ctx.fillRect(0, 0, size, size);
 
-  if (room.settings.mapId === "cidade") {
+  if (room.settings.mapId === "mundo") {
+    const cityMin = point(-290, -240);
+    const cityMax = point(-12, 90);
+    ctx.fillStyle = "#60696d";
+    ctx.fillRect(cityMin.x, cityMin.y, cityMax.x - cityMin.x, cityMax.y - cityMin.y);
+    const beachStart = point(0, 116).y;
+    const oceanStart = point(0, 190).y;
+    ctx.fillStyle = "#d7bd68";
+    ctx.fillRect(0, beachStart, size, oceanStart - beachStart);
+    ctx.fillStyle = "#267ca8";
+    ctx.fillRect(0, oceanStart, size, size - oceanStart);
+    ctx.fillStyle = "#287f9e";
+    const lake = point(126, -62);
+    ctx.beginPath(); ctx.arc(lake.x, lake.y, 31 / (half * 2) * size, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = "#3a9eb3";
+    ctx.lineWidth = Math.max(3, 13 / (half * 2) * size);
+    ctx.beginPath();
+    UNIFIED_RIVER_POINTS.forEach((riverPoint, index) => {
+      const marker = point(riverPoint.x, riverPoint.z);
+      if (index === 0) ctx.moveTo(marker.x, marker.y);
+      else ctx.lineTo(marker.x, marker.y);
+    });
+    ctx.stroke();
+    ctx.strokeStyle = "rgba(32,38,42,0.8)";
+    ctx.lineWidth = Math.max(2, 15 / (half * 2) * size);
+    [-258, -206, -154, -102, -50].forEach((x) => {
+      const start = point(x, -240); const end = point(x, 90);
+      ctx.beginPath(); ctx.moveTo(start.x, start.y); ctx.lineTo(end.x, end.y); ctx.stroke();
+    });
+    [-224, -166, -108, -50, 8, 66].forEach((z) => {
+      const start = point(-290, z); const end = point(-12, z);
+      ctx.beginPath(); ctx.moveTo(start.x, start.y); ctx.lineTo(end.x, end.y); ctx.stroke();
+    });
+  } else if (room.settings.mapId === "cidade") {
     ctx.fillStyle = "#272d32";
     [-34, 0, 34].forEach((coordinate) => {
       const vertical = point(coordinate - 6, 0).x;
@@ -2031,14 +2087,17 @@ function drawMinimap() {
   }
 
   if (activeWorldEvent?.type === "tsunami" && activeWorldEvent.phase === "surge") {
-    const z = half - (half * 2 - 8) * Math.max(0, Math.min(1, activeWorldEvent.progress || 0));
+    const progress = Math.max(0, Math.min(1, activeWorldEvent.progress || 0));
+    const z = room.settings.mapId === "mundo" ? half - 185 * progress : half - (half * 2 - 8) * progress;
     const wave = point(0, z).y;
     ctx.strokeStyle = "#8de4ff"; ctx.lineWidth = 4;
     ctx.beginPath(); ctx.moveTo(0, wave); ctx.lineTo(size, wave); ctx.stroke();
   }
   if (activeWorldEvent?.type === "tornado" && activeWorldEvent.phase === "active") {
     const progress = Math.max(0, Math.min(1, activeWorldEvent.progress || 0));
-    const marker = point(-70 + progress * 140, Math.sin(progress * Math.PI * 3) * 30);
+    const marker = room.settings.mapId === "mundo"
+      ? point(30 + progress * 230, -190 + progress * 250)
+      : point(-70 + progress * 140, Math.sin(progress * Math.PI * 3) * 30);
     ctx.strokeStyle = "#f2e7a5"; ctx.lineWidth = 2;
     ctx.beginPath(); ctx.arc(marker.x, marker.y, 6, 0, Math.PI * 2); ctx.stroke();
   }
@@ -2053,12 +2112,17 @@ function drawMinimap() {
   const now = performance.now();
   remotePlayers.forEach((avatar) => {
     if (!avatar.alive || !avatar.root.visible) return;
-    const distance = Math.hypot(avatar.root.position.x - camera.position.x, avatar.root.position.z - camera.position.z);
     const ally = room.settings.mode === "teams" && avatar.team === local.team;
-    if (!ally && distance > 24 && now > (avatar.revealedUntil || 0)) return;
     const marker = point(avatar.root.position.x, avatar.root.position.z);
     ctx.fillStyle = ally ? "#71a9ff" : "#ff6565";
     ctx.beginPath(); ctx.arc(marker.x, marker.y, 3.5, 0, Math.PI * 2); ctx.fill();
+    if (!ally) {
+      ctx.strokeStyle = "rgba(255,82,82,0.9)";
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.arc(marker.x, marker.y, 5.5 + Math.sin(now * 0.008) * 1.2, 0, Math.PI * 2);
+      ctx.stroke();
+    }
   });
 
   const self = point(camera.position.x, camera.position.z);
@@ -2113,7 +2177,7 @@ function updateEventAlert(event) {
   const messages = {
     "tsunami:warning": "ALERTA DE EVENTO: tsunami se formando",
     "tsunami:surge": "TSUNAMI: a onda esta atravessando a ilha",
-    "tsunami:flooded": "ILHA INUNDADA: a agua recua em 15 segundos",
+    "tsunami:flooded": "COSTA INUNDADA: a agua recua em 15 segundos",
     "tsunami:drain": "A agua esta baixando",
     "tornado:warning": "ALERTA DE EVENTO: a floresta esta despertando",
     "tornado:active": "TORNADO ANCESTRAL: procure abrigo nas montanhas",
@@ -2143,7 +2207,7 @@ export function attachSocket(activeSocket) {
     obstacles = mapWorld.obstacles;
     solidMeshesForRaycast = mapWorld.raycastMeshes || [];
     scene.traverse((obj) => {
-      if (obj.isMesh && obj.userData.socketId === undefined && !solidMeshesForRaycast.includes(obj)) {
+      if (obj.isMesh && !obj.userData.ignoreRaycast && obj.userData.socketId === undefined && !solidMeshesForRaycast.includes(obj)) {
         solidMeshesForRaycast.push(obj);
       }
     });
@@ -2352,6 +2416,7 @@ export function attachSocket(activeSocket) {
     playWeaponSound(weaponId, shotOrigin);
     if (!weapon || weapon.kind === "melee") return;
     const dir = new THREE.Vector3(Number(direction?.x) || 0, Number(direction?.y) || 0, Number(direction?.z) || -1).normalize();
+    emitMuzzleFx(scene, shotOrigin, dir, weaponId === "heavy_mg" ? 1.18 : 1);
     const profile = ballisticForWeapon(weapon);
     const speed = THREE.MathUtils.clamp(Number(ballistics?.speed) || profile.speed, 30, 220);
     const gravity = THREE.MathUtils.clamp(Number(ballistics?.gravity) || profile.gravity, -20, 0);

@@ -359,6 +359,18 @@ function createRoomsModule(io) {
 
   function eventForRoom(room, now) {
     const elapsed = Math.max(0, now - room.startedAt) / 1000 / WORLD_EVENT_TIME_SCALE;
+    if (room.settings.mapId === "mundo") {
+      if (elapsed < 55) return null;
+      const cycle = (elapsed - 55) % 190;
+      if (cycle < 10) return { type: "tornado", phase: "warning", progress: cycle / 10 };
+      if (cycle < 34) return { type: "tornado", phase: "active", progress: (cycle - 10) / 24 };
+      if (cycle < 42) return { type: "tornado", phase: "recovery", progress: (cycle - 34) / 8 };
+      if (cycle >= 104 && cycle < 114) return { type: "tsunami", phase: "warning", progress: (cycle - 104) / 10 };
+      if (cycle < 128 && cycle >= 114) return { type: "tsunami", phase: "surge", progress: (cycle - 114) / 14 };
+      if (cycle < 143 && cycle >= 128) return { type: "tsunami", phase: "flooded", progress: (cycle - 128) / 15 };
+      if (cycle < 158 && cycle >= 143) return { type: "tsunami", phase: "drain", progress: (cycle - 143) / 15 };
+      return null;
+    }
     if (room.settings.mapId === "praia") {
       if (elapsed < 35) return null;
       const cycle = (elapsed - 35) % 105;
@@ -379,7 +391,7 @@ function createRoomsModule(io) {
   }
 
   function worldTimeForRoom(room, now) {
-    const lengthMs = room.settings.mapId === "cidade" ? 210000 : room.settings.mapId === "floresta" ? 240000 : 195000;
+    const lengthMs = room.settings.mapId === "mundo" ? 300000 : room.settings.mapId === "cidade" ? 210000 : room.settings.mapId === "floresta" ? 240000 : 195000;
     const rawProgress = ((now - room.startedAt) % lengthMs) / lengthMs;
     const progress = (rawProgress + 0.44) % 1;
     const sun = Math.sin(progress * Math.PI * 2 - Math.PI * 0.42) * 0.5 + 0.5;
@@ -396,8 +408,9 @@ function createRoomsModule(io) {
   function applyWorldEventForces(room, event, now) {
     if (!event) return;
     if (event.type === "tsunami" && event.phase === "surge") {
-      const half = MAP_HALF_SIZES.praia;
-      const waveZ = half - (half * 2 - 8) * event.progress;
+      const unified = room.settings.mapId === "mundo";
+      const half = unified ? MAP_HALF_SIZES.mundo : MAP_HALF_SIZES.praia;
+      const waveZ = unified ? half - 185 * event.progress : half - (half * 2 - 8) * event.progress;
       room.players.forEach((player) => {
         if (!player.alive || now - player.lastWorldForceAt < 800 || Math.abs(player.z - waveZ) > 7) return;
         player.lastWorldForceAt = now;
@@ -409,8 +422,9 @@ function createRoomsModule(io) {
       });
     }
     if (event.type === "tornado" && event.phase === "active") {
-      const tornadoX = -134 + event.progress * 268;
-      const tornadoZ = Math.sin(event.progress * Math.PI * 3) * 62;
+      const unified = room.settings.mapId === "mundo";
+      const tornadoX = unified ? 30 + event.progress * 230 : -134 + event.progress * 268;
+      const tornadoZ = unified ? -190 + event.progress * 250 : Math.sin(event.progress * Math.PI * 3) * 62;
       room.players.forEach((player) => {
         if (!player.alive || now - player.lastWorldForceAt < 1400) return;
         const distance = Math.hypot(player.x - tornadoX, player.z - tornadoZ);
@@ -592,8 +606,8 @@ function createRoomsModule(io) {
         vehicle.x = Math.max(-half + 3, Math.min(half - 3, vehicle.x));
         vehicle.z = Math.max(-half + 3, Math.min(half - 3, vehicle.z));
       }
-      if (vehicle.type === "jetski" && room.settings.mapId === "praia" && vehicle.z < 39) {
-        vehicle.z = 39;
+      if (vehicle.type === "jetski" && (room.settings.mapId === "praia" || room.settings.mapId === "mundo") && vehicle.z < (room.settings.mapId === "mundo" ? 190 : 39)) {
+        vehicle.z = room.settings.mapId === "mundo" ? 190 : 39;
         vehicle.speed = Math.max(0, vehicle.speed * 0.45);
       }
       if (driver) {
@@ -654,6 +668,7 @@ function createRoomsModule(io) {
   }
 
   function worldObjectMaxHealth(mapId, objectId) {
+    if (mapId === "mundo" && /^unified-bridge-(north|south)$/.test(objectId)) return 165;
     if (mapId === "floresta" && /^fantasy_bridge_destructible_\d+$/.test(objectId)) return 145;
     if (mapId !== "cidade") return 0;
     if (/^city-lamp-\d+$/.test(objectId)) return 55;
@@ -826,7 +841,7 @@ function createRoomsModule(io) {
       const room = findRoomBySocket(socket.id);
       if (!room || room.status !== "waiting" || room.players[0]?.socketId !== socket.id) return;
       room.settings.mapId = selectVotedMap(room);
-      if (!MAP_IDS.includes(room.settings.mapId)) room.settings.mapId = "praia";
+      if (!MAP_IDS.includes(room.settings.mapId)) room.settings.mapId = "mundo";
       if (room.settings.mode === "teams") assignTeams(room);
       room.players.forEach((p) => {
         p.kills = 0; p.deaths = 0; p.score = 0;

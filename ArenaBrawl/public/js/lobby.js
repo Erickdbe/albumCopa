@@ -2,7 +2,7 @@ import {
   CLASSES, CLASS_ORDER, SECONDARY_WEAPONS, SECONDARY_ORDER, MAP_META, MAP_ORDER,
   MATCH_DURATIONS_MIN, SCORE_LIMITS
 } from "./config.js";
-import { attachSocket, onMatchEnd, initGamePlayerJoinHandler } from "./game.js";
+import { attachSocket, onMatchEnd, initGamePlayerJoinHandler } from "./game.js?v=20260715-4";
 
 const token = localStorage.getItem("mp_token");
 const invitedRoomId = new URLSearchParams(window.location.search).get("room")?.trim().toUpperCase() || "";
@@ -26,7 +26,7 @@ const state = {
   classId: "rifle",
   secondaryId: "pistol_common",
   settings: {
-    mapId: "sketchbook", durationMin: 10, scoreLimit: 50, mode: "ffa",
+    mapId: "mundo", durationMin: 10, scoreLimit: 50, mode: "ffa",
     moveSpeedMul: 1, jumpHeightMul: 1, grenadesEnabled: true, secondaryEnabled: true, maxPlayers: 16
   },
   currentRoom: null,

@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { attachMeshyModel } from "./meshy-assets.js";
+import { attachFreeGunModel, hasFreeGunModel } from "./unity-pack-assets.js";
 
 const MESHY_WEAPONS = {
   sniper_rifle: { asset: "sniper", targetSize: 2, align: "negative-x-to-z" },
@@ -256,7 +257,16 @@ export function buildWeaponModel(weaponId, accentColor = "#5c6b48") {
   group.rotation.set(isKnife ? -0.18 : 0, isKnife ? -0.2 : 0, isKnife ? 0.2 : 0);
 
   const meshy = MESHY_WEAPONS[weaponId];
-  if (meshy) {
+  if (hasFreeGunModel(weaponId)) {
+    attachFreeGunModel(group, weaponId, {
+      onReady(model) {
+        model.traverse((child) => {
+          child.userData.weaponId = weaponId;
+          child.userData.viewModel = Boolean(group.parent?.userData?.viewModel || group.userData.viewModel);
+        });
+      }
+    }).catch((error) => console.warn(`Arma ${weaponId} do Free Pack nao carregou`, error));
+  } else if (meshy) {
     attachMeshyModel(group, meshy.asset, {
       targetSize: meshy.targetSize,
       align: meshy.align,

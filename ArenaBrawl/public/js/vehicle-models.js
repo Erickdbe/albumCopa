@@ -1,6 +1,8 @@
 import * as THREE from "three";
 import { attachMeshyModel } from "./meshy-assets.js";
 import { attachSketchbookVehicle } from "./sketchbook-assets.js";
+import { attachLowPolyVehicleModel } from "./unity-pack-assets.js";
+import { emitExplosionFx } from "./war-fx.js";
 
 const materials = {
   dark: new THREE.MeshStandardMaterial({ color: 0x22262b, roughness: 0.65, metalness: 0.45 }),
@@ -124,19 +126,16 @@ export function buildVehicleModel(vehicle) {
   model.traverse((child)=>{if(child.isMesh)child.userData.vehicleId=vehicle.id;});
   model.position.set(vehicle.x,vehicle.y,vehicle.z);
   model.rotation.y=vehicle.yaw||0;
-  if(vehicle.type==="car")attachSketchbookVehicle(model,"car",{targetSize:4.45,rotation:[0,Math.PI,0]});
-  else if(vehicle.type==="motorcycle")attachMeshyModel(model,"vehicle-thunder",{targetSize:2.5,align:"x-to-z"});
+  if(vehicle.type==="car"||vehicle.type==="motorcycle"||vehicle.type==="plane") {
+    const variant=vehicle.type==="car"&&vehicle.id.includes("humvee-b")?"car_blue":undefined;
+    attachLowPolyVehicleModel(model,vehicle.type,{variant}).catch((error)=>console.warn(`Veiculo ${vehicle.type} do pack nao carregou`,error));
+  }
   else if(vehicle.type==="helicopter")attachSketchbookVehicle(model,"helicopter",{targetSize:7.2,offset:new THREE.Vector3(0,0.12,0)});
-  else if(vehicle.type==="plane")attachSketchbookVehicle(model,"plane",{targetSize:7.5,offset:new THREE.Vector3(0,0.05,0)});
   return model;
 }
 
 export function createExplosion(scene, position, color = 0xff7a2f) {
-  const group=new THREE.Group();group.position.copy(position);scene.add(group);
-  const fire=new THREE.Mesh(new THREE.IcosahedronGeometry(1.4,1),new THREE.MeshBasicMaterial({color,transparent:true,opacity:0.9}));group.add(fire);
-  const smoke=new THREE.Mesh(new THREE.IcosahedronGeometry(1.9,1),new THREE.MeshStandardMaterial({color:0x3d4145,transparent:true,opacity:0.7}));smoke.position.y=1.2;group.add(smoke);
-  const start=performance.now();
-  (function animate(){const t=(performance.now()-start)/1100;group.scale.setScalar(1+t*2.5);group.position.y+=0.018;fire.material.opacity=Math.max(0,1-t*1.8);smoke.material.opacity=Math.max(0,0.7-t*0.65);if(t<1)requestAnimationFrame(animate);else scene.remove(group);})();
+  return emitExplosionFx(scene, position, color, 1);
 }
 
 export function createCannonProjectile(scene, origin, direction, onDone) {

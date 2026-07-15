@@ -66,15 +66,16 @@ const GRENADES = {
 const GRENADE_IDS = Object.keys(GRENADES);
 const GRENADE_CHARGES_PER_LIFE = 2;
 
-const MAP_IDS = ["sketchbook", "praia", "cidade", "floresta"];
+const MAP_IDS = ["mundo"];
 const MAP_META = {
+  mundo: { id: "mundo", name: "Mundo Unificado" },
   sketchbook: { id: "sketchbook", name: "Sketchbook" },
   praia: { id: "praia", name: "Praia" },
   cidade: { id: "cidade", name: "Cidade" },
   floresta: { id: "floresta", name: "Floresta" }
 };
 
-const MAP_HALF_SIZES = { sketchbook: 190, praia: 128, cidade: 124, floresta: 168 };
+const MAP_HALF_SIZES = { mundo: 300, sketchbook: 190, praia: 128, cidade: 124, floresta: 168 };
 const SKETCHBOOK_GROUND_Y = 5.35;
 const SKETCHBOOK_PLAYABLE_AREAS = [
   { minX: -74, maxX: 74, minZ: -58, maxZ: 53 },
@@ -83,6 +84,17 @@ const SKETCHBOOK_PLAYABLE_AREAS = [
 ];
 
 const VEHICLE_SPAWNS = {
+  mundo: [
+    { id: "world-humvee-a", type: "car", x: -258, y: 0.2, z: -92, yaw: 0 },
+    { id: "world-humvee-b", type: "car", x: -102, y: 0.2, z: 52, yaw: Math.PI },
+    { id: "world-bike-a", type: "motorcycle", x: -154, y: 0.2, z: -181, yaw: 0 },
+    { id: "world-bike-b", type: "motorcycle", x: -50, y: 0.2, z: 24, yaw: Math.PI },
+    { id: "world-quad", type: "quad", x: -23, y: 0.25, z: 82, yaw: -Math.PI / 2 },
+    { id: "world-plane", type: "plane", x: -276, y: 0.35, z: 55, yaw: -Math.PI / 2 },
+    { id: "world-helicopter", type: "helicopter", x: -180, y: 45.2, z: -195, yaw: Math.PI },
+    { id: "world-jetski-a", type: "jetski", x: -62, y: 0.25, z: 224, yaw: Math.PI },
+    { id: "world-jetski-b", type: "jetski", x: 54, y: 0.25, z: 230, yaw: Math.PI }
+  ],
   sketchbook: [
     { id: "sketch-car-left", type: "car", x: -48, y: SKETCHBOOK_GROUND_Y, z: 30, yaw: Math.PI / 2 },
     { id: "sketch-car-right", type: "car", x: 48, y: SKETCHBOOK_GROUND_Y, z: -30, yaw: -Math.PI / 2 },
@@ -129,6 +141,32 @@ const ARENA_HALF = 92;
 
 // Pontos de spawn por mapa (compartilhado com public/js/maps.js no cliente).
 const MAP_SPAWNS = {
+  mundo: {
+    ffa: [
+      { x: -206, y: 0.2, z: 53, yaw: Math.PI },
+      { x: -102, y: 0.2, z: 53, yaw: Math.PI },
+      { x: -258, y: 0.2, z: -136, yaw: Math.PI / 2 },
+      { x: -154, y: 0.2, z: -224, yaw: 0 },
+      { x: -50, y: 0.2, z: -108, yaw: -Math.PI / 2 },
+      { x: -32, y: 0.2, z: 62, yaw: -Math.PI / 2 },
+      { x: -190, y: 0.2, z: 117, yaw: Math.PI },
+      { x: 182, y: 0.2, z: 146, yaw: Math.PI }
+    ],
+    teams: {
+      red: [
+        { x: -258, y: 0.2, z: -136, yaw: Math.PI / 2 },
+        { x: -206, y: 0.2, z: 53, yaw: Math.PI },
+        { x: -154, y: 0.2, z: -224, yaw: 0 },
+        { x: -50, y: 0.2, z: -108, yaw: -Math.PI / 2 }
+      ],
+      blue: [
+        { x: -32, y: 0.2, z: 62, yaw: -Math.PI / 2 },
+        { x: 182, y: 0.2, z: 146, yaw: Math.PI },
+        { x: 78, y: 0.2, z: 145, yaw: Math.PI },
+        { x: 255, y: 0.2, z: 154, yaw: Math.PI }
+      ]
+    }
+  },
   sketchbook: {
     ffa: [
       { x: 0, y: SKETCHBOOK_GROUND_Y, z: 0, yaw: 0 },
@@ -194,7 +232,7 @@ const MAP_SPAWNS = {
 };
 
 function pickSpawn(mapId, mode, team) {
-  const map = MAP_SPAWNS[mapId] || MAP_SPAWNS.praia;
+  const map = MAP_SPAWNS[mapId] || MAP_SPAWNS.mundo;
   const list = mode === "teams" ? (map.teams[team === "blue" ? "blue" : "red"] || map.ffa) : map.ffa;
   return list[Math.floor(Math.random() * list.length)];
 }
@@ -262,7 +300,7 @@ function normalizeSettings(input = {}) {
     grenadesEnabled: input.grenadesEnabled !== false,
     secondaryEnabled: input.secondaryEnabled !== false,
     maxPlayers: Math.round(clamp(input.maxPlayers, 2, 16)),
-    mapId: MAP_IDS.includes(input.mapId) ? input.mapId : "sketchbook"
+    mapId: MAP_IDS.includes(input.mapId) ? input.mapId : "mundo"
   };
 }
 

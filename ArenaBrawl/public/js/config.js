@@ -60,17 +60,29 @@ export const GRENADE_ORDER = ["explosive", "smoke", "flash", "impact"];
 export const GRENADE_CHARGES_PER_LIFE = 2;
 
 export const MAP_META = {
+  mundo: { id: "mundo", name: "Mundo Unificado", sky: 0x91c9ee, ground: 0x4f723f },
   sketchbook: { id: "sketchbook", name: "Sketchbook", sky: 0xb7d6e6, ground: 0xd9d2bf },
   praia: { id: "praia", name: "Praia", sky: 0x8fd6ff, ground: 0xe8d68a },
   cidade: { id: "cidade", name: "Cidade", sky: 0x9fb0c2, ground: 0x6b6f75 },
   floresta: { id: "floresta", name: "Floresta", sky: 0x9fd1ff, ground: 0x3f5c34 }
 };
-export const MAP_ORDER = ["sketchbook", "praia", "cidade", "floresta"];
+export const MAP_ORDER = ["mundo"];
 
-export const MAP_HALF_SIZES = { sketchbook: 190, praia: 128, cidade: 124, floresta: 168 };
+export const MAP_HALF_SIZES = { mundo: 300, sketchbook: 190, praia: 128, cidade: 124, floresta: 168 };
 export const SKETCHBOOK_GROUND_Y = 5.35;
 
 export const VEHICLE_SPAWNS = {
+  mundo: [
+    { id: "world-humvee-a", type: "car", x: -258, y: 0.2, z: -92, yaw: 0 },
+    { id: "world-humvee-b", type: "car", x: -102, y: 0.2, z: 52, yaw: Math.PI },
+    { id: "world-bike-a", type: "motorcycle", x: -154, y: 0.2, z: -181, yaw: 0 },
+    { id: "world-bike-b", type: "motorcycle", x: -50, y: 0.2, z: 24, yaw: Math.PI },
+    { id: "world-quad", type: "quad", x: -23, y: 0.25, z: 82, yaw: -Math.PI / 2 },
+    { id: "world-plane", type: "plane", x: -276, y: 0.35, z: 55, yaw: -Math.PI / 2 },
+    { id: "world-helicopter", type: "helicopter", x: -180, y: 45.2, z: -195, yaw: Math.PI },
+    { id: "world-jetski-a", type: "jetski", x: -62, y: 0.25, z: 224, yaw: Math.PI },
+    { id: "world-jetski-b", type: "jetski", x: 54, y: 0.25, z: 230, yaw: Math.PI }
+  ],
   sketchbook: [
     { id: "sketch-car-left", type: "car", x: -48, y: SKETCHBOOK_GROUND_Y, z: 30, yaw: Math.PI / 2 },
     { id: "sketch-car-right", type: "car", x: 48, y: SKETCHBOOK_GROUND_Y, z: -30, yaw: -Math.PI / 2 },

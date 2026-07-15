@@ -8,7 +8,9 @@ import {
   attachAnimatedCharacter,
   playCharacterAction,
   playCharacterWeaponAction,
-  setCharacterAnimation
+  setCharacterAiming,
+  setCharacterAnimation,
+  updateCharacterPose
 } from "./character-model.js";
 import { attachMeshyModel } from "./meshy-assets.js";
 import {
@@ -23,6 +25,7 @@ import {
 
 const STEP_TOLERANCE = 0.65;
 const PLAYER_COLLISION_RADIUS = 0.32;
+const GRENADE_RELEASE_MS = 950;
 const JUMP_HEIGHT_BASE = 1.5; // altura de pulo de referencia (multiplicada por jumpHeightMul)
 const DEFAULT_FOV = 78;
 const LADDER_SPEED = 4.8;
@@ -77,6 +80,7 @@ const local = {
   lastShotAt: { primary: 0, secondary: 0 },
   grenadeCharges: {},
   grenadeSelected: "explosive",
+  grenadeThrowPending: false,
   abilityActive: false, abilityExpiresAt: 0, abilityCooldownUntil: 0,
   pendingSpecialShot: null,
   blindedUntil: 0,
@@ -541,7 +545,9 @@ function buildAvatar(p) {
   rightLeg.geometry.translate(0, -0.37, 0);
   root.add(rightLeg);
 
-  const remoteWeaponId = CLASSES[p.classId]?.primary?.id || "assault_rifle";
+  const remoteWeaponId = p.slot === "secondary"
+    ? (SECONDARY_WEAPONS[p.secondaryId]?.id || "pistol_common")
+    : (CLASSES[p.classId]?.primary?.id || "assault_rifle");
   const gun = buildWeaponModel(remoteWeaponId, teamColor);
   rightArm.add(gun);
   gun.scale.setScalar(0.24);
@@ -562,13 +568,16 @@ function buildAvatar(p) {
   scene.add(root);
   const avatar = {
     root, leftArm, rightArm, leftLeg, rightLeg, gun, teamMarker,
+    bodyHitbox, lowerHitbox,
     hittable: [bodyHitbox, lowerHitbox, headHitbox],
     fallbackMeshes: [torso, head, leftArm, rightArm, leftLeg, rightLeg],
     headMesh: headHitbox,
     walkPhase: Math.random() * 10,
-    username: p.username, classId: p.classId, kills: p.kills || 0, deaths: p.deaths || 0, team: p.team,
+    username: p.username, classId: p.classId, secondaryId: p.secondaryId || "pistol_common",
+    kills: p.kills || 0, deaths: p.deaths || 0, team: p.team,
     alive: p.alive !== false,
     moving: Boolean(p.moving), sprinting: Boolean(p.sprinting), jumping: Boolean(p.jumping), crouching: Boolean(p.crouching),
+    aiming: Boolean(p.aiming), slot: p.slot === "secondary" ? "secondary" : "primary", weaponId: remoteWeaponId,
     moveForward: Number(p.moveForward) || 0, moveStrafe: Number(p.moveStrafe) || 0,
     model: null, mixer: null, actions: null, animationName: null, desiredAnimation: "idle",
     characterId: characterIdForPlayer(p), emoteUntil: 0, emoteSpeed: 1, emoteAnimation: "dance",
@@ -627,6 +636,8 @@ function updateLocalViewAvatar(delta) {
   localViewAvatar.sprinting = local.sprinting;
   localViewAvatar.jumping = local.jumping;
   localViewAvatar.crouching = local.crouching;
+  localViewAvatar.aiming = local.aiming;
+  localViewAvatar.weaponId = currentWeapon().id;
   localViewAvatar.moveForward = local.moveForward;
   localViewAvatar.moveStrafe = local.moveStrafe;
   localViewAvatar.inVehicle = false;
@@ -636,7 +647,9 @@ function updateLocalViewAvatar(delta) {
   if (localViewAvatar.mixer) {
     const animation = animationForAvatar(localViewAvatar);
     localViewAvatar.setAnimation(animation, false, animation.startsWith("dance") ? localViewAvatar.emoteSpeed : null);
+    setCharacterAiming(localViewAvatar, localViewAvatar.weaponId, localViewAvatar.aiming);
     localViewAvatar.mixer.update(delta);
+    updateCharacterPose(localViewAvatar, delta);
   }
 }
 
@@ -661,6 +674,12 @@ function spawnOrUpdateRemote(p) {
   avatar.sprinting = Boolean(p.sprinting);
   avatar.jumping = Boolean(p.jumping);
   avatar.crouching = Boolean(p.crouching);
+  avatar.secondaryId = p.secondaryId || avatar.secondaryId;
+  avatar.aiming = Boolean(p.aiming);
+  avatar.slot = p.slot === "secondary" ? "secondary" : "primary";
+  avatar.weaponId = avatar.slot === "secondary"
+    ? (SECONDARY_WEAPONS[p.secondaryId || avatar.secondaryId]?.id || "pistol_common")
+    : (CLASSES[p.classId || avatar.classId]?.primary?.id || "assault_rifle");
   avatar.moveForward = Number(p.moveForward) || 0;
   avatar.moveStrafe = Number(p.moveStrafe) || 0;
   avatar.kills = p.kills || 0;
@@ -1318,17 +1337,21 @@ function switchSlot(slot) {
 function throwGrenade() {
   if (!room.settings.grenadesEnabled || !local.alive) return;
   const id = local.grenadeSelected;
-  if ((local.grenadeCharges[id] || 0) <= 0) return;
-  const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
-  const origin = camera.getWorldPosition(new THREE.Vector3());
-  const grenade = GRENADES[id];
-
-  socket.emit("match:grenadeThrow", {
-    grenadeId: id, x: origin.x, y: origin.y, z: origin.z, dirX: dir.x, dirY: dir.y, dirZ: dir.z
-  });
+  if ((local.grenadeCharges[id] || 0) <= 0 || local.grenadeThrowPending) return;
+  local.grenadeThrowPending = true;
   playCharacterAction(localViewAvatar, "grenade");
+  socket.emit("match:grenadePrepare", { grenadeId: id });
 
-  simulateGrenadeArc(id, origin, dir, true);
+  setTimeout(() => {
+    local.grenadeThrowPending = false;
+    if (!local.alive || room?.status !== "playing" || (local.grenadeCharges[id] || 0) <= 0) return;
+    const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+    const origin = camera.getWorldPosition(new THREE.Vector3());
+    socket.emit("match:grenadeThrow", {
+      grenadeId: id, x: origin.x, y: origin.y, z: origin.z, dirX: dir.x, dirY: dir.y, dirZ: dir.z
+    });
+    simulateGrenadeArc(id, origin, dir, true);
+  }, GRENADE_RELEASE_MS);
 }
 
 function simulateGrenadeArc(id, origin, dir, isLocal, fromSocketId) {
@@ -1647,7 +1670,7 @@ function updateMovement(delta) {
     socket.emit("match:move", {
       x: camera.position.x, y: Math.max(0, local.jumpOffset), z: camera.position.z,
       yaw: _readEuler.y, pitch: _readEuler.x,
-      moving, sprinting, jumping: !local.onGround || climbing, crouching,
+      moving, sprinting, jumping: !local.onGround || climbing, crouching, aiming: local.aiming, slot: local.slot,
       moveForward: forward, moveStrafe: strafe
     });
   }
@@ -1677,7 +1700,9 @@ function animateAvatars(delta) {
     if (avatar.mixer) {
       const animation = animationForAvatar(avatar);
       avatar.setAnimation(animation, false, animation.startsWith("dance") ? avatar.emoteSpeed : null);
+      setCharacterAiming(avatar, avatar.weaponId, avatar.aiming && avatar.alive);
       avatar.mixer.update(delta);
+      updateCharacterPose(avatar, delta);
       return;
     }
     avatar.walkPhase += delta * 6;
@@ -1925,6 +1950,7 @@ export function attachSocket(activeSocket) {
     local.score = 0;
     local.jumpOffset = me?.y || 0;
     local.grenadeCharges = Object.fromEntries(GRENADE_ORDER.map((id) => [id, GRENADE_CHARGES_PER_LIFE]));
+    local.grenadeThrowPending = false;
     local.ammo.primary = CLASSES[local.classId].primary.magSize;
     local.ammo.secondary = SECONDARY_WEAPONS[local.secondaryId].magSize;
     local.abilityCooldownUntil = 0;
@@ -1982,6 +2008,7 @@ export function attachSocket(activeSocket) {
 
   socket.on("vehicle:entered", (vehicle) => {
     local.vehicleId = vehicle.id;
+    setAiming(false);
     localMoveVelocity.set(0, 0, 0);
     localMoveTarget.set(0, 0, 0);
     local.emoteActive = false;
@@ -2061,6 +2088,11 @@ export function attachSocket(activeSocket) {
     avatar.sprinting = Boolean(p.sprinting);
     avatar.jumping = Boolean(p.jumping);
     avatar.crouching = Boolean(p.crouching);
+    avatar.aiming = Boolean(p.aiming);
+    avatar.slot = p.slot === "secondary" ? "secondary" : "primary";
+    avatar.weaponId = avatar.slot === "secondary"
+      ? (SECONDARY_WEAPONS[avatar.secondaryId]?.id || "pistol_common")
+      : (CLASSES[avatar.classId]?.primary?.id || "assault_rifle");
     avatar.moveForward = Number(p.moveForward) || 0;
     avatar.moveStrafe = Number(p.moveStrafe) || 0;
     if (avatar.moving || avatar.jumping) {
@@ -2128,6 +2160,7 @@ export function attachSocket(activeSocket) {
       local.sprinting = false;
       local.crouching = false;
       local.jumping = false;
+      local.grenadeThrowPending = false;
       closeDanceHub({ relock: false });
       local.externalVelocity.set(0, 0, 0);
       local.pendingFallDamage = 0;
@@ -2193,6 +2226,7 @@ export function attachSocket(activeSocket) {
       local.ammo.primary = CLASSES[local.classId].primary.magSize;
       local.ammo.secondary = SECONDARY_WEAPONS[local.secondaryId].magSize;
       local.grenadeCharges = Object.fromEntries(GRENADE_ORDER.map((id) => [id, GRENADE_CHARGES_PER_LIFE]));
+      local.grenadeThrowPending = false;
       weaponRig.visible = true;
       setViewWeapon("#4c5a3a", CLASSES[local.classId].primary.id);
       dom.vehicleStatus.classList.remove("active");
@@ -2272,10 +2306,14 @@ export function attachSocket(activeSocket) {
     updateGrenadeHud();
   });
 
-  socket.on("match:grenadeThrow", ({ socketId, grenadeId, x, y, z, dirX, dirY, dirZ }) => {
+  socket.on("match:grenadePrepare", ({ socketId }) => {
     if (socketId === selfId) return;
     const avatar = remotePlayers.get(socketId);
     if (avatar) playCharacterAction(avatar, "grenade");
+  });
+
+  socket.on("match:grenadeThrow", ({ socketId, grenadeId, x, y, z, dirX, dirY, dirZ }) => {
+    if (socketId === selfId) return;
     simulateGrenadeArc(grenadeId, new THREE.Vector3(x, y, z), new THREE.Vector3(dirX, dirY, dirZ), false, socketId);
   });
 

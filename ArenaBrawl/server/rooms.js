@@ -120,7 +120,7 @@ function createRoomsModule(io) {
       classId: normalizeClassId(className),
       team: null,
       x: 0, y: 0, z: 0, yaw: 0, pitch: 0,
-      moving: false, sprinting: false, jumping: false, crouching: false,
+      moving: false, sprinting: false, jumping: false, crouching: false, aiming: false, slot: "primary",
       moveForward: 0, moveStrafe: 0,
       health: 100,
       alive: true,
@@ -137,6 +137,7 @@ function createRoomsModule(io) {
       chargeStartedAt: 0,
       vehicleId: null,
       lastWorldForceAt: 0,
+      lastGrenadePrepareAt: 0,
       lastEnvironmentHitAt: 0,
       lastEmoteAt: 0,
       emoteId: null,
@@ -151,6 +152,7 @@ function createRoomsModule(io) {
       socketId: p.socketId, username: p.username, classId: p.classId, secondaryId: p.secondaryId, team: p.team,
       x: p.x, y: p.y, z: p.z, yaw: p.yaw, pitch: p.pitch,
       moving: p.moving, sprinting: p.sprinting, jumping: p.jumping, crouching: p.crouching,
+      aiming: p.aiming, slot: p.slot,
       health: p.health, alive: p.alive, kills: p.kills, deaths: p.deaths, score: p.score,
       vehicleId: p.vehicleId || null
     };
@@ -211,6 +213,12 @@ function createRoomsModule(io) {
     player.x = spawn.x; player.y = spawn.y; player.z = spawn.z; player.yaw = spawn.yaw; player.pitch = 0;
     player.health = 100;
     player.alive = true;
+    player.moving = false;
+    player.sprinting = false;
+    player.jumping = false;
+    player.crouching = false;
+    player.aiming = false;
+    player.slot = "primary";
     player.grenadeCharges = Object.fromEntries(Object.keys(GRENADES).map((id) => [id, GRENADE_CHARGES_PER_LIFE]));
     if (emit) {
       io.to(room.roomId).emit("match:respawn", {
@@ -308,7 +316,7 @@ function createRoomsModule(io) {
       io.to(room.roomId).volatile.emit("match:player-move", {
         socketId: player.socketId, x: player.x, y: player.y, z: player.z,
         yaw: player.yaw, pitch: player.pitch,
-        moving: false, sprinting: false, jumping: false, crouching: false
+        moving: false, sprinting: false, jumping: false, crouching: false, aiming: false, slot: player.slot
       });
     }
     io.to(player.socketId).emit("vehicle:exited", { reason, x: player.x, y: player.y, z: player.z });
@@ -803,7 +811,7 @@ function createRoomsModule(io) {
         io.to(room.roomId).emit("match:emote-stop", { socketId: socket.id });
       }
       player.x = vehicle.x; player.y = vehicle.y; player.z = vehicle.z;
-      player.moving = false; player.sprinting = false; player.jumping = false; player.crouching = false;
+      player.moving = false; player.sprinting = false; player.jumping = false; player.crouching = false; player.aiming = false;
       io.to(room.roomId).emit("vehicle:occupied", { vehicleId: vehicle.id, driverId: socket.id });
       socket.emit("vehicle:entered", publicVehicle(vehicle));
     });
@@ -935,6 +943,8 @@ function createRoomsModule(io) {
       player.sprinting = Boolean(state.sprinting);
       player.jumping = Boolean(state.jumping);
       player.crouching = Boolean(state.crouching);
+      player.aiming = Boolean(state.aiming);
+      player.slot = state.slot === "secondary" ? "secondary" : "primary";
       player.moveForward = Math.max(-1, Math.min(1, num(state.moveForward, 0)));
       player.moveStrafe = Math.max(-1, Math.min(1, num(state.moveStrafe, 0)));
       if ((player.moving || player.jumping) && player.emoteId) {
@@ -944,6 +954,7 @@ function createRoomsModule(io) {
       socket.to(room.roomId).volatile.emit("match:player-move", {
         socketId: socket.id, x: player.x, y: player.y, z: player.z, yaw: player.yaw, pitch: player.pitch,
         moving: player.moving, sprinting: player.sprinting, jumping: player.jumping, crouching: player.crouching,
+        aiming: player.aiming, slot: player.slot,
         moveForward: player.moveForward, moveStrafe: player.moveStrafe
       });
     });
@@ -1090,6 +1101,17 @@ function createRoomsModule(io) {
       if (!room || !player?.emoteId) return;
       player.emoteId = null;
       io.to(room.roomId).emit("match:emote-stop", { socketId: socket.id });
+    });
+
+    socket.on("match:grenadePrepare", ({ grenadeId } = {}) => {
+      const room = findRoomBySocket(socket.id);
+      if (!room || room.status !== "playing" || !room.settings.grenadesEnabled) return;
+      const player = room.players.find((p) => p.socketId === socket.id);
+      if (!player || !player.alive || !GRENADES[grenadeId] || (player.grenadeCharges[grenadeId] || 0) <= 0) return;
+      const now = Date.now();
+      if (now - player.lastGrenadePrepareAt < 650) return;
+      player.lastGrenadePrepareAt = now;
+      socket.to(room.roomId).emit("match:grenadePrepare", { socketId: socket.id, grenadeId });
     });
 
     socket.on("match:grenadeThrow", ({ grenadeId, x, y, z, dirX, dirY, dirZ } = {}) => {

@@ -24,6 +24,9 @@ let sketchbookCharacterPromise = null;
 let fpsCharacterPackPromise = null;
 const humanSoldierPackPromises = new Map();
 const oneShotTimers = new WeakMap();
+const aimStopTimers = new WeakMap();
+const poseEuler = new THREE.Euler();
+const poseQuaternion = new THREE.Quaternion();
 
 function loadTexture(loader, root, name) {
   return loader.loadAsync(`${root}${name}`).then((texture) => {
@@ -385,7 +388,7 @@ async function attachHumanSoldierCharacter(avatar, characterId) {
     jump: "run_forward",
     fall: "idle",
     land: "idle",
-    crouch: "aim_assault",
+    crouch: "idle",
     crouchWalk: "walk_forward",
     drive: "idle",
     driveBike: "idle",
@@ -428,6 +431,16 @@ async function attachHumanSoldierCharacter(avatar, characterId) {
   avatar.mixer = mixer;
   avatar.actions = actions;
   avatar.currentAnimationAction = null;
+  avatar.aimAnimationAction = null;
+  avatar.crouchBlend = 0;
+  avatar.crouchBones = {
+    hips: model.getObjectByName("B-hips"),
+    spine: model.getObjectByName("B-spine"),
+    thighL: model.getObjectByName("B-thighL"),
+    thighR: model.getObjectByName("B-thighR"),
+    shinL: model.getObjectByName("B-shinL"),
+    shinR: model.getObjectByName("B-shinR")
+  };
   avatar.humanSoldierCharacter = true;
   avatar.fpsCharacter = true;
   avatar.fallbackMeshes.forEach((mesh) => {
@@ -650,6 +663,67 @@ export function setCharacterAnimation(avatar, name, immediate = false, speed = n
   }
   avatar.currentAnimationAction = next;
   avatar.animationName = resolvedName;
+}
+
+function applyBoneRotation(bone, x, y, z, weight) {
+  if (!bone || weight <= 0.001) return;
+  poseEuler.set(x * weight, y * weight, z * weight);
+  poseQuaternion.setFromEuler(poseEuler);
+  bone.quaternion.multiply(poseQuaternion);
+}
+
+export function updateCharacterPose(avatar, delta) {
+  if (!avatar?.humanSoldierCharacter || !avatar.crouchBones) return;
+  const target = avatar.crouching && avatar.alive !== false && !avatar.inVehicle ? 1 : 0;
+  avatar.crouchBlend = THREE.MathUtils.damp(avatar.crouchBlend || 0, target, 13, Math.max(0, delta));
+  const blend = avatar.crouchBlend;
+  if (avatar.bodyHitbox) avatar.bodyHitbox.position.y = THREE.MathUtils.lerp(0.9, 0.68, blend);
+  if (avatar.lowerHitbox) avatar.lowerHitbox.position.y = THREE.MathUtils.lerp(0.32, 0.25, blend);
+  if (avatar.headMesh) avatar.headMesh.position.y = THREE.MathUtils.lerp(1.56, 1.22, blend);
+  if (blend <= 0.001) return;
+
+  const bones = avatar.crouchBones;
+  if (bones.hips) bones.hips.position.y -= 30 * blend;
+  applyBoneRotation(bones.spine, 0.12, 0, 0, blend);
+  applyBoneRotation(bones.thighL, -0.7, 0, 0, blend);
+  applyBoneRotation(bones.thighR, -0.7, 0, 0, blend);
+  applyBoneRotation(bones.shinL, 1.15, 0, 0, blend);
+  applyBoneRotation(bones.shinR, 1.15, 0, 0, blend);
+
+}
+
+export function setCharacterAiming(avatar, weaponId, enabled) {
+  if (!avatar?.humanSoldierCharacter || !avatar.actions) return false;
+  const next = enabled ? avatar.actions[`aim_${weaponAnimationFamily(weaponId)}`] : null;
+  if (avatar.aimAnimationAction === next) return Boolean(next);
+
+  const previous = avatar.aimAnimationAction;
+  avatar.aimAnimationAction = next;
+  if (previous) {
+    previous.fadeOut(0.14);
+    const oldTimer = aimStopTimers.get(previous);
+    if (oldTimer) clearTimeout(oldTimer);
+    const timer = setTimeout(() => {
+      if (avatar.aimAnimationAction !== previous) previous.stop();
+      aimStopTimers.delete(previous);
+    }, 180);
+    aimStopTimers.set(previous, timer);
+  }
+
+  if (!next) return false;
+  const pendingStop = aimStopTimers.get(next);
+  if (pendingStop) {
+    clearTimeout(pendingStop);
+    aimStopTimers.delete(next);
+  }
+  next.reset();
+  next.enabled = true;
+  next.paused = false;
+  next.setLoop(THREE.LoopRepeat, Infinity);
+  next.setEffectiveTimeScale(1);
+  next.setEffectiveWeight(1.4);
+  next.fadeIn(0.12).play();
+  return true;
 }
 
 export function playCharacterAction(avatar, name, speed = 1) {

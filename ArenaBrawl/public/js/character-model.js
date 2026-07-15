@@ -397,23 +397,37 @@ async function attachHumanSoldierCharacter(avatar, characterId) {
     dance_slow: "idle"
   };
 
-  Object.entries({ ...locomotionAliases, ...Object.fromEntries(Object.keys(clips).map((name) => [name, name])) })
-    .forEach(([name, clipName]) => {
-      const clip = clips[clipName] || clips.idle;
-      if (!clip) return;
-      const action = mixer.clipAction(clip);
-      if (["death", "damage", "grenade"].includes(name) || name.startsWith("shoot_") || name.startsWith("reload_")) {
-        action.setLoop(THREE.LoopOnce, 1);
-        action.clampWhenFinished = name === "death";
-      } else {
-        action.setLoop(THREE.LoopRepeat, Infinity);
-      }
-      actions[name] = action;
-    });
+  const actionDefinitions = new Map(Object.entries(locomotionAliases));
+  Object.keys(clips).forEach((name) => {
+    if (!actionDefinitions.has(name)) actionDefinitions.set(name, name);
+  });
+
+  actionDefinitions.forEach((clipName, name) => {
+    const sourceClip = clips[clipName] || clips.idle;
+    if (!sourceClip) return;
+
+    // AnimationMixer caches actions by clip UUID. Aliases such as jump/run and
+    // drive/idle must use independent clips or fading one state also fades the other.
+    const clip = sourceClip.clone();
+    clip.name = `${descriptor.prefix}_${name}`;
+    const action = mixer.clipAction(clip, model);
+    action.enabled = true;
+    action.paused = false;
+    action.zeroSlopeAtStart = false;
+    action.zeroSlopeAtEnd = false;
+    if (["death", "damage", "grenade"].includes(name) || name.startsWith("shoot_") || name.startsWith("reload_")) {
+      action.setLoop(THREE.LoopOnce, 1);
+      action.clampWhenFinished = name === "death";
+    } else {
+      action.setLoop(THREE.LoopRepeat, Infinity);
+    }
+    actions[name] = action;
+  });
 
   avatar.model = model;
   avatar.mixer = mixer;
   avatar.actions = actions;
+  avatar.currentAnimationAction = null;
   avatar.humanSoldierCharacter = true;
   avatar.fpsCharacter = true;
   avatar.fallbackMeshes.forEach((mesh) => {
@@ -592,7 +606,8 @@ export async function attachAnimatedCharacter(avatar) {
 }
 
 export function setCharacterAnimation(avatar, name, immediate = false, speed = null) {
-  const next = avatar.actions?.[name] || avatar.actions?.idle;
+  const resolvedName = avatar.actions?.[name] ? name : "idle";
+  const next = avatar.actions?.[resolvedName];
   if (!next) return;
   let defaultSpeed = name === "death" ? 2.8 : 1;
   if (avatar.sketchbookCharacter && name === "walk") defaultSpeed = 0.68;
@@ -606,21 +621,35 @@ export function setCharacterAnimation(avatar, name, immediate = false, speed = n
   if (avatar.fpsCharacter && name === "drive") defaultSpeed = 1;
   if (avatar.fpsCharacter && (name === "driveBike" || name === "drivePlane" || name === "driveJetski")) defaultSpeed = 1;
   if (avatar.fpsCharacter && name === "death") defaultSpeed = 1.35;
-  const effectiveSpeed = Number.isFinite(Number(speed)) ? Number(speed) : defaultSpeed;
+  const requestedSpeed = speed == null ? Number.NaN : Number(speed);
+  const effectiveSpeed = Number.isFinite(requestedSpeed) && requestedSpeed > 0
+    ? requestedSpeed
+    : defaultSpeed;
   next.setEffectiveTimeScale(effectiveSpeed);
-  if (avatar.animationName === name) {
-    if (!next.isRunning()) next.reset().play();
+  next.enabled = true;
+  next.paused = false;
+
+  if (avatar.currentAnimationAction === next && avatar.animationName === resolvedName) {
+    if (!next.isRunning() && resolvedName !== "death") next.play();
     return;
   }
-  const previous = avatar.actions?.[avatar.animationName];
-  if (immediate) {
+
+  const previous = avatar.currentAnimationAction;
+  next.reset();
+  next.enabled = true;
+  next.paused = false;
+  next.setEffectiveTimeScale(effectiveSpeed);
+  next.setEffectiveWeight(1);
+
+  if (immediate || !previous) {
     if (previous && previous !== next) previous.stop();
-    next.reset().setEffectiveWeight(1).play();
+    next.play();
   } else {
-    if (previous && previous !== next) previous.fadeOut(0.16);
-    next.reset().fadeIn(0.16).play();
+    next.play();
+    previous.crossFadeTo(next, 0.22, false);
   }
-  avatar.animationName = name;
+  avatar.currentAnimationAction = next;
+  avatar.animationName = resolvedName;
 }
 
 export function playCharacterAction(avatar, name, speed = 1) {
@@ -636,13 +665,15 @@ export function playCharacterAction(avatar, name, speed = 1) {
   action.setLoop(THREE.LoopOnce, 1);
   action.setEffectiveTimeScale(Math.max(0.1, Number(speed) || 1));
   const upperBodyAction = name === "grenade" || name.startsWith("shoot_") || name.startsWith("reload_");
-  action.setEffectiveWeight(upperBodyAction ? 2.4 : 1);
-  action.fadeIn(0.04).play();
+  action.setEffectiveWeight(upperBodyAction ? 1.35 : 0.9);
+  action.fadeIn(upperBodyAction ? 0.07 : 0.1).play();
 
   if (name !== "death") {
     const durationMs = Math.max(140, (action.getClip().duration / Math.max(0.1, Number(speed) || 1)) * 1000);
     const timer = setTimeout(() => {
-      action.fadeOut(Math.min(0.14, durationMs / 3000));
+      const fadeSeconds = Math.min(0.16, durationMs / 3000);
+      action.fadeOut(fadeSeconds);
+      setTimeout(() => action.stop(), fadeSeconds * 1000 + 20);
       oneShotTimers.delete(action);
     }, Math.max(80, durationMs - 120));
     oneShotTimers.set(action, timer);

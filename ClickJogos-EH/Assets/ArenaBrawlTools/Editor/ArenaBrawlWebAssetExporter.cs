@@ -285,11 +285,33 @@ public static class ArenaBrawlWebAssetExporter
         if (lower.Contains("ladder")) kind = "ladder";
         if (lower.Contains("tree_") || lower.Contains("tree_pine"))
         {
-            var trunkWidth = Mathf.Clamp(Mathf.Max(gameObject.transform.lossyScale.x, gameObject.transform.lossyScale.z) * 0.9f, 0.8f, 3.2f);
+            var trunkWidth = Mathf.Clamp(Mathf.Max(gameObject.transform.lossyScale.x, gameObject.transform.lossyScale.z) * 0.68f, 0.58f, 2.5f);
             bounds = new Bounds(
                 new Vector3(gameObject.transform.position.x, bounds.center.y * 0.5f, gameObject.transform.position.z),
                 new Vector3(trunkWidth, Mathf.Max(2.4f, bounds.size.y * 0.72f), trunkWidth)
             );
+        }
+        else if (lower.Contains("fence"))
+        {
+            var size = bounds.size;
+            if (size.x >= size.z)
+            {
+                size.x *= 0.88f;
+                size.z *= 0.46f;
+            }
+            else
+            {
+                size.x *= 0.46f;
+                size.z *= 0.88f;
+            }
+            bounds.size = size;
+        }
+        else if (lower.Contains("barrel") || lower.Contains("crate") || lower.Contains("bench") || lower.Contains("sign"))
+        {
+            var size = bounds.size;
+            size.x *= 0.78f;
+            size.z *= 0.78f;
+            bounds.size = size;
         }
 
         collider = new ExportCollider { kind = kind, source = assetName, bounds = bounds };

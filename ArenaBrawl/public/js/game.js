@@ -353,7 +353,8 @@ function isBlockedAt(x, z, feetY) {
   for (const ob of obstacles) {
     if (ob.active === false) continue;
     if (!ob.solid) continue;
-    if (pointInsideObstacle2D(ob, x, z, PLAYER_COLLISION_RADIUS)) {
+    const padding = Number.isFinite(ob.collisionPadding) ? ob.collisionPadding : PLAYER_COLLISION_RADIUS;
+    if (pointInsideObstacle2D(ob, x, z, padding)) {
       if (feetY + STEP_TOLERANCE < ob.topY) return true;
     }
   }
@@ -662,7 +663,6 @@ function spawnOrUpdateRemote(p) {
   avatar.crouching = Boolean(p.crouching);
   avatar.moveForward = Number(p.moveForward) || 0;
   avatar.moveStrafe = Number(p.moveStrafe) || 0;
-  avatar.setAnimation(animationForAvatar(avatar));
   avatar.kills = p.kills || 0;
   avatar.deaths = p.deaths || 0;
   avatar.score = p.score || avatar.kills || 0;
@@ -712,7 +712,8 @@ function nearestVehicle() {
   vehicles.forEach((entry) => {
     if (entry.target.destroyed || entry.target.driverId) return;
     const distance = Math.hypot(camera.position.x - entry.target.x, camera.position.z - entry.target.z);
-    if (distance < nearestDistance && Math.abs(camera.position.y - entry.target.y) < 6) {
+    const vehicleY = entry.model?.position.y ?? entry.target.y;
+    if (distance < nearestDistance && Math.abs(camera.position.y - vehicleY) < 6) {
       nearest = entry.target;
       nearestDistance = distance;
     }
@@ -751,7 +752,12 @@ function updateVehiclePresentation(delta) {
     entry.state.roll = THREE.MathUtils.lerp(entry.state.roll || 0, entry.target.roll || 0, t);
     entry.state.enginePower = THREE.MathUtils.lerp(entry.state.enginePower || 0, entry.target.enginePower || 0, t);
     entry.state.speed = THREE.MathUtils.lerp(entry.state.speed || 0, entry.target.speed || 0, t);
-    entry.model.position.set(entry.state.x, entry.state.y, entry.state.z);
+    const airVehicle = isAirVehicleType(entry.target.type);
+    const ground = airVehicle ? null : groundInfoAt(entry.state.x, entry.state.z, 0);
+    const presentationY = ground?.found
+      ? Math.max(entry.state.y, ground.height + 0.04)
+      : entry.state.y;
+    entry.model.position.set(entry.state.x, presentationY, entry.state.z);
     entry.model.rotation.set(entry.state.pitch || 0, entry.state.yaw, entry.state.roll || 0);
     entry.model.userData.wheels?.forEach((wheel) => {
       wheel.rotation.x += (entry.state.speed || 0) * delta * 2.4;
@@ -812,9 +818,9 @@ function updateVehiclePresentation(delta) {
   lookTarget.y += airVehicle ? 1.2 : 1.1;
   camera.lookAt(lookTarget);
   local.x = driven.state.x;
-  local.y = driven.state.y;
+  local.y = driven.model.position.y;
   local.z = driven.state.z;
-  local.jumpOffset = driven.state.y;
+  local.jumpOffset = driven.model.position.y;
   weaponRig.visible = !VEHICLE_STATS[driven.target.type]?.builtInWeapon;
   updateVehicleHud();
 }
@@ -1539,9 +1545,21 @@ function updateMovement(delta) {
 
   const feetY = local.jumpOffset;
   if (isBlockedAt(camera.position.x, camera.position.z, feetY)) {
-    camera.position.x = prevX;
-    camera.position.z = prevZ;
-    localMoveVelocity.multiplyScalar(0.25);
+    const movedX = camera.position.x;
+    const movedZ = camera.position.z;
+    const canSlideX = !isBlockedAt(movedX, prevZ, feetY);
+    const canSlideZ = !isBlockedAt(prevX, movedZ, feetY);
+    if (canSlideX && (!canSlideZ || Math.abs(moveVec.x) >= Math.abs(moveVec.z))) {
+      camera.position.z = prevZ;
+      localMoveVelocity.z = 0;
+    } else if (canSlideZ) {
+      camera.position.x = prevX;
+      localMoveVelocity.x = 0;
+    } else {
+      camera.position.x = prevX;
+      camera.position.z = prevZ;
+      localMoveVelocity.multiplyScalar(0.2);
+    }
   }
   if (mapWorld?.requireExplicitGround && !groundInfoAt(camera.position.x, camera.position.z, feetY).found) {
     camera.position.x = prevX;
@@ -2050,8 +2068,6 @@ export function attachSocket(activeSocket) {
       avatar.emoteSpeed = 1;
       avatar.emoteAnimation = "dance";
     }
-    const animation = animationForAvatar(avatar);
-    avatar.setAnimation(animation, false, animation.startsWith("dance") ? avatar.emoteSpeed : null);
   });
 
   socket.on("match:shot-fired", ({ socketId, weaponId, origin, direction, ballistics }) => {

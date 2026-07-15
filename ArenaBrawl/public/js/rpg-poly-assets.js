@@ -20,6 +20,7 @@ const fbxLoader = new FBXLoader(assetLoadingManager);
 const textureLoader = new THREE.TextureLoader();
 const modelCache = new Map();
 let texturePromise = null;
+let terrainTexture = null;
 const snapRaycaster = new THREE.Raycaster();
 const snapRayOrigin = new THREE.Vector3();
 const snapRayDirection = new THREE.Vector3(0, -1, 0);
@@ -56,6 +57,17 @@ function loadAtlasTexture() {
     });
   }
   return texturePromise;
+}
+
+function loadTerrainTexture() {
+  if (!terrainTexture) {
+    terrainTexture = textureLoader.load(resolveAssetUrl("./assets/textures/forest-grass.jpg"));
+    terrainTexture.colorSpace = THREE.SRGBColorSpace;
+    terrainTexture.wrapS = THREE.RepeatWrapping;
+    terrainTexture.wrapT = THREE.RepeatWrapping;
+    terrainTexture.anisotropy = 4;
+  }
+  return terrainTexture;
 }
 
 function loadRpgPolyModel(assetName) {
@@ -200,6 +212,7 @@ function createTerrainMesh(terrain) {
   const [sizeX, , sizeZ] = terrain.size;
   const positions = [];
   const colors = [];
+  const uvs = [];
   const indices = [];
 
   for (let z = 0; z < resolution; z++) {
@@ -209,6 +222,7 @@ function createTerrainMesh(terrain) {
       const index = z * resolution + x;
       const y = terrain.heights[index] ?? 0;
       positions.push(originX + nx * sizeX, y, originZ + nz * sizeZ);
+      uvs.push(nx * 18, nz * 18);
       const color = terrainColorForHeight(y, terrain.minY, terrain.maxY);
       colors.push(color.r, color.g, color.b);
     }
@@ -227,6 +241,7 @@ function createTerrainMesh(terrain) {
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
   geometry.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
+  geometry.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
   geometry.setIndex(indices);
   geometry.computeVertexNormals();
   geometry.computeBoundingBox();
@@ -235,6 +250,7 @@ function createTerrainMesh(terrain) {
   const mesh = new THREE.Mesh(
     geometry,
     new THREE.MeshStandardMaterial({
+      map: loadTerrainTexture(),
       vertexColors: true,
       roughness: 0.92,
       metalness: 0,
@@ -262,9 +278,14 @@ export function attachRpgPolyForestTerrain(world) {
     world.groundRaycastMeshes.push(mesh);
   });
 
-  const safeTerrain = RPG_POLY_FOREST_TERRAINS[0];
-  const safeY = terrainHeightAt(safeTerrain, 0, 0) ?? safeTerrain.position[1] ?? 0;
-  world.safeSpawn = { x: 0, y: safeY + 0.08, z: 0, yaw: 0 };
+  const requestedSpawn = world.safeSpawn || { x: 0, z: 0, yaw: 0 };
+  const spawnTerrain = RPG_POLY_FOREST_TERRAINS.find((terrain) => (
+    terrainHeightAt(terrain, requestedSpawn.x || 0, requestedSpawn.z || 0) != null
+  )) || RPG_POLY_FOREST_TERRAINS[0];
+  const safeY = terrainHeightAt(spawnTerrain, requestedSpawn.x || 0, requestedSpawn.z || 0)
+    ?? spawnTerrain.position[1]
+    ?? 0;
+  world.safeSpawn = { ...requestedSpawn, y: safeY + 0.08 };
   return true;
 }
 
@@ -294,6 +315,12 @@ export function registerRpgPolyForestCollisions(world) {
       return;
     }
 
+    const source = String(collider.source || "").toLowerCase();
+    const collisionPadding = source.includes("fence")
+      ? 0.1
+      : /barrel|crate|bench|sign|lamp/.test(source)
+        ? 0.16
+        : 0.23;
     world.obstacles.push({
       type: "aabb",
       minX: collider.minX,
@@ -305,6 +332,7 @@ export function registerRpgPolyForestCollisions(world) {
       topY: collider.maxY,
       solid: collider.kind !== "platform",
       active: true,
+      collisionPadding,
       source: `rpg-poly:${collider.source}`
     });
   });

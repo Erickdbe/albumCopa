@@ -124,8 +124,8 @@ export function buildVehicleModel(vehicle) {
   model.traverse((child)=>{if(child.isMesh)child.userData.vehicleId=vehicle.id;});
   model.position.set(vehicle.x,vehicle.y,vehicle.z);
   model.rotation.y=vehicle.yaw||0;
-  if(vehicle.type==="car")attachSketchbookVehicle(model,"car",{targetSize:4.45});
-  else if(vehicle.type==="motorcycle")attachMeshyModel(model,"vehicle-thunder",{targetSize:2.5,align:"negative-x-to-z"});
+  if(vehicle.type==="car")attachSketchbookVehicle(model,"car",{targetSize:4.45,rotation:[0,Math.PI,0]});
+  else if(vehicle.type==="motorcycle")attachMeshyModel(model,"vehicle-thunder",{targetSize:2.5,align:"x-to-z"});
   else if(vehicle.type==="helicopter")attachSketchbookVehicle(model,"helicopter",{targetSize:7.2,offset:new THREE.Vector3(0,0.12,0)});
   else if(vehicle.type==="plane")attachSketchbookVehicle(model,"plane",{targetSize:7.5,offset:new THREE.Vector3(0,0.05,0)});
   return model;

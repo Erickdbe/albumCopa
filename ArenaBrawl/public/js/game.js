@@ -288,11 +288,18 @@ function clearSceneObjects() {
 
 function updateCameraToggle() {
   if (!dom.cameraToggle) return;
-  dom.cameraToggle.textContent = cameraMode === "third" ? "3a pessoa" : "1a pessoa";
-  dom.cameraToggle.classList.toggle("third", cameraMode === "third");
+  const vehicleCamera = Boolean(local.vehicleId);
+  const thirdPersonActive = vehicleCamera || cameraMode === "third";
+  dom.cameraToggle.textContent = thirdPersonActive ? "3a pessoa" : "1a pessoa";
+  dom.cameraToggle.classList.toggle("third", thirdPersonActive);
 }
 
 function toggleCameraMode() {
+  if (local.vehicleId) {
+    weaponRig.visible = false;
+    updateCameraToggle();
+    return;
+  }
   cameraMode = cameraMode === "third" ? "first" : "third";
   localStorage.setItem("arenaBrawlCameraMode", cameraMode);
   thirdPersonCameraReady = false;
@@ -918,7 +925,7 @@ function updateVehiclePresentation(delta) {
   local.y = driven.model.position.y;
   local.z = driven.state.z;
   local.jumpOffset = driven.model.position.y;
-  weaponRig.visible = !VEHICLE_STATS[driven.target.type]?.builtInWeapon;
+  weaponRig.visible = false;
   updateVehicleHud();
 }
 
@@ -2204,7 +2211,8 @@ export function attachSocket(activeSocket) {
     local.lastVehicleShotAt = 0;
     syncVehicles([...(Array.from(vehicles.values()).map((entry) => entry.target).filter((item) => item.id !== vehicle.id)), vehicle]);
     if (!VEHICLE_STATS[vehicle.type]?.builtInWeapon) switchSlot("secondary");
-    else weaponRig.visible = false;
+    weaponRig.visible = false;
+    updateCameraToggle();
     updateVehicleHud();
   });
 
@@ -2222,11 +2230,12 @@ export function attachSocket(activeSocket) {
     local.prone = false;
     local.proneExitUntil = 0;
     local.jumping = false;
-    weaponRig.visible = true;
+    weaponRig.visible = cameraMode !== "third";
     camera.position.set(Number(x) || camera.position.x, EYE_HEIGHT + (Number(y) || 0), Number(z) || camera.position.z);
     local.jumpOffset = Number(y) || 0;
     ensureLocalPlayablePosition();
     switchSlot("primary");
+    updateCameraToggle();
     updateVehicleHud();
   });
 

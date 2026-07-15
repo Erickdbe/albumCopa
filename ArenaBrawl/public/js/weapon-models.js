@@ -16,6 +16,21 @@ const MESHY_WEAPONS = {
   pistol_common: { asset: "pistol", targetSize: 0.72, align: "negative-x-to-z" }
 };
 
+const AIM_POSES = {
+  sniper_rifle: [0, -0.2, -2],
+  bow: [0, -0.03, -1.18],
+  crossbow: [0, -0.12, -1.55],
+  smg: [0, -0.12, -1.35],
+  assault_rifle: [0, -0.13, -1.75],
+  heavy_mg: [0, -0.14, -1.85],
+  mini_shotgun: [0, -0.13, -1.65],
+  revolver: [0, -0.12, -0.95],
+  heavy_pistol: [0, -0.12, -0.95],
+  auto_pistol_weak: [0, -0.12, -0.9],
+  pistol_common: [0, -0.12, -0.9],
+  knife: [0.14, -0.28, -0.82]
+};
+
 const MAT = {
   dark: new THREE.MeshStandardMaterial({ color: 0x171a1f, roughness: 0.55, metalness: 0.5 }),
   metal: new THREE.MeshStandardMaterial({ color: 0x454b52, roughness: 0.35, metalness: 0.75 }),
@@ -236,7 +251,7 @@ export function buildWeaponModel(weaponId, accentColor = "#5c6b48") {
   const isBow = weaponId === "bow";
   const isKnife = weaponId === "knife";
   group.userData.hipPosition = new THREE.Vector3(isBow ? 0.36 : 0.3, isKnife ? -0.34 : -0.27, isBow ? -0.72 : -0.62);
-  group.userData.aimPosition = new THREE.Vector3(0, isBow ? -0.03 : -0.12, isBow ? -0.76 : -0.68);
+  group.userData.aimPosition = new THREE.Vector3(...(AIM_POSES[weaponId] || [0, -0.12, -1.2]));
   group.position.copy(group.userData.hipPosition);
   group.rotation.set(isKnife ? -0.18 : 0, isKnife ? -0.2 : 0, isKnife ? 0.2 : 0);
 

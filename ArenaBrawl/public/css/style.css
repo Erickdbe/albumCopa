@@ -177,6 +177,9 @@ html, body {
 .vehicle-status strong { display: block; margin-bottom: 6px; font-size: 0.82rem; text-transform: uppercase; }
 .vehicle-health { width: 100%; height: 8px; background: rgba(255,255,255,0.14); overflow: hidden; }
 .vehicle-health div { width: 100%; height: 100%; background: #6fd36f; transition: width 0.15s linear; }
+.vehicle-health-text { display: block; margin-top: 4px; color: #f2f5ff; font-size: 0.7rem; font-weight: 800; }
+.vehicle-ability { display: block; margin-top: 7px; color: #b9c2d4; font-size: 0.72rem; font-weight: 700; }
+.vehicle-ability.ready { color: #ffd23f; }
 
 .hud-top-left { top: 20px; left: 20px; display: none; }
 .hud-health { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }

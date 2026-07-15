@@ -877,15 +877,15 @@ export function updateCharacterPose(avatar, delta) {
   if (avatar.model && avatar.modelBasePosition) {
     avatar.model.position.copy(avatar.modelBasePosition);
     avatar.model.position.y += 0.38 * proneBlend;
-    avatar.model.position.z += 0.22 * proneBlend;
-    avatar.model.rotation.x = (avatar.modelBaseRotationX || 0) - Math.PI * 0.5 * proneBlend;
+    avatar.model.position.z -= 0.22 * proneBlend;
+    avatar.model.rotation.x = (avatar.modelBaseRotationX || 0) + Math.PI * 0.5 * proneBlend;
   }
 
   if (avatar.bodyHitbox) {
     avatar.bodyHitbox.position.set(
       0,
       THREE.MathUtils.lerp(THREE.MathUtils.lerp(0.9, 0.68, crouchBlend), 0.42, proneBlend),
-      THREE.MathUtils.lerp(0, -0.88, proneBlend)
+      THREE.MathUtils.lerp(0, 0.88, proneBlend)
     );
     avatar.bodyHitbox.scale.set(1, THREE.MathUtils.lerp(1, 0.42, proneBlend), THREE.MathUtils.lerp(1, 2.15, proneBlend));
   }
@@ -893,7 +893,7 @@ export function updateCharacterPose(avatar, delta) {
     avatar.lowerHitbox.position.set(
       0,
       THREE.MathUtils.lerp(THREE.MathUtils.lerp(0.32, 0.25, crouchBlend), 0.34, proneBlend),
-      THREE.MathUtils.lerp(0, -0.25, proneBlend)
+      THREE.MathUtils.lerp(0, 0.25, proneBlend)
     );
     avatar.lowerHitbox.scale.set(1, THREE.MathUtils.lerp(1, 0.55, proneBlend), THREE.MathUtils.lerp(1, 1.65, proneBlend));
   }
@@ -901,12 +901,12 @@ export function updateCharacterPose(avatar, delta) {
     avatar.headMesh.position.set(
       0,
       THREE.MathUtils.lerp(THREE.MathUtils.lerp(1.56, 1.22, crouchBlend), 0.4, proneBlend),
-      THREE.MathUtils.lerp(0, -1.55, proneBlend)
+      THREE.MathUtils.lerp(0, 1.55, proneBlend)
     );
   }
   if (avatar.tagSprite) {
     avatar.tagSprite.position.y = THREE.MathUtils.lerp(1.95, 0.92, proneBlend);
-    avatar.tagSprite.position.z = THREE.MathUtils.lerp(0, -0.82, proneBlend);
+    avatar.tagSprite.position.z = THREE.MathUtils.lerp(0, 0.82, proneBlend);
   }
 
   const bones = avatar.crouchBones;

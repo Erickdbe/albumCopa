@@ -85,11 +85,14 @@ export const VEHICLE_SPAWNS = {
     { id: "city-quad-park", type: "quad", x: -72, y: 0, z: 42, yaw: Math.PI / 2 }
   ],
   floresta: [
-    { id: "forest-plane", type: "plane", x: 0, y: 7, z: 132, yaw: Math.PI },
-    { id: "forest-cannon-west", type: "cannon", x: -118, y: 0, z: -18, yaw: Math.PI / 2 },
-    { id: "forest-cannon-east", type: "cannon", x: 118, y: 0, z: 18, yaw: -Math.PI / 2 },
-    { id: "forest-bike-trail", type: "motorcycle", x: 64, y: 0, z: -110, yaw: -0.35 },
-    { id: "forest-quad-lodge", type: "quad", x: -58, y: 0, z: 92, yaw: 0.7 }
+    { id: "forest-plane", type: "plane", x: -100, y: 3, z: 0, yaw: -Math.PI / 2 },
+    { id: "forest-helicopter", type: "helicopter", x: -80, y: 3, z: -30, yaw: Math.PI / 2 },
+    { id: "forest-car-camp", type: "car", x: -60, y: 1, z: -70, yaw: 0 },
+    { id: "forest-car-trail", type: "car", x: -100, y: 0.85, z: 10, yaw: Math.PI },
+    { id: "forest-bike-trail", type: "motorcycle", x: -20, y: 1.8, z: -50, yaw: -0.35 },
+    { id: "forest-quad-lodge", type: "quad", x: -50, y: 6.5, z: 70, yaw: 0.7 },
+    { id: "forest-cannon-west", type: "cannon", x: -118, y: 4.7, z: -18, yaw: Math.PI / 2 },
+    { id: "forest-cannon-east", type: "cannon", x: 118, y: 8.35, z: 18, yaw: -Math.PI / 2 }
   ],
   praia: [
     { id: "beach-jetski-a", type: "jetski", x: -34, y: 0.2, z: 82, yaw: Math.PI },
@@ -101,13 +104,13 @@ export const VEHICLE_SPAWNS = {
 };
 
 export const VEHICLE_STATS = {
-  car: { name: "Carro", maxHealth: 260, maxSpeed: 19 },
-  motorcycle: { name: "Moto", maxHealth: 150, maxSpeed: 25 },
-  quad: { name: "Quadriciclo", maxHealth: 220, maxSpeed: 17 },
-  jetski: { name: "Jetski", maxHealth: 180, maxSpeed: 23 },
-  plane: { name: "Aviao", maxHealth: 320, maxSpeed: 34, builtInWeapon: true },
-  helicopter: { name: "Helicoptero", maxHealth: 300, maxSpeed: 28, builtInWeapon: true },
-  cannon: { name: "Canhao", maxHealth: 420, maxSpeed: 0, builtInWeapon: true }
+  car: { name: "Carro", maxHealth: 1200, maxSpeed: 19 },
+  motorcycle: { name: "Moto", maxHealth: 1200, maxSpeed: 25 },
+  quad: { name: "Quadriciclo", maxHealth: 1200, maxSpeed: 17 },
+  jetski: { name: "Jetski", maxHealth: 1200, maxSpeed: 23 },
+  plane: { name: "Aviao", maxHealth: 1200, maxSpeed: 34, builtInWeapon: true, bombCooldownMs: 25000 },
+  helicopter: { name: "Helicoptero", maxHealth: 1200, maxSpeed: 28, builtInWeapon: true },
+  cannon: { name: "Canhao", maxHealth: 1200, maxSpeed: 0, builtInWeapon: true }
 };
 
 export const MATCH_DURATIONS_MIN = [3, 5, 10, 15];

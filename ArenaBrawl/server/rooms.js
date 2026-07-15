@@ -68,8 +68,13 @@ function makeVehicles(mapId) {
       steering: 0,
       enginePower: 0,
       verticalVelocity: 0,
+      grounded: spawn.type !== "plane" && spawn.type !== "helicopter",
+      groundY: spawn.y,
+      lastGroundY: spawn.y,
       lastSpeed: 0,
       lastFireAt: 0,
+      lastBombAt: 0,
+      bombReadyAt: 0,
       lastRamAt: new Map()
     };
   });
@@ -81,7 +86,8 @@ function publicVehicle(vehicle) {
     x: vehicle.x, y: vehicle.y, z: vehicle.z, yaw: vehicle.yaw,
     pitch: vehicle.pitch || 0, roll: vehicle.roll || 0, enginePower: vehicle.enginePower || 0,
     speed: vehicle.speed, health: vehicle.health, maxHealth: vehicle.maxHealth,
-    driverId: vehicle.driverId, destroyed: vehicle.destroyed
+    driverId: vehicle.driverId, destroyed: vehicle.destroyed,
+    grounded: vehicle.grounded !== false, bombReadyAt: vehicle.bombReadyAt || 0
   };
 }
 
@@ -326,7 +332,7 @@ function createRoomsModule(io) {
 
   function damageVehicle(room, vehicle, amount, attacker = null) {
     if (!vehicle || vehicle.destroyed) return;
-    vehicle.health = Math.max(0, vehicle.health - Math.max(0, Math.min(120, Number(amount) || 0)));
+    vehicle.health = Math.max(0, vehicle.health - Math.max(0, Math.min(400, Number(amount) || 0)));
     io.to(room.roomId).emit("vehicle:damaged", {
       vehicleId: vehicle.id,
       health: vehicle.health,
@@ -439,6 +445,10 @@ function createRoomsModule(io) {
       vehicle.speed = approach(vehicle.speed, 0, stats.acceleration * (waterMode ? 0.42 : 0.34) * delta);
     }
     if (brake) vehicle.speed = approach(vehicle.speed, 0, stats.acceleration * 1.8 * delta);
+    if (input.collision) {
+      vehicle.speed = Math.abs(vehicle.speed) > 8 ? -vehicle.speed * 0.08 : 0;
+      vehicle.enginePower = Math.min(vehicle.enginePower, 0.18);
+    }
 
     const drag = waterMode ? 0.985 : 0.992;
     vehicle.speed *= Math.pow(drag, delta * 60);
@@ -451,10 +461,44 @@ function createRoomsModule(io) {
     vehicle.z -= Math.cos(vehicle.yaw) * vehicle.speed * delta;
 
     const acceleration = (vehicle.speed - (vehicle.lastSpeed || 0)) / Math.max(0.001, delta);
+    const sampledGround = Number.isFinite(input.groundY)
+      ? clamp(input.groundY, -2, 60)
+      : Number.isFinite(vehicle.groundY) ? vehicle.groundY : vehicle.y;
+    const aheadGround = Number.isFinite(input.groundAheadY) ? clamp(input.groundAheadY, -2, 60) : sampledGround;
+    const behindGround = Number.isFinite(input.groundBehindY) ? clamp(input.groundBehindY, -2, 60) : sampledGround;
+    const previousGround = Number.isFinite(vehicle.lastGroundY) ? vehicle.lastGroundY : sampledGround;
+    const terrainVelocity = clamp((sampledGround - previousGround) / Math.max(0.001, delta), -12, 12);
+    const contactY = sampledGround + (waterMode ? 0.2 : 0.06);
+    const terrainPitch = Math.atan2(aheadGround - behindGround, 4.8);
+    const wasGrounded = vehicle.grounded !== false;
+
+    vehicle.groundY = sampledGround;
+    vehicle.lastGroundY = sampledGround;
+    if (!waterMode) {
+      if (wasGrounded && contactY < vehicle.y - 0.34 && Math.abs(vehicle.speed) > 6.5) {
+        vehicle.grounded = false;
+        vehicle.verticalVelocity = Math.max(vehicle.verticalVelocity || 0, terrainVelocity * 0.72);
+      }
+      if (vehicle.grounded !== false) {
+        const suspension = Math.min(1, delta * (Math.abs(vehicle.speed) > 5 ? 16 : 22));
+        vehicle.y = lerp(vehicle.y, contactY, suspension);
+        vehicle.verticalVelocity = clamp(terrainVelocity * 0.68, -4.5, 8.5);
+      } else {
+        vehicle.verticalVelocity = (vehicle.verticalVelocity || 0) - 18 * delta;
+        vehicle.y += vehicle.verticalVelocity * delta;
+        if (vehicle.y <= contactY) {
+          const impactSpeed = Math.abs(Math.min(0, vehicle.verticalVelocity || 0));
+          vehicle.y = contactY;
+          vehicle.grounded = true;
+          vehicle.verticalVelocity = impactSpeed > 8 ? Math.min(2.2, impactSpeed * 0.12) : 0;
+          if (impactSpeed > 11) vehicle.speed *= 0.82;
+        }
+      }
+    }
     const targetRoll = -vehicle.steering * steeringAtSpeed * (waterMode ? 0.18 : 0.26);
-    const targetPitch = clamp(-acceleration * 0.012, -0.22, 0.18);
+    const targetPitch = clamp(terrainPitch - acceleration * 0.012, -0.48, 0.42);
     vehicle.roll = lerp(vehicle.roll || 0, targetRoll, delta * 5.5);
-    vehicle.pitch = lerp(vehicle.pitch || 0, targetPitch, delta * 4.5);
+    vehicle.pitch = lerp(vehicle.pitch || 0, vehicle.grounded === false ? clamp(targetPitch - (vehicle.verticalVelocity || 0) * 0.018, -0.48, 0.42) : targetPitch, delta * 4.5);
     vehicle.lastSpeed = vehicle.speed;
   }
 
@@ -534,8 +578,6 @@ function createRoomsModule(io) {
 
       if (vehicle.type === "jetski") {
         vehicle.y = 0.2;
-      } else if (vehicle.type !== "cannon" && vehicle.type !== "plane" && vehicle.type !== "helicopter") {
-        vehicle.y = Math.max(groundY, vehicle.y - 8 * delta);
       }
 
       if (room.settings.mapId === "sketchbook") {
@@ -830,6 +872,11 @@ function createRoomsModule(io) {
       const vehicle = room?.vehicles.find((item) => item.id === player?.vehicleId && item.driverId === socket.id);
       if (!vehicle || vehicle.destroyed) return;
       const clampInput = (value) => Math.max(-1, Math.min(1, Number(value) || 0));
+      const groundSample = (value) => {
+        if (value == null || value === "") return null;
+        const numeric = Number(value);
+        return Number.isFinite(numeric) ? Math.max(-2, Math.min(60, numeric)) : null;
+      };
       vehicle.input = {
         throttle: clampInput(input.throttle),
         steer: clampInput(input.steer),
@@ -837,7 +884,11 @@ function createRoomsModule(io) {
         pitch: clampInput(input.pitch),
         roll: clampInput(input.roll),
         yaw: clampInput(input.yaw),
-        brake: Boolean(input.brake)
+        brake: Boolean(input.brake),
+        groundY: groundSample(input.groundY),
+        groundAheadY: groundSample(input.groundAheadY),
+        groundBehindY: groundSample(input.groundBehindY),
+        collision: Boolean(input.collision)
       };
     });
 
@@ -881,6 +932,69 @@ function createRoomsModule(io) {
         origin: origin || { x: vehicle.x, y: vehicle.y + 1, z: vehicle.z },
         direction: direction || { x: 0, y: 0, z: -1 }
       });
+    });
+
+    socket.on("vehicle:bomb", ({ vehicleId, target } = {}) => {
+      const room = findRoomBySocket(socket.id);
+      const shooter = room?.players.find((item) => item.socketId === socket.id);
+      const vehicle = room?.vehicles.find((item) => item.id === vehicleId && item.driverId === socket.id);
+      const stats = vehicle ? VEHICLE_STATS[vehicle.type] : null;
+      if (!room || room.status !== "playing" || !shooter?.alive || !vehicle || vehicle.destroyed || vehicle.type !== "plane") return;
+      const now = Date.now();
+      const cooldownMs = stats?.bombCooldownMs || 25000;
+      if (now < (vehicle.bombReadyAt || 0)) return;
+
+      const half = MAP_HALF_SIZES[room.settings.mapId] || ARENA_HALF;
+      const requestedX = Number(target?.x);
+      const requestedY = Number(target?.y);
+      const requestedZ = Number(target?.z);
+      const targetPoint = {
+        x: clamp(Number.isFinite(requestedX) ? requestedX : vehicle.x, -half + 2, half - 2),
+        y: clamp(Number.isFinite(requestedY) ? requestedY : 0, -1, 55),
+        z: clamp(Number.isFinite(requestedZ) ? requestedZ : vehicle.z, -half + 2, half - 2)
+      };
+      if (Math.hypot(targetPoint.x - vehicle.x, targetPoint.z - vehicle.z) > 90) return;
+
+      const origin = { x: vehicle.x, y: vehicle.y - 0.45, z: vehicle.z };
+      const flightMs = Math.round(clamp(Math.sqrt(2 * Math.max(1, origin.y - targetPoint.y) / 16) * 1000, 650, 2500));
+      vehicle.lastBombAt = now;
+      vehicle.bombReadyAt = now + cooldownMs;
+      io.to(room.roomId).emit("vehicle:bomb-dropped", {
+        vehicleId: vehicle.id,
+        origin,
+        target: targetPoint,
+        flightMs
+      });
+      io.to(socket.id).emit("vehicle:bomb-cooldown", { vehicleId: vehicle.id, readyAt: vehicle.bombReadyAt });
+
+      setTimeout(() => {
+        if (rooms.get(room.roomId) !== room || room.status !== "playing") return;
+        const currentShooter = room.players.find((item) => item.socketId === socket.id) || null;
+        const radius = 9;
+        io.to(room.roomId).emit("vehicle:bomb-exploded", {
+          vehicleId: vehicle.id,
+          x: targetPoint.x,
+          y: targetPoint.y,
+          z: targetPoint.z
+        });
+        room.players.forEach((player) => {
+          if (!player.alive) return;
+          const distance = Math.hypot(player.x - targetPoint.x, player.z - targetPoint.z);
+          if (distance > radius) return;
+          const falloff = Math.max(0, 1 - distance / radius);
+          applyDamage(room, player.socketId === currentShooter?.socketId ? null : currentShooter, player, 24 + 76 * falloff, false);
+        });
+        room.vehicles.forEach((targetVehicle) => {
+          if (targetVehicle.destroyed || targetVehicle.id === vehicle.id) return;
+          const distance = Math.hypot(targetVehicle.x - targetPoint.x, targetVehicle.z - targetPoint.z);
+          if (distance <= radius + 2) damageVehicle(room, targetVehicle, 90 + 210 * Math.max(0, 1 - distance / (radius + 2)), currentShooter);
+        });
+        room.worldObjects.forEach((object) => {
+          if (Math.hypot(object.x - targetPoint.x, object.z - targetPoint.z) <= radius + 2) {
+            damageWorldObject(room, object.id, 180, object);
+          }
+        });
+      }, flightMs);
     });
 
     socket.on("vehicle:launch-self", ({ vehicleId } = {}) => {

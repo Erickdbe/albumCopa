@@ -49,7 +49,7 @@ function buildCar(color) {
   group.userData.wheels = [[-1.02,0.48,-1.35],[1.02,0.48,-1.35],[-1.02,0.48,1.35],[1.02,0.48,1.35]].map((p)=>addWheel(group,...p));
   box(group,[0.36,0.2,0.08],[-0.62,0.8,-2.08],mat(0xffefb0,{emissive:0x554411}));
   box(group,[0.36,0.2,0.08],[0.62,0.8,-2.08],mat(0xffefb0,{emissive:0x554411}));
-  group.userData.cameraOffset=new THREE.Vector3(0,2.15,0.25);group.userData.radius=2.25;
+  group.userData.cameraOffset=new THREE.Vector3(0,3.05,7.4);group.userData.lookHeight=1.15;group.userData.radius=2.25;
   return group;
 }
 
@@ -60,7 +60,7 @@ function buildMotorcycle(color) {
   box(group,[0.5,0.16,0.8],[0,1.2,0.55],materials.dark);
   box(group,[0.12,1.1,0.12],[0,1.15,-0.88],materials.metal,[0.22,0,0]);
   box(group,[1.0,0.1,0.1],[0,1.6,-1.05],materials.metal);
-  group.userData.cameraOffset=new THREE.Vector3(0,1.85,0.3);group.userData.radius=1.35;
+  group.userData.cameraOffset=new THREE.Vector3(0,2.65,5.6);group.userData.lookHeight=1.05;group.userData.radius=1.35;
   return group;
 }
 
@@ -70,7 +70,7 @@ function buildQuad(color) {
   box(group,[0.72,0.24,0.9],[0,1.15,0.35],materials.dark);
   group.userData.wheels=[[-0.9,0.5,-0.8],[0.9,0.5,-0.8],[-0.9,0.5,0.8],[0.9,0.5,0.8]].map((p)=>addWheel(group,...p,0.5,0.38));
   box(group,[1.15,0.1,0.1],[0,1.5,-0.62],materials.metal);
-  group.userData.cameraOffset=new THREE.Vector3(0,1.9,0.2);group.userData.radius=1.45;
+  group.userData.cameraOffset=new THREE.Vector3(0,2.75,6.1);group.userData.lookHeight=1.1;group.userData.radius=1.45;
   return group;
 }
 
@@ -79,7 +79,7 @@ function buildJetski(color) {
   const hull=new THREE.Mesh(new THREE.CapsuleGeometry(0.72,2.5,5,12),body);hull.rotation.x=Math.PI/2;hull.scale.y=0.52;hull.position.y=0.55;group.add(hull);
   box(group,[0.62,0.5,1.05],[0,1.02,0.25],materials.dark,[0.12,0,0]);
   box(group,[1.05,0.09,0.09],[0,1.55,-0.28],materials.metal);
-  group.userData.cameraOffset=new THREE.Vector3(0,1.8,0.3);group.userData.radius=1.65;
+  group.userData.cameraOffset=new THREE.Vector3(0,2.55,6.4);group.userData.lookHeight=1;group.userData.radius=1.65;
   return group;
 }
 
@@ -97,7 +97,7 @@ function buildPlane(color) {
   box(group,[0.95,0.52,0.9],[0,0.55,-0.6],materials.glass);
   cylinder(group,0.055,2.1,[-0.42,-0.18,-1.45],materials.dark,[Math.PI/2,0,0]);
   cylinder(group,0.055,2.1,[0.42,-0.18,-1.45],materials.dark,[Math.PI/2,0,0]);
-  group.userData.cameraOffset=new THREE.Vector3(0,1.25,0.15);group.userData.radius=3.7;group.userData.muzzleOffset=new THREE.Vector3(0,-0.15,-2.6);
+  group.userData.cameraOffset=new THREE.Vector3(0,4.6,12.5);group.userData.lookHeight=1.05;group.userData.radius=3.7;group.userData.muzzleOffset=new THREE.Vector3(0,-0.15,-2.6);
   return group;
 }
 
@@ -107,7 +107,7 @@ function buildCannon() {
   box(group,[2.3,0.32,2.5],[0,0.65,0.35],materials.wood);
   const barrel=cylinder(group,0.33,3.8,[0,1.35,-1.05],materials.dark,[Math.PI/2,0,0],14);barrel.rotation.x=Math.PI/2-0.18;
   cylinder(group,0.48,0.55,[0,1.08,0.35],materials.metal,[0,0,Math.PI/2],14);
-  group.userData.cameraOffset=new THREE.Vector3(0,2.0,0.65);group.userData.radius=2.15;group.userData.muzzleOffset=new THREE.Vector3(0,1.65,-2.9);
+  group.userData.cameraOffset=new THREE.Vector3(0,3.35,7.2);group.userData.lookHeight=1.35;group.userData.radius=2.15;group.userData.muzzleOffset=new THREE.Vector3(0,1.65,-2.9);
   return group;
 }
 
@@ -144,4 +144,35 @@ export function createCannonProjectile(scene, origin, direction, onDone) {
   const velocity=direction.clone().multiplyScalar(38).add(new THREE.Vector3(0,8,0));let elapsed=0;
   function step(){const delta=1/60;elapsed+=delta;velocity.y-=14*delta;ball.position.addScaledVector(velocity,delta);if(elapsed<3&&ball.position.y>-1)requestAnimationFrame(step);else{const point=ball.position.clone();scene.remove(ball);onDone?.(point);}}
   requestAnimationFrame(step);
+}
+
+export function createAirBomb(scene, origin, target, durationMs = 1200, onDone) {
+  const group = new THREE.Group();
+  const shell = new THREE.Mesh(
+    new THREE.CapsuleGeometry(0.18, 0.58, 5, 10),
+    new THREE.MeshStandardMaterial({ color: 0x25282c, roughness: 0.48, metalness: 0.72 })
+  );
+  shell.rotation.x = Math.PI / 2;
+  group.add(shell);
+  box(group, [0.62, 0.05, 0.2], [0, 0, 0.3], materials.metal);
+  box(group, [0.2, 0.05, 0.62], [0, 0, 0.3], materials.metal);
+  group.position.copy(origin);
+  scene.add(group);
+  const startedAt = performance.now();
+  const flightMs = Math.max(300, Number(durationMs) || 1200);
+
+  function step(now) {
+    const t = THREE.MathUtils.clamp((now - startedAt) / flightMs, 0, 1);
+    group.position.x = THREE.MathUtils.lerp(origin.x, target.x, t);
+    group.position.z = THREE.MathUtils.lerp(origin.z, target.z, t);
+    group.position.y = THREE.MathUtils.lerp(origin.y, target.y, t * t);
+    group.rotation.x += 0.13;
+    if (t < 1) requestAnimationFrame(step);
+    else {
+      scene.remove(group);
+      onDone?.(target.clone());
+    }
+  }
+  requestAnimationFrame(step);
+  return group;
 }

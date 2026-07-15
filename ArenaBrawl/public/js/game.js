@@ -3,7 +3,7 @@ import { PointerLockControls } from "three/addons/controls/PointerLockControls.j
 import { BloomEffect, EffectComposer, EffectPass, RenderPass, VignetteEffect } from "postprocessing";
 import { buildMap } from "./maps.js";
 import { buildWeaponModel, setBowChargeVisual } from "./weapon-models.js";
-import { buildVehicleModel, createCannonProjectile, createExplosion } from "./vehicle-models.js";
+import { buildVehicleModel, createAirBomb, createCannonProjectile, createExplosion } from "./vehicle-models.js";
 import {
   attachAnimatedCharacter,
   playCharacterAction,
@@ -66,6 +66,14 @@ const localMoveTarget = new THREE.Vector3();
 const localViewTargetPosition = new THREE.Vector3();
 const thirdPersonRenderPosition = new THREE.Vector3();
 const thirdPersonRenderTarget = new THREE.Vector3();
+const vehicleCameraDesired = new THREE.Vector3();
+const vehicleCameraAnchor = new THREE.Vector3();
+const vehicleCameraDirection = new THREE.Vector3();
+const vehicleCameraPath = new THREE.Vector3();
+const vehicleCameraLookAt = new THREE.Vector3();
+const vehicleCameraLift = new THREE.Vector3();
+const vehicleForward = new THREE.Vector3();
+const vehicleMuzzle = new THREE.Vector3();
 let thirdPersonCameraReady = false;
 let lastFootstepAt = 0;
 let lastMinimapDrawAt = 0;
@@ -94,6 +102,9 @@ const local = {
   externalVelocity: new THREE.Vector3(),
   pendingFallDamage: 0,
   lastVehicleShotAt: 0,
+  vehicleLookYaw: 0,
+  vehicleLookPitch: 0,
+  vehicleBombReadyAt: 0,
   emoteActive: false,
   emoteUntil: 0,
   emoteSpeed: 1,
@@ -117,7 +128,7 @@ function cacheDom() {
     "scoreboardList", "killFeed", "deathScreen", "deathBy", "pauseHint", "hudTopLeft",
     "hudBottomRight", "hudTopRight", "abilityFill", "abilityName", "grenadeCount", "grenadeName",
     "matchTimer", "endScreen", "endResults", "gameRoot", "scopeOverlay", "chargeMeter", "chargeFill",
-    "eventAlert", "vehicleStatus", "vehicleHealthFill", "respawnClassSelect", "respawnSecondarySelect",
+    "eventAlert", "vehicleStatus", "vehicleHealthFill", "vehicleHealthText", "vehicleAbility", "respawnClassSelect", "respawnSecondarySelect",
     "respawnLoadoutStatus", "minimap", "minimapCanvas", "hitMarker", "danceHub", "danceGrid", "closeDanceHub",
     "cameraToggle"
   ].forEach((id) => { dom[id] = document.getElementById(id); });
@@ -172,6 +183,7 @@ function ensureScene() {
   });
   document.addEventListener("mousedown", (event) => { unlockAudio(); onMouseDown(event); });
   document.addEventListener("mouseup", onMouseUp);
+  document.addEventListener("mousemove", onVehicleMouseMove);
   dom.gameCanvas.addEventListener("click", () => { if (local.alive && !danceHubOpen) controls.lock(); });
   dom.pauseHint.addEventListener("click", () => { if (local.alive && !danceHubOpen) controls.lock(); });
   dom.cameraToggle?.addEventListener("click", toggleCameraMode);
@@ -344,6 +356,17 @@ function groundInfoAt(x, z, feetY) {
 }
 function groundHeightAt(x, z, feetY) {
   return groundInfoAt(x, z, feetY).height;
+}
+
+function terrainSurfaceHeightAt(x, z, fallback = 0) {
+  const groundMeshes = mapWorld?.groundRaycastMeshes || [];
+  if (!groundMeshes.length) return fallback;
+  groundRayOrigin.set(x, 110, z);
+  groundRaycaster.set(groundRayOrigin, groundRayDirection);
+  groundRaycaster.far = 180;
+  const hit = groundRaycaster.intersectObjects(groundMeshes, false)
+    .find((item) => item.object.visible !== false);
+  return hit?.point?.y ?? fallback;
 }
 function snapLocalToSafeGround() {
   const safe = mapWorld?.safeSpawn || { x: 0, y: 0, z: 0, yaw: 0 };
@@ -775,7 +798,22 @@ function updateVehicleHud() {
   const stats = VEHICLE_STATS[entry.target.type];
   dom.vehicleStatus.classList.add("active");
   dom.vehicleStatus.querySelector("strong").textContent = stats?.name || entry.target.type;
-  dom.vehicleHealthFill.style.width = `${Math.max(0, entry.target.health / entry.target.maxHealth * 100)}%`;
+  const health = Math.max(0, Math.round(Number(entry.target.health) || 0));
+  const maxHealth = Math.max(1, Math.round(Number(entry.target.maxHealth) || 1200));
+  dom.vehicleHealthFill.style.width = `${Math.max(0, health / maxHealth * 100)}%`;
+  if (dom.vehicleHealthText) dom.vehicleHealthText.textContent = `${health} / ${maxHealth}`;
+  if (dom.vehicleAbility) {
+    const isBomber = entry.target.type === "plane";
+    dom.vehicleAbility.hidden = !isBomber;
+    if (isBomber) {
+      const readyAt = Math.max(local.vehicleBombReadyAt || 0, Number(entry.target.bombReadyAt) || 0);
+      const remaining = Math.max(0, readyAt - Date.now());
+      dom.vehicleAbility.textContent = remaining > 0
+        ? `F - Bombardeio ${Math.ceil(remaining / 1000)}s`
+        : "F - Bombardeio pronto";
+      dom.vehicleAbility.classList.toggle("ready", remaining <= 0);
+    }
+  }
 }
 
 function updateVehiclePresentation(delta) {
@@ -794,10 +832,8 @@ function updateVehiclePresentation(delta) {
     entry.state.enginePower = THREE.MathUtils.lerp(entry.state.enginePower || 0, entry.target.enginePower || 0, t);
     entry.state.speed = THREE.MathUtils.lerp(entry.state.speed || 0, entry.target.speed || 0, t);
     const airVehicle = isAirVehicleType(entry.target.type);
-    const ground = airVehicle ? null : groundInfoAt(entry.state.x, entry.state.z, 0);
-    const presentationY = ground?.found
-      ? Math.max(entry.state.y, ground.height + 0.04)
-      : entry.state.y;
+    const groundY = airVehicle ? null : terrainSurfaceHeightAt(entry.state.x, entry.state.z, entry.state.y);
+    const presentationY = groundY == null ? entry.state.y : Math.max(entry.state.y, groundY + 0.04);
     entry.model.position.set(entry.state.x, presentationY, entry.state.z);
     entry.model.rotation.set(entry.state.pitch || 0, entry.state.yaw, entry.state.roll || 0);
     entry.model.userData.wheels?.forEach((wheel) => {
@@ -849,15 +885,35 @@ function updateVehiclePresentation(delta) {
     return;
   }
   dom.pauseHint.hidden = true;
-  const cameraEuler = new THREE.Euler((driven.state.pitch || 0) * 0.45, driven.state.yaw, (driven.state.roll || 0) * 0.2, "YXZ");
-  const offset = driven.model.userData.cameraOffset.clone().applyEuler(cameraEuler);
-  const desired = driven.model.position.clone().add(offset);
   const airVehicle = isAirVehicleType(driven.target.type);
-  camera.position.lerp(desired, Math.min(1, delta * (airVehicle ? 8 : 14)));
-  const forward = new THREE.Vector3(0, 0, -1).applyEuler(new THREE.Euler(driven.state.pitch || 0, driven.state.yaw, 0, "YXZ"));
-  const lookTarget = driven.model.position.clone().addScaledVector(forward, airVehicle ? 18 : 8);
-  lookTarget.y += airVehicle ? 1.2 : 1.1;
-  camera.lookAt(lookTarget);
+  const cameraOffset = driven.model.userData.cameraOffset || new THREE.Vector3(0, airVehicle ? 4.6 : 3, airVehicle ? 12 : 7);
+  const lookHeight = driven.model.userData.lookHeight || 1.1;
+  const viewPitch = THREE.MathUtils.clamp(local.vehicleLookPitch + (airVehicle ? (driven.state.pitch || 0) * 0.22 : 0), -0.85, 0.72);
+  const viewYaw = driven.state.yaw + local.vehicleLookYaw;
+  vehicleCameraDirection.set(0, 0, -1).applyEuler(new THREE.Euler(viewPitch, viewYaw, 0, "YXZ")).normalize();
+  vehicleCameraLift.set(0, lookHeight, 0);
+  vehicleCameraAnchor.copy(driven.model.position).add(vehicleCameraLift);
+  vehicleCameraDesired.copy(vehicleCameraAnchor)
+    .addScaledVector(vehicleCameraDirection, -cameraOffset.z)
+    .add(vehicleCameraLift.set(0, Math.max(0.45, cameraOffset.y - lookHeight), 0));
+
+  vehicleCameraPath.copy(vehicleCameraDesired).sub(vehicleCameraAnchor);
+  const cameraDistance = vehicleCameraPath.length();
+  if (cameraDistance > 0.01) {
+    vehicleCameraPath.normalize();
+    raycaster.set(vehicleCameraAnchor, vehicleCameraPath);
+    raycaster.far = cameraDistance;
+    const obstruction = raycaster.intersectObjects(solidMeshesForRaycast, false)
+      .find((item) => item.object.visible !== false && item.distance > 0.7);
+    if (obstruction) {
+      vehicleCameraDesired.copy(vehicleCameraAnchor)
+        .addScaledVector(vehicleCameraPath, Math.max(1.2, obstruction.distance - 0.5));
+    }
+  }
+
+  camera.position.lerp(vehicleCameraDesired, Math.min(1, delta * (airVehicle ? 7.5 : 11)));
+  vehicleCameraLookAt.copy(vehicleCameraAnchor).addScaledVector(vehicleCameraDirection, airVehicle ? 34 : 18);
+  camera.lookAt(vehicleCameraLookAt);
   local.x = driven.state.x;
   local.y = driven.model.position.y;
   local.z = driven.state.z;
@@ -1254,8 +1310,11 @@ function fireVehicleWeapon() {
 
   scene.updateMatrixWorld(true);
   const direction = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion).normalize();
-  const origin = camera.getWorldPosition(new THREE.Vector3());
-  raycaster.set(origin, direction);
+  const aimOrigin = camera.getWorldPosition(new THREE.Vector3());
+  const muzzleOffset = entry.model.userData.muzzleOffset || new THREE.Vector3(0, 0.8, -1.6);
+  vehicleMuzzle.copy(muzzleOffset);
+  entry.model.localToWorld(vehicleMuzzle);
+  raycaster.set(aimOrigin, direction);
   raycaster.far = entry.target.type === "cannon" ? 140 : 120;
   const hits = raycaster.intersectObjects([...gatherHittable(), ...gatherVehicleHittable(), ...solidMeshesForRaycast], false);
   const hit = hits.find((item) => item.object.userData.socketId !== selfId && item.object.userData.vehicleId !== local.vehicleId);
@@ -1263,8 +1322,28 @@ function fireVehicleWeapon() {
     vehicleId: local.vehicleId,
     targetSocketId: hit?.object.userData.socketId || null,
     targetVehicleId: hit?.object.userData.vehicleId || null,
-    origin: { x: origin.x, y: origin.y, z: origin.z },
+    origin: { x: vehicleMuzzle.x, y: vehicleMuzzle.y, z: vehicleMuzzle.z },
     direction: { x: direction.x, y: direction.y, z: direction.z }
+  });
+}
+
+function dropPlaneBomb() {
+  const entry = vehicles.get(local.vehicleId);
+  if (!entry || entry.target.type !== "plane") return;
+  const readyAt = Math.max(local.vehicleBombReadyAt || 0, Number(entry.target.bombReadyAt) || 0);
+  if (Date.now() < readyAt) return;
+
+  const origin = entry.model.position.clone().add(new THREE.Vector3(0, -0.45, 0));
+  vehicleForward.set(0, 0, -1).applyEuler(new THREE.Euler(0, entry.state.yaw, 0, "YXZ")).normalize();
+  const groundBelow = terrainSurfaceHeightAt(origin.x, origin.z, 0);
+  const fallSeconds = THREE.MathUtils.clamp(Math.sqrt(2 * Math.max(1, origin.y - groundBelow) / 16), 0.65, 2.5);
+  const travel = Math.max(5, Math.abs(entry.state.speed || 0) * fallSeconds * 0.72);
+  const targetX = origin.x + vehicleForward.x * travel;
+  const targetZ = origin.z + vehicleForward.z * travel;
+  const targetY = terrainSurfaceHeightAt(targetX, targetZ, groundBelow) + 0.12;
+  socket.emit("vehicle:bomb", {
+    vehicleId: local.vehicleId,
+    target: { x: targetX, y: targetY, z: targetZ }
   });
 }
 
@@ -1285,6 +1364,19 @@ function renderVehicleFire({ type, origin, direction }) {
   const tracer = new THREE.Line(geometry, new THREE.LineBasicMaterial({ color: 0xffe36e, transparent: true, opacity: 0.9 }));
   scene.add(tracer);
   setTimeout(() => scene.remove(tracer), 70);
+}
+
+function renderPlaneBomb({ origin, target, flightMs }) {
+  const start = new THREE.Vector3(Number(origin?.x) || 0, Number(origin?.y) || 0, Number(origin?.z) || 0);
+  const end = new THREE.Vector3(Number(target?.x) || 0, Number(target?.y) || 0, Number(target?.z) || 0);
+  createAirBomb(scene, start, end, flightMs);
+}
+
+function renderPlaneBombExplosion({ x, y, z }) {
+  const point = new THREE.Vector3(Number(x) || 0, Number(y) || 0, Number(z) || 0);
+  createExplosion(scene, point, 0xff6b28);
+  mapWorld?.showExplosionImpact?.(point.x, point.z, 1.8);
+  playExplosionSound(point);
 }
 
 function shoot(charge = 1) {
@@ -1469,6 +1561,15 @@ function onMouseUp(e) {
 }
 document.addEventListener("contextmenu", (e) => { if (controls?.isLocked) e.preventDefault(); });
 
+function onVehicleMouseMove(event) {
+  if (!local.vehicleId || !controls?.isLocked) return;
+  local.vehicleLookYaw -= (Number(event.movementX) || 0) * 0.00215;
+  local.vehicleLookPitch -= (Number(event.movementY) || 0) * 0.0019;
+  local.vehicleLookPitch = THREE.MathUtils.clamp(local.vehicleLookPitch, -0.82, 0.68);
+  if (local.vehicleLookYaw > Math.PI) local.vehicleLookYaw -= Math.PI * 2;
+  if (local.vehicleLookYaw < -Math.PI) local.vehicleLookYaw += Math.PI * 2;
+}
+
 function onKeyDown(e) {
   if (!room || !local.alive) return;
   if (e.code === "Escape" && danceHubOpen) {
@@ -1490,6 +1591,10 @@ function onKeyDown(e) {
   }
   if (e.code === "Space" && vehicles.get(local.vehicleId)?.target.type === "cannon") {
     socket.emit("vehicle:launch-self", { vehicleId: local.vehicleId });
+    return;
+  }
+  if (e.code === "KeyF" && local.vehicleId) {
+    dropPlaneBomb();
     return;
   }
   if (e.code === "KeyZ" && !e.repeat && !local.vehicleId && local.onGround && !local.climbing) {
@@ -1536,6 +1641,30 @@ function updateVehicleControls() {
   const throttle = Number(Boolean(keys.KeyW)) - Number(Boolean(keys.KeyS));
   const steer = Number(Boolean(keys.KeyA)) - Number(Boolean(keys.KeyD));
   const lift = Number(Boolean(keys.Space)) - Number(Boolean(keys.ControlLeft || keys.ControlRight));
+  let groundY = null;
+  let groundAheadY = null;
+  let groundBehindY = null;
+  let collision = false;
+  if (!isPlane && entry.target.type !== "cannon" && entry.target.type !== "jetski") {
+    const radius = Math.max(1.2, Number(entry.model.userData.radius) || 1.5);
+    const speedLookAhead = Math.min(4.8, Math.abs(entry.state.speed || 0) * 0.18);
+    const sampleDistance = radius + speedLookAhead;
+    vehicleForward.set(-Math.sin(entry.state.yaw), 0, -Math.cos(entry.state.yaw));
+    groundY = terrainSurfaceHeightAt(entry.state.x, entry.state.z, entry.state.y);
+    groundAheadY = terrainSurfaceHeightAt(
+      entry.state.x + vehicleForward.x * sampleDistance,
+      entry.state.z + vehicleForward.z * sampleDistance,
+      groundY
+    );
+    groundBehindY = terrainSurfaceHeightAt(
+      entry.state.x - vehicleForward.x * radius,
+      entry.state.z - vehicleForward.z * radius,
+      groundY
+    );
+    const nextX = entry.state.x + vehicleForward.x * Math.max(1.1, radius * 0.78);
+    const nextZ = entry.state.z + vehicleForward.z * Math.max(1.1, radius * 0.78);
+    collision = throttle > 0 && isBlockedAt(nextX, nextZ, groundY);
+  }
   socket.emit("vehicle:input", {
     throttle,
     steer,
@@ -1543,7 +1672,11 @@ function updateVehicleControls() {
     pitch: isPlane ? lift : 0,
     roll: isPlane ? steer : 0,
     yaw: 0,
-    brake: !isPlane && Boolean(keys.Space)
+    brake: !isPlane && Boolean(keys.Space),
+    groundY,
+    groundAheadY,
+    groundBehindY,
+    collision
   });
 }
 
@@ -2050,6 +2183,9 @@ export function attachSocket(activeSocket) {
 
   socket.on("vehicle:entered", (vehicle) => {
     local.vehicleId = vehicle.id;
+    local.vehicleLookYaw = 0;
+    local.vehicleLookPitch = 0;
+    local.vehicleBombReadyAt = Number(vehicle.bombReadyAt) || 0;
     setAiming(false);
     localMoveVelocity.set(0, 0, 0);
     localMoveTarget.set(0, 0, 0);
@@ -2074,6 +2210,8 @@ export function attachSocket(activeSocket) {
 
   socket.on("vehicle:exited", ({ x, y, z }) => {
     local.vehicleId = null;
+    local.vehicleLookYaw = 0;
+    local.vehicleLookPitch = 0;
     localMoveVelocity.set(0, 0, 0);
     localMoveTarget.set(0, 0, 0);
     local.mouseDown = false;
@@ -2108,6 +2246,16 @@ export function attachSocket(activeSocket) {
   });
 
   socket.on("vehicle:fired", renderVehicleFire);
+  socket.on("vehicle:bomb-dropped", renderPlaneBomb);
+  socket.on("vehicle:bomb-exploded", renderPlaneBombExplosion);
+  socket.on("vehicle:bomb-cooldown", ({ vehicleId, readyAt }) => {
+    const entry = vehicles.get(vehicleId);
+    if (entry) entry.target.bombReadyAt = Number(readyAt) || 0;
+    if (local.vehicleId === vehicleId) {
+      local.vehicleBombReadyAt = Number(readyAt) || 0;
+      updateVehicleHud();
+    }
+  });
 
   socket.on("arena-world:event", (event) => updateEventAlert(event?.type === "none" ? null : event));
   socket.on("arena-world:time", (time) => { activeWorldTime = time || activeWorldTime; });

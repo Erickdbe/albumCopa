@@ -96,11 +96,14 @@ const VEHICLE_SPAWNS = {
     { id: "city-quad-park", type: "quad", x: -72, y: 0, z: 42, yaw: Math.PI / 2 }
   ],
   floresta: [
-    { id: "forest-plane", type: "plane", x: 0, y: 7, z: 132, yaw: Math.PI },
-    { id: "forest-cannon-west", type: "cannon", x: -118, y: 0, z: -18, yaw: Math.PI / 2 },
-    { id: "forest-cannon-east", type: "cannon", x: 118, y: 0, z: 18, yaw: -Math.PI / 2 },
-    { id: "forest-bike-trail", type: "motorcycle", x: 64, y: 0, z: -110, yaw: -0.35 },
-    { id: "forest-quad-lodge", type: "quad", x: -58, y: 0, z: 92, yaw: 0.7 }
+    { id: "forest-plane", type: "plane", x: -100, y: 3, z: 0, yaw: -Math.PI / 2 },
+    { id: "forest-helicopter", type: "helicopter", x: -80, y: 3, z: -30, yaw: Math.PI / 2 },
+    { id: "forest-car-camp", type: "car", x: -60, y: 1, z: -70, yaw: 0 },
+    { id: "forest-car-trail", type: "car", x: -100, y: 0.85, z: 10, yaw: Math.PI },
+    { id: "forest-bike-trail", type: "motorcycle", x: -20, y: 1.8, z: -50, yaw: -0.35 },
+    { id: "forest-quad-lodge", type: "quad", x: -50, y: 6.5, z: 70, yaw: 0.7 },
+    { id: "forest-cannon-west", type: "cannon", x: -118, y: 4.7, z: -18, yaw: Math.PI / 2 },
+    { id: "forest-cannon-east", type: "cannon", x: 118, y: 8.35, z: 18, yaw: -Math.PI / 2 }
   ],
   praia: [
     { id: "beach-jetski-a", type: "jetski", x: -34, y: 0.2, z: 82, yaw: Math.PI },
@@ -112,13 +115,13 @@ const VEHICLE_SPAWNS = {
 };
 
 const VEHICLE_STATS = {
-  car: { maxHealth: 260, maxSpeed: 19, acceleration: 15, turnSpeed: 1.8 },
-  motorcycle: { maxHealth: 150, maxSpeed: 25, acceleration: 19, turnSpeed: 2.25 },
-  quad: { maxHealth: 220, maxSpeed: 17, acceleration: 14, turnSpeed: 1.9 },
-  jetski: { maxHealth: 180, maxSpeed: 23, acceleration: 17, turnSpeed: 1.75 },
-  plane: { maxHealth: 320, maxSpeed: 34, acceleration: 11, turnSpeed: 1.15, builtInWeapon: true },
-  helicopter: { maxHealth: 300, maxSpeed: 28, acceleration: 10, turnSpeed: 1.45, builtInWeapon: true },
-  cannon: { maxHealth: 420, maxSpeed: 0, acceleration: 0, turnSpeed: 0.8, builtInWeapon: true }
+  car: { maxHealth: 1200, maxSpeed: 19, acceleration: 15, turnSpeed: 1.8 },
+  motorcycle: { maxHealth: 1200, maxSpeed: 25, acceleration: 19, turnSpeed: 2.25 },
+  quad: { maxHealth: 1200, maxSpeed: 17, acceleration: 14, turnSpeed: 1.9 },
+  jetski: { maxHealth: 1200, maxSpeed: 23, acceleration: 17, turnSpeed: 1.75 },
+  plane: { maxHealth: 1200, maxSpeed: 34, acceleration: 11, turnSpeed: 1.15, builtInWeapon: true, bombCooldownMs: 25000 },
+  helicopter: { maxHealth: 1200, maxSpeed: 28, acceleration: 10, turnSpeed: 1.45, builtInWeapon: true },
+  cannon: { maxHealth: 1200, maxSpeed: 0, acceleration: 0, turnSpeed: 0.8, builtInWeapon: true }
 };
 
 const ARENA_HALF = 92;

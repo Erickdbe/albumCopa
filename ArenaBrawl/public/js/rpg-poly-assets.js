@@ -63,14 +63,46 @@ function loadAtlasTexture() {
   return texturePromise;
 }
 
+function fantasyTextureFallback(name) {
+  const token = String(name || "").toLowerCase();
+  const color = token.includes("ground01") || /grass|leaf|bush/.test(token)
+    ? "#39752b"
+    : token.includes("ground02") || /rock|pebble/.test(token)
+      ? "#747d85"
+      : token.includes("ground03") || token.includes("bridge") || token.includes("trunk")
+        ? "#76563a"
+        : "#62934c";
+  const canvas = document.createElement("canvas");
+  canvas.width = 2;
+  canvas.height = 2;
+  const context = canvas.getContext("2d");
+  context.fillStyle = color;
+  context.fillRect(0, 0, 2, 2);
+  return new THREE.CanvasTexture(canvas);
+}
+
 function loadFantasyTexture(name, repeat = true) {
   const cacheKey = `${name}:${repeat}`;
   if (!fantasyTextureCache.has(cacheKey)) {
-    const texture = textureLoader.load(resolveAssetUrl(`${FANTASY_MOUNTAIN_BASE_PATH}textures/${name}`));
+    const foliageTexture = /grass|flower|leaf|bush/i.test(name);
+    const texture = fantasyTextureFallback(name);
     texture.colorSpace = THREE.SRGBColorSpace;
     texture.wrapS = repeat ? THREE.RepeatWrapping : THREE.ClampToEdgeWrapping;
     texture.wrapT = repeat ? THREE.RepeatWrapping : THREE.ClampToEdgeWrapping;
     texture.anisotropy = 4;
+    texture.generateMipmaps = !foliageTexture;
+    texture.minFilter = foliageTexture ? THREE.LinearFilter : THREE.LinearMipmapLinearFilter;
+    texture.magFilter = THREE.LinearFilter;
+    texture.needsUpdate = true;
+    textureLoader.load(
+      resolveAssetUrl(`${FANTASY_MOUNTAIN_BASE_PATH}textures/${name}`),
+      (loaded) => {
+        texture.image = loaded.image;
+        texture.needsUpdate = true;
+      },
+      undefined,
+      (error) => console.warn(`Textura de fantasia indisponivel: ${name}`, error)
+    );
     fantasyTextureCache.set(cacheKey, texture);
   }
   return fantasyTextureCache.get(cacheKey);
@@ -141,13 +173,14 @@ function fantasyMaterial(assetName, sourceMaterial) {
     roughness: key === "bridge" ? 0.76 : 0.88,
     metalness: 0,
     side: vegetation ? THREE.DoubleSide : THREE.FrontSide,
-    alphaTest: vegetation ? 0.32 : 0,
+    alphaTest: vegetation ? 0.18 : 0,
+    alphaToCoverage: vegetation,
     transparent: false
   });
   if (vegetation) {
-    material.emissive.set(key === "flower" ? 0x17221a : 0x101d0b);
+    material.emissive.set(0xffffff);
     material.emissiveMap = colorMap;
-    material.emissiveIntensity = key === "leaf" ? 0.42 : 0.28;
+    material.emissiveIntensity = key === "grass" ? 0.45 : key === "flower" ? 0.32 : 0.2;
   }
   if (vegetation) {
     material.onBeforeCompile = (shader) => {
@@ -193,8 +226,9 @@ function prepareFantasyModel(model, assetName) {
       child.visible = false;
       return;
     }
-    child.castShadow = !/grass|flower/.test(assetName.toLowerCase());
-    child.receiveShadow = true;
+    const isGroundFoliage = /grass|flower/.test(assetName.toLowerCase());
+    child.castShadow = !isGroundFoliage;
+    child.receiveShadow = !isGroundFoliage;
     const materials = Array.isArray(child.material) ? child.material : [child.material];
     const replacements = materials.map((material) => fantasyMaterial(assetName, material));
     child.material = Array.isArray(child.material) ? replacements : replacements[0];

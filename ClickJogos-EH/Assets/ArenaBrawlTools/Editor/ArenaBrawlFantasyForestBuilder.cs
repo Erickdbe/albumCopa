@@ -86,9 +86,9 @@ public static class ArenaBrawlFantasyForestBuilder
             BuildMountainBackdrop(mountains, terrains);
             ScatterTrees(trees, terrains, 86);
             ScatterBushes(trees, terrains, 46);
-            ScatterMeadow(meadow, terrains, 150, "Grass01");
-            ScatterMeadow(meadow, terrains, 72, "Flowers01");
-            ScatterMeadow(meadow, terrains, 38, "Flower01");
+            ScatterMeadow(meadow, terrains, 360, "Grass01");
+            ScatterMeadow(meadow, terrains, 96, "Flowers01");
+            ScatterMeadow(meadow, terrains, 52, "Flower01");
             ScatterRocks(rocks, terrains, 44);
             BuildBridges(bridges, terrains);
         }

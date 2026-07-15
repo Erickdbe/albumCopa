@@ -365,11 +365,73 @@ function prepareHumanSoldierScene(sourceModel, descriptor, team) {
   return facingGroup;
 }
 
+function createHumanSoldierJumpClip(model, prefix) {
+  const times = [0, 0.12, 0.34, 0.58, 0.82];
+  const poses = {
+    "B-hips": [[0, 0, 0], [0.08, 0, 0], [0.04, 0, 0], [-0.04, 0, 0], [0, 0, 0]],
+    "B-spine": [[0, 0, 0], [0.12, 0, 0], [0.08, 0, 0], [-0.02, 0, 0], [0, 0, 0]],
+    "B-chest": [[0, 0, 0], [-0.04, 0, 0], [-0.1, 0, 0], [0.02, 0, 0], [0, 0, 0]],
+    "B-thighL": [[-0.08, 0, 0], [-0.72, 0, 0.08], [-0.94, 0, 0.12], [-0.38, 0, 0.04], [0, 0, 0]],
+    "B-thighR": [[-0.08, 0, 0], [-0.68, 0, -0.08], [-0.86, 0, -0.12], [-0.34, 0, -0.04], [0, 0, 0]],
+    "B-shinL": [[0.12, 0, 0], [1.02, 0, 0], [1.26, 0, 0], [0.58, 0, 0], [0, 0, 0]],
+    "B-shinR": [[0.12, 0, 0], [0.96, 0, 0], [1.16, 0, 0], [0.52, 0, 0], [0, 0, 0]],
+    "B-footL": [[0, 0, 0], [-0.22, 0, 0], [-0.18, 0, 0], [-0.06, 0, 0], [0, 0, 0]],
+    "B-footR": [[0, 0, 0], [-0.2, 0, 0], [-0.16, 0, 0], [-0.05, 0, 0], [0, 0, 0]]
+  };
+  const tracks = [];
+  Object.entries(poses).forEach(([boneName, rotations]) => {
+    const bone = model.getObjectByName(boneName);
+    if (!bone) return;
+    const values = [];
+    rotations.forEach(([x, y, z]) => {
+      const offset = new THREE.Quaternion().setFromEuler(new THREE.Euler(x, y, z));
+      const pose = bone.quaternion.clone().multiply(offset).normalize();
+      values.push(pose.x, pose.y, pose.z, pose.w);
+    });
+    tracks.push(new THREE.QuaternionKeyframeTrack(`${boneName}.quaternion`, times, values));
+  });
+  return new THREE.AnimationClip(`${prefix}_jump`, times[times.length - 1], tracks);
+}
+
+function weaponGripPoint(weaponId = "") {
+  if (["pistol_common", "heavy_pistol", "auto_pistol_weak", "revolver"].includes(weaponId)) {
+    return new THREE.Vector3(0, -0.2, 0);
+  }
+  if (weaponId === "knife") return new THREE.Vector3(0, 0, 0.16);
+  if (weaponId === "bow") return new THREE.Vector3(0, 0, 0);
+  return new THREE.Vector3(0, -0.23, 0.24);
+}
+
 function attachWeaponToHumanSoldier(avatar, model) {
-  avatar.root.attach(avatar.gun);
-  avatar.gun.position.set(0.28, 1.18, -0.38);
-  avatar.gun.rotation.set(-0.04, 0, 0);
-  avatar.gun.scale.setScalar(0.34);
+  const socket = model.getObjectByName("B-handPropR") || model.getObjectByName("B-handR");
+  if (!socket) {
+    avatar.root.attach(avatar.gun);
+    avatar.gun.position.set(0.28, 1.18, -0.38);
+    avatar.gun.rotation.set(-0.04, 0, 0);
+    avatar.gun.scale.setScalar(0.34);
+    avatar.gun.visible = true;
+    return;
+  }
+
+  model.updateMatrixWorld(true);
+  const socketScale = socket.getWorldScale(new THREE.Vector3());
+  const targetWorldScale = 0.34;
+  const localScale = targetWorldScale / Math.max(0.0001, Math.abs(socketScale.x));
+  socket.add(avatar.gun);
+  // Human Soldier's prop socket is authored in Z-up FBX space. This offset
+  // keeps Arena Brawl's -Z weapon axis pointed forward after the FBX conversion.
+  avatar.gun.rotation.set(
+    THREE.MathUtils.degToRad(78.94),
+    THREE.MathUtils.degToRad(49.99),
+    THREE.MathUtils.degToRad(-90.12),
+    "XYZ"
+  );
+  avatar.gun.scale.setScalar(localScale);
+  const gripOffset = weaponGripPoint(avatar.weaponId)
+    .applyEuler(avatar.gun.rotation)
+    .multiplyScalar(localScale);
+  avatar.gun.position.copy(gripOffset).multiplyScalar(-1);
+  avatar.weaponSocket = socket;
   avatar.gun.visible = true;
 }
 
@@ -380,12 +442,13 @@ async function attachHumanSoldierCharacter(avatar, characterId) {
   const model = prepareHumanSoldierScene(sourceModel, descriptor, avatar.team);
   avatar.root.add(model);
   const mixer = new THREE.AnimationMixer(model);
+  const clipSources = { ...clips, jump: createHumanSoldierJumpClip(model, descriptor.prefix) };
   const actions = {};
   const locomotionAliases = {
     idle: "idle",
     walk: "walk_forward",
     run: "run_forward",
-    jump: "run_forward",
+    jump: "jump",
     fall: "idle",
     land: "idle",
     crouch: "idle",
@@ -401,12 +464,12 @@ async function attachHumanSoldierCharacter(avatar, characterId) {
   };
 
   const actionDefinitions = new Map(Object.entries(locomotionAliases));
-  Object.keys(clips).forEach((name) => {
+  Object.keys(clipSources).forEach((name) => {
     if (!actionDefinitions.has(name)) actionDefinitions.set(name, name);
   });
 
   actionDefinitions.forEach((clipName, name) => {
-    const sourceClip = clips[clipName] || clips.idle;
+    const sourceClip = clipSources[clipName] || clipSources.idle;
     if (!sourceClip) return;
 
     // AnimationMixer caches actions by clip UUID. Aliases such as jump/run and
@@ -694,8 +757,18 @@ export function updateCharacterPose(avatar, delta) {
 
 export function setCharacterAiming(avatar, weaponId, enabled) {
   if (!avatar?.humanSoldierCharacter || !avatar.actions) return false;
-  const next = enabled ? avatar.actions[`aim_${weaponAnimationFamily(weaponId)}`] : null;
-  if (avatar.aimAnimationAction === next) return Boolean(next);
+  const canHoldWeapon = avatar.alive !== false && !avatar.inVehicle;
+  const next = canHoldWeapon ? avatar.actions[`aim_${weaponAnimationFamily(weaponId)}`] : null;
+  const targetWeight = enabled ? 1.35 : 0.9;
+  if (avatar.aimAnimationAction === next) {
+    if (next) {
+      next.enabled = true;
+      next.paused = false;
+      next.setEffectiveWeight(targetWeight);
+      if (!next.isRunning()) next.play();
+    }
+    return Boolean(next);
+  }
 
   const previous = avatar.aimAnimationAction;
   avatar.aimAnimationAction = next;
@@ -721,7 +794,7 @@ export function setCharacterAiming(avatar, weaponId, enabled) {
   next.paused = false;
   next.setLoop(THREE.LoopRepeat, Infinity);
   next.setEffectiveTimeScale(1);
-  next.setEffectiveWeight(1.4);
+  next.setEffectiveWeight(targetWeight);
   next.fadeIn(0.12).play();
   return true;
 }

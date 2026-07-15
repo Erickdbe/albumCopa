@@ -4,6 +4,7 @@
 // prever visualmente (sway, HUD, animações) — o dano/acerto real sempre é validado aqui.
 
 const HEADSHOT_MULTIPLIER = 2;
+const INSTANT_KILL_HEADSHOT_WEAPONS = new Set(["sniper_rifle", "bow", "crossbow"]);
 
 // Classes jogaveis: arma principal + habilidade unica com cooldown.
 const CLASSES = {
@@ -267,6 +268,7 @@ function normalizeSettings(input = {}) {
 
 module.exports = {
   HEADSHOT_MULTIPLIER,
+  INSTANT_KILL_HEADSHOT_WEAPONS,
   CLASSES, CLASS_IDS,
   SECONDARY_WEAPONS, SECONDARY_IDS,
   GRENADES, GRENADE_IDS, GRENADE_CHARGES_PER_LIFE,

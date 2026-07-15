@@ -559,20 +559,52 @@ function buildAvatar(p) {
   head.position.y = 1.78;
   root.add(head);
 
-  // Dedicated gameplay volumes stay stable even while the detailed model animates.
+  // Tight body-part volumes avoid registering shots in the empty space around the avatar.
   const hitboxMaterial = new THREE.MeshBasicMaterial({
     transparent: true, opacity: 0, depthWrite: false, colorWrite: false
   });
-  const bodyHitbox = new THREE.Mesh(new THREE.BoxGeometry(0.92, 1.08, 0.68), hitboxMaterial);
-  bodyHitbox.position.y = 0.9;
-  root.add(bodyHitbox);
-  const lowerHitbox = new THREE.Mesh(new THREE.BoxGeometry(0.78, 0.62, 0.64), hitboxMaterial.clone());
-  lowerHitbox.position.y = 0.32;
-  root.add(lowerHitbox);
-  const headHitbox = new THREE.Mesh(new THREE.SphereGeometry(0.34, 12, 10), hitboxMaterial.clone());
-  headHitbox.position.y = 1.56;
-  headHitbox.userData.isHead = true;
-  root.add(headHitbox);
+  const hitboxRig = new THREE.Group();
+  hitboxRig.name = "player-hitbox-rig";
+  root.add(hitboxRig);
+  const bodyHitboxes = [];
+  const hitboxParts = {};
+  const addBodyHitbox = (part, geometry, position, isHead = false) => {
+    const hitbox = new THREE.Mesh(geometry, hitboxMaterial.clone());
+    hitbox.position.copy(position);
+    hitbox.userData.isHead = isHead;
+    hitbox.userData.hitZone = isHead ? "head" : "body";
+    hitbox.userData.hitPart = part;
+    hitboxRig.add(hitbox);
+    bodyHitboxes.push(hitbox);
+    hitboxParts[part] = hitbox;
+    return hitbox;
+  };
+  const bodyHitbox = addBodyHitbox(
+    "torso",
+    new THREE.BoxGeometry(0.54, 1, 0.32),
+    new THREE.Vector3(0, 1.16, 0)
+  );
+  const lowerHitbox = addBodyHitbox(
+    "pelvis",
+    new THREE.BoxGeometry(0.46, 0.3, 0.32),
+    new THREE.Vector3(0, 0.7, 0)
+  );
+  addBodyHitbox("upperArmL", new THREE.BoxGeometry(0.17, 1, 0.18), new THREE.Vector3(-0.39, 1.12, 0));
+  addBodyHitbox("forearmL", new THREE.BoxGeometry(0.15, 1, 0.17), new THREE.Vector3(-0.39, 0.86, 0));
+  addBodyHitbox("upperArmR", new THREE.BoxGeometry(0.17, 1, 0.18), new THREE.Vector3(0.39, 1.12, 0));
+  addBodyHitbox("forearmR", new THREE.BoxGeometry(0.15, 1, 0.17), new THREE.Vector3(0.39, 0.86, 0));
+  addBodyHitbox("thighL", new THREE.BoxGeometry(0.22, 1, 0.23), new THREE.Vector3(-0.15, 0.52, 0));
+  addBodyHitbox("calfL", new THREE.BoxGeometry(0.18, 1, 0.2), new THREE.Vector3(-0.15, 0.2, 0));
+  addBodyHitbox("footL", new THREE.BoxGeometry(0.2, 1, 0.32), new THREE.Vector3(-0.15, 0.08, -0.08));
+  addBodyHitbox("thighR", new THREE.BoxGeometry(0.22, 1, 0.23), new THREE.Vector3(0.15, 0.52, 0));
+  addBodyHitbox("calfR", new THREE.BoxGeometry(0.18, 1, 0.2), new THREE.Vector3(0.15, 0.2, 0));
+  addBodyHitbox("footR", new THREE.BoxGeometry(0.2, 1, 0.32), new THREE.Vector3(0.15, 0.08, -0.08));
+  const headHitbox = addBodyHitbox(
+    "head",
+    new THREE.SphereGeometry(0.22, 14, 12),
+    new THREE.Vector3(0, 1.76, 0),
+    true
+  );
 
   const armGeo = new THREE.BoxGeometry(0.2, 0.65, 0.2);
   const leftArm = new THREE.Mesh(armGeo, bodyMat);
@@ -618,8 +650,8 @@ function buildAvatar(p) {
   scene.add(root);
   const avatar = {
     root, leftArm, rightArm, leftLeg, rightLeg, gun, teamMarker, tagSprite,
-    bodyHitbox, lowerHitbox,
-    hittable: [bodyHitbox, lowerHitbox, headHitbox],
+    bodyHitbox, lowerHitbox, hitboxRig, hitboxParts,
+    hittable: bodyHitboxes,
     fallbackMeshes: [torso, head, leftArm, rightArm, leftLeg, rightLeg],
     headMesh: headHitbox,
     walkPhase: Math.random() * 10,

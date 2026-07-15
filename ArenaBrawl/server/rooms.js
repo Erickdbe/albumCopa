@@ -13,7 +13,8 @@ const {
   constrainMapPosition,
   normalizeSettings,
   pickSpawn,
-  HEADSHOT_MULTIPLIER
+  HEADSHOT_MULTIPLIER,
+  INSTANT_KILL_HEADSHOT_WEAPONS
 } = require("./config");
 
 const RESPAWN_MS = 3500;
@@ -274,9 +275,11 @@ function createRoomsModule(io) {
     }
   }
 
-  function applyDamage(room, shooter, target, rawDamage, isHeadshot) {
+  function applyDamage(room, shooter, target, rawDamage, isHeadshot, instantKill = false) {
     if (!target.alive) return;
-    const damage = Math.round(isHeadshot ? rawDamage * HEADSHOT_MULTIPLIER : rawDamage);
+    const damage = instantKill
+      ? target.health
+      : Math.round(isHeadshot ? rawDamage * HEADSHOT_MULTIPLIER : rawDamage);
     target.health = Math.max(0, target.health - damage);
     if (target.health <= 0) {
       target.alive = false;
@@ -1155,13 +1158,16 @@ function createRoomsModule(io) {
       const pellets = Math.max(1, Math.min(weapon.pellets || 1, Number(pelletHits) || 1));
       let piercingBonus = 1;
       if (shooter.abilityActive && now < shooter.abilityExpiresAt && CLASSES[shooter.classId]?.ability?.id === "disparo_perfurante") piercingBonus = 1;
+      const isHeadshot = hitZone === "head";
+      const instantKillHeadshot = isHeadshot && INSTANT_KILL_HEADSHOT_WEAPONS.has(weapon.id);
 
       applyDamage(
         room,
         shooter,
         target,
         weapon.damage * falloff * pellets * piercingBonus * chargeDamageMultiplier,
-        hitZone === "head"
+        isHeadshot,
+        instantKillHeadshot
       );
     });
 

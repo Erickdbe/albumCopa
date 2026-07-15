@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { MAP_HALF_SIZES, MAP_META, SKETCHBOOK_GROUND_Y } from "./config.js";
 import { attachMeshyModel } from "./meshy-assets.js";
-import { attachRpgPolyForest, attachRpgPolyForestTerrain, registerRpgPolyForestCollisions } from "./rpg-poly-assets.js";
+import { attachRpgPolyForest, attachRpgPolyForestTerrain, registerRpgPolyForestCollisions, updateRpgPolyForest } from "./rpg-poly-assets.js";
 import { attachSketchbookWorld } from "./sketchbook-assets.js";
 
 const textureLoader = new THREE.TextureLoader();
@@ -397,12 +397,14 @@ function createWorld(mapId, scene) {
   const root = new THREE.Group();
   root.name = `world-${mapId}`;
   scene.add(root);
-  return {
+  const world = {
     mapId, scene, root, half: MAP_HALF_SIZES[mapId], obstacles: [], ladders: [], destructibles: new Map(),
     groundRaycastMeshes: [], safeSpawn: { x: 0, y: 0, z: 0, yaw: 0 },
-    animated: { trees: [], waves: [], sharks: [], debris: [], elapsed: 0 },
+    animated: { trees: [], waves: [], sharks: [], debris: [], craters: [], elapsed: 0 },
     water: null, tsunami: null, tornado: null, event: null
   };
+  world.registerDestructible = (id, mesh, kind, obstacle = null) => registerDestructible(world, id, mesh, kind, obstacle);
+  return world;
 }
 
 function addMeshyLandmark(world, assetName, x, z, options = {}) {
@@ -553,6 +555,22 @@ function buildFloresta(scene) {
     onReady: () => registerRpgPolyForestCollisions(world)
   });
 
+  const motePositions = [];
+  for (let i = 0; i < 140; i++) {
+    const angle = i * 2.39996;
+    const radius = 14 + (i % 23) * 4.7;
+    motePositions.push(Math.cos(angle) * radius, 1.2 + (i % 9) * 0.56, Math.sin(angle) * radius);
+  }
+  const moteGeometry = new THREE.BufferGeometry();
+  moteGeometry.setAttribute("position", new THREE.Float32BufferAttribute(motePositions, 3));
+  const motes = new THREE.Points(moteGeometry, new THREE.PointsMaterial({
+    color: 0xffe8a6, size: 0.085, transparent: true, opacity: 0.52,
+    depthWrite: false, blending: THREE.AdditiveBlending
+  }));
+  motes.name = "fantasy-forest-motes";
+  world.root.add(motes);
+  world.animated.motes = motes;
+
   world.tornado = new THREE.Group();
   for(let i=0;i<9;i++){
     const ring=new THREE.Mesh(new THREE.TorusGeometry(1.1+i*0.35,0.12,6,20),makeMaterial(0xaab7a7,{transparent:true,opacity:0.35}));
@@ -617,6 +635,60 @@ function spawnDebris(world, position, count = 6, strength = 1, color = 0x777777)
   }
 }
 
+function groundImpactPoint(world, x, z) {
+  const raycaster = new THREE.Raycaster(new THREE.Vector3(x, 100, z), new THREE.Vector3(0, -1, 0), 0, 180);
+  const hits = raycaster.intersectObjects(world.groundRaycastMeshes || [], false);
+  return hits[0]?.point || new THREE.Vector3(x, 0.03, z);
+}
+
+function spawnExplosionCrater(world, x, z, strength = 1) {
+  if (world.mapId !== "floresta") return;
+  const point = groundImpactPoint(world, x, z);
+  const radius = THREE.MathUtils.clamp(1.35 + strength * 0.42, 1.6, 3.4);
+  const group = new THREE.Group();
+  group.name = "grenade-scorch-crater";
+  group.position.copy(point).addScaledVector(new THREE.Vector3(0, 1, 0), 0.035);
+
+  const center = new THREE.Mesh(
+    new THREE.CircleGeometry(radius * 0.68, 32),
+    new THREE.MeshStandardMaterial({
+      color: 0x171812, roughness: 1, transparent: true, opacity: 0.86,
+      depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2
+    })
+  );
+  center.rotation.x = -Math.PI / 2;
+  group.add(center);
+
+  const scorch = new THREE.Mesh(
+    new THREE.RingGeometry(radius * 0.54, radius, 36),
+    new THREE.MeshStandardMaterial({
+      color: 0x34291d, roughness: 1, transparent: true, opacity: 0.76,
+      depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2
+    })
+  );
+  scorch.rotation.x = -Math.PI / 2;
+  scorch.rotation.z = Math.random() * Math.PI;
+  group.add(scorch);
+
+  const stoneMaterial = new THREE.MeshStandardMaterial({ color: 0x625d52, roughness: 0.96 });
+  for (let i = 0; i < 9; i++) {
+    const angle = (i / 9) * Math.PI * 2 + Math.random() * 0.28;
+    const size = 0.12 + Math.random() * 0.22;
+    const stone = new THREE.Mesh(new THREE.DodecahedronGeometry(size, 0), stoneMaterial);
+    stone.position.set(Math.cos(angle) * radius * (0.72 + Math.random() * 0.34), size * 0.35, Math.sin(angle) * radius * (0.72 + Math.random() * 0.34));
+    stone.rotation.set(Math.random() * 2, Math.random() * 2, Math.random() * 2);
+    group.add(stone);
+  }
+
+  world.root.add(group);
+  world.animated.craters.push({ group, age: 0, life: 58 + Math.random() * 14 });
+  while (world.animated.craters.length > 18) {
+    const oldest = world.animated.craters.shift();
+    world.root.remove(oldest.group);
+  }
+  spawnDebris(world, point.clone().add(new THREE.Vector3(0, 0.2, 0)), 14, 1.4, 0x716b60);
+}
+
 function objectImpactPosition(object) {
   const bounds = new THREE.Box3().setFromObject(object.mesh);
   if (bounds.isEmpty()) return object.mesh.getWorldPosition(new THREE.Vector3());
@@ -664,6 +736,20 @@ function updateDestructibles(world, delta) {
       world.animated.debris.splice(i, 1);
     }
   }
+  for (let i = world.animated.craters.length - 1; i >= 0; i--) {
+    const crater = world.animated.craters[i];
+    crater.age += delta;
+    if (crater.age > crater.life - 8) {
+      const opacity = Math.max(0, (crater.life - crater.age) / 8);
+      crater.group.traverse((child) => {
+        if (child.material?.transparent) child.material.opacity = opacity * 0.78;
+      });
+    }
+    if (crater.age >= crater.life) {
+      world.root.remove(crater.group);
+      world.animated.craters.splice(i, 1);
+    }
+  }
 }
 
 function updateWater(world, elapsed, event) {
@@ -691,6 +777,12 @@ function updateWater(world, elapsed, event) {
 }
 
 function updateForest(world, elapsed, event) {
+  updateRpgPolyForest(Math.min(0.05, elapsed - (world.animated.lastForestElapsed || 0)));
+  world.animated.lastForestElapsed = elapsed;
+  if (world.animated.motes) {
+    world.animated.motes.rotation.y = elapsed * 0.025;
+    world.animated.motes.material.opacity = 0.42 + Math.sin(elapsed * 0.75) * 0.1;
+  }
   world.animated.trees.forEach(({trunk,crown,phase})=>{
     const strength=event?.type==="tornado"&&event.phase==="active"?0.085:0.012;
     trunk.rotation.z=Math.sin(elapsed*1.8+phase)*strength;crown.rotation.z=trunk.rotation.z*1.4;
@@ -729,9 +821,13 @@ function applyObjectState(world, state) {
       if(piece.id.startsWith(`${prefix}-panel-`)&&!piece.falling){piece.falling=true;piece.velocity.set((Math.random()-.5)*3,3,(Math.random()-.5)*3);piece.angularVelocity.set(1.2,0,1.4);}
     });
   }
+  if(object.kind==="bridge"){
+    spawnDebris(world,impactPosition,22,1.55,0x6f4b2d);
+    object.angularVelocity.set(0.42+(Math.random()-.5)*0.2,0,(Math.random()-.5)*0.75);
+  }
   object.falling=true;
-  object.velocity.set((Math.random()-0.5)*2.5,object.kind==="building-piece"?2.5:0,(Math.random()-0.5)*2.5);
-  object.angularVelocity.set((Math.random()-0.5)*2,0,(Math.random()-0.5)*2);
+  object.velocity.set((Math.random()-0.5)*2.5,object.kind==="building-piece"?2.5:object.kind==="bridge"?-0.6:0,(Math.random()-0.5)*2.5);
+  if(object.kind!=="bridge")object.angularVelocity.set((Math.random()-0.5)*2,0,(Math.random()-0.5)*2);
 }
 
 function updateWorld(world, delta, event = null) {
@@ -748,6 +844,7 @@ export function buildMap(mapId, scene) {
   world.update=(delta,event)=>updateWorld(world,delta,event);
   world.applyObjectState=(state)=>applyObjectState(world,state);
   world.showImpact=(point,strength=1)=>spawnDebris(world,point,Math.max(2,Math.round(4*strength)),strength,0x9a927f);
+  world.showExplosionImpact=(x,z,strength=1)=>spawnExplosionCrater(world,x,z,strength);
   world.destructiblesNear=(x,z,radius)=>[...world.destructibles.values()].filter((object)=>{
     const dx=object.mesh.position.x-x,dz=object.mesh.position.z-z;return !object.destroyed&&Math.hypot(dx,dz)<=radius;
   });

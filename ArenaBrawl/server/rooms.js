@@ -608,6 +608,7 @@ function createRoomsModule(io) {
   }
 
   function worldObjectMaxHealth(mapId, objectId) {
+    if (mapId === "floresta" && /^fantasy_bridge_destructible_\d+$/.test(objectId)) return 145;
     if (mapId !== "cidade") return 0;
     if (/^city-lamp-\d+$/.test(objectId)) return 55;
     if (/^city-building-\d+-panel-\d+$/.test(objectId)) return 85;

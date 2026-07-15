@@ -351,7 +351,16 @@ function snapLocalToSafeGround() {
 function ensureLocalPlayablePosition() {
   if (!mapWorld?.requireExplicitGround) return;
   const ground = groundInfoAt(camera.position.x, camera.position.z, local.jumpOffset);
-  if (!ground.found) snapLocalToSafeGround();
+  if (!ground.found) {
+    snapLocalToSafeGround();
+    return;
+  }
+  if (ground.height > local.jumpOffset + 0.04 || local.jumpOffset < ground.height - 0.12) {
+    local.jumpOffset = ground.height;
+    local.verticalVelocity = 0;
+    local.onGround = true;
+    camera.position.y = EYE_HEIGHT + ground.height;
+  }
 }
 function isBlockedAt(x, z, feetY) {
   for (const ob of obstacles) {
@@ -2319,7 +2328,10 @@ export function attachSocket(activeSocket) {
 
   socket.on("match:grenadeDetonate", ({ grenadeId, x, z }) => {
     renderGrenadeExplosionVisual(grenadeId, x, z);
-    if (grenadeId === "explosive" || grenadeId === "impact") playExplosionSound({ x, y: 1, z });
+    if (grenadeId === "explosive" || grenadeId === "impact") {
+      playExplosionSound({ x, y: 1, z });
+      mapWorld?.showExplosionImpact?.(x, z, grenadeId === "impact" ? 0.9 : 1.35);
+    }
     else playImpactSound({ x, y: 1, z }, false);
   });
 

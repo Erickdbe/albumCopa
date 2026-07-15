@@ -11,7 +11,7 @@ import {
   setCharacterAiming,
   setCharacterAnimation,
   updateCharacterPose
-} from "./character-model.js";
+} from "./character-model.js?v=20260715-3";
 import { attachMeshyModel } from "./meshy-assets.js";
 import {
   unlockAudio, playWeaponSound, playImpactSound, playExplosionSound, playReloadSound,
@@ -672,6 +672,7 @@ function buildAvatar(p) {
     avatar.desiredAnimation = name;
     setCharacterAnimation(avatar, name, immediate, speed);
   };
+  avatar.fallbackMeshes.forEach((mesh) => { mesh.visible = false; });
   attachAnimatedCharacter(avatar).catch((error) => console.warn("Nao foi possivel carregar o personagem 3D:", error));
   return avatar;
 }

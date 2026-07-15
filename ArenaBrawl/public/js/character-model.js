@@ -11,7 +11,7 @@ const MODEL_ROOTS = {
 const FPS_CHARACTER_PACK = "./assets/models/fps-characters/arena_brawl_fps_characters_enhanced_export.glb";
 const TOON_SOLDIER_MODEL = "./assets/models/toon-soldier/toon-soldier.glb";
 const TOON_SOLDIER_ANIMATION_ROOT = "./assets/models/toon-soldier/animations";
-const TOON_SOLDIER_ASSET_VERSION = "20260715-2";
+const TOON_SOLDIER_ASSET_VERSION = "20260715-3";
 const TOON_UPPER_BODY_BONES = new Set([
   "Bip001_Spine", "Bip001_Neck", "Bip001_Head",
   "Bip001_L_Clavicle", "Bip001_L_UpperArm", "Bip001_L_Forearm", "Bip001_L_Hand",
@@ -313,17 +313,27 @@ async function loadHumanSoldierPack(characterId) {
   if (!humanSoldierPackPromises.has(characterId)) {
     const descriptor = humanSoldierDescriptor(characterId);
     const loader = new FBXLoader();
+    const loadAnimation = async (file, name, upperBodyOnly = false) => {
+      try {
+        const asset = await loader.loadAsync(`${TOON_SOLDIER_ANIMATION_ROOT}/${file}?v=${TOON_SOLDIER_ASSET_VERSION}`);
+        return toonClip(asset.animations?.[0], name, upperBodyOnly);
+      } catch (error) {
+        console.warn(`Animacao Toon Soldier indisponivel: ${file}`, error);
+        return null;
+      }
+    };
     const promise = Promise.all([
       loadToonSoldierModel(),
-      loader.loadAsync(`${TOON_SOLDIER_ANIMATION_ROOT}/infantry_combat_idle.fbx?v=${TOON_SOLDIER_ASSET_VERSION}`),
-      loader.loadAsync(`${TOON_SOLDIER_ANIMATION_ROOT}/infantry_combat_run.fbx?v=${TOON_SOLDIER_ASSET_VERSION}`),
-      loader.loadAsync(`${TOON_SOLDIER_ANIMATION_ROOT}/infantry_combat_shoot.fbx?v=${TOON_SOLDIER_ASSET_VERSION}`),
-      loader.loadAsync(`${TOON_SOLDIER_ANIMATION_ROOT}/infantry_guard_idle.fbx?v=${TOON_SOLDIER_ASSET_VERSION}`)
-    ]).then(([toonModel, idleAsset, runAsset, shootAsset, guardAsset]) => {
-      const idle = toonClip(idleAsset.animations?.[0], "idle");
-      const run = toonClip(runAsset.animations?.[0], "run");
-      const shoot = toonClip(shootAsset.animations?.[0], "shoot", true);
-      const guard = toonClip(guardAsset.animations?.[0], "guard", true);
+      loadAnimation("infantry_combat_idle.fbx", "idle"),
+      loadAnimation("infantry_combat_run.fbx", "run"),
+      loadAnimation("infantry_combat_shoot.fbx", "shoot", true),
+      loadAnimation("infantry_guard_idle.fbx", "guard", true)
+    ]).then(([toonModel, loadedIdle, loadedRun, loadedShoot, loadedGuard]) => {
+      const idle = loadedIdle || loadedGuard || loadedRun;
+      const run = loadedRun || idle;
+      const shoot = loadedShoot || loadedGuard || idle;
+      const guard = loadedGuard || idle;
+      if (!idle) throw new Error("O Toon Soldier foi carregado, mas nenhum clip de animacao valido foi encontrado.");
       const clips = { idle, damage: shoot, death: idle, grenade: shoot };
       ["walk", "run"].forEach((pace) => {
         ["forward", "forward_left", "forward_right", "left", "right", "back", "back_left", "back_right"].forEach((direction) => {
@@ -739,11 +749,7 @@ async function attachHumanSoldierCharacter(avatar, characterId) {
   avatar.toonSoldierCharacter = Boolean(toonSoldier);
   avatar.humanSoldierCharacter = true;
   avatar.fpsCharacter = true;
-  avatar.fallbackMeshes.forEach((mesh) => {
-    mesh.material = mesh.material.clone();
-    mesh.material.colorWrite = false;
-    mesh.material.depthWrite = false;
-  });
+  avatar.fallbackMeshes.forEach((mesh) => { mesh.visible = false; });
   attachWeaponToHumanSoldier(avatar, model);
   avatar.setAnimation(avatar.desiredAnimation || "idle", true);
 }
@@ -813,8 +819,8 @@ export async function attachAnimatedCharacter(avatar) {
     try {
       await attachHumanSoldierCharacter(avatar, characterId);
     } catch (error) {
-      console.warn("Human Soldier Animations nao carregou; usando personagem anterior.", error);
-      await attachFpsCharacter(avatar, characterId);
+      console.error("Toon Soldier nao carregou; o avatar anterior nao sera reativado.", error);
+      avatar.fallbackMeshes.forEach((mesh) => { mesh.visible = true; });
     }
     return;
   }

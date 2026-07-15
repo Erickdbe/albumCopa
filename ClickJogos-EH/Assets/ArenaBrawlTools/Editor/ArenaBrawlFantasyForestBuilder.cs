@@ -86,9 +86,10 @@ public static class ArenaBrawlFantasyForestBuilder
             BuildMountainBackdrop(mountains, terrains);
             ScatterTrees(trees, terrains, 86);
             ScatterBushes(trees, terrains, 46);
-            ScatterMeadow(meadow, terrains, 360, "Grass01");
-            ScatterMeadow(meadow, terrains, 96, "Flowers01");
-            ScatterMeadow(meadow, terrains, 52, "Flower01");
+            ScatterMeadow(meadow, terrains, 1500, "Grass01", "low", 0.24f, 0.58f, 4.2f);
+            ScatterMeadow(meadow, terrains, 620, "Grass01", "tall", 0.78f, 1.45f, 5.2f);
+            ScatterMeadow(meadow, terrains, 220, "Flowers01", "cluster", 0.38f, 0.78f, 5.5f);
+            ScatterMeadow(meadow, terrains, 120, "Flower01", "single", 0.35f, 0.74f, 5.5f);
             ScatterRocks(rocks, terrains, 44);
             BuildBridges(bridges, terrains);
         }
@@ -349,19 +350,47 @@ public static class ArenaBrawlFantasyForestBuilder
         });
     }
 
-    private static void ScatterMeadow(Transform parent, Terrain[] terrains, int count, string prefix)
+    private static void ScatterMeadow(
+        Transform parent,
+        Terrain[] terrains,
+        int count,
+        string prefix,
+        string layer,
+        float minHeight,
+        float maxHeight,
+        float clearingRadius)
     {
         var variants = prefix == "Grass01" ? new[] { "Grass01A", "Grass01B", "Grass01C" }
             : prefix == "Flowers01" ? new[] { "Flowers01A", "Flowers01B" }
             : new[] { "Flower01A", "Flower01B" };
         var prefabs = variants.Select(LoadPrefab).ToArray();
-        Scatter(parent, terrains, count, 18f, 135f, 5.5f, (index, position) =>
-        {
-            var instance = PlacePrefab(prefabs[index % prefabs.Length], parent, $"fantasy_{prefix.ToLowerInvariant()}_{index + 1:000}", position, UnityEngine.Random.Range(0f, 360f));
-            var desired = prefix == "Grass01" ? UnityEngine.Random.Range(0.45f, 0.9f) : UnityEngine.Random.Range(0.35f, 0.72f);
-            ScaleToHeight(instance, desired);
-            SnapBottomToTerrain(instance, terrains, 0.015f);
-        });
+        Scatter(
+            parent,
+            terrains,
+            count,
+            18f,
+            135f,
+            clearingRadius,
+            (index, position) =>
+            {
+                var instance = PlacePrefab(
+                    prefabs[index % prefabs.Length],
+                    parent,
+                    $"fantasy_{prefix.ToLowerInvariant()}_{layer}_{index + 1:000}",
+                    position,
+                    UnityEngine.Random.Range(0f, 360f));
+                ScaleToHeight(instance, UnityEngine.Random.Range(minHeight, maxHeight));
+                SnapBottomToTerrain(instance, terrains, 0.015f);
+            },
+            position =>
+            {
+                var broadPatch = Mathf.PerlinNoise((position.x + 180f) * 0.026f, (position.z + 180f) * 0.026f);
+                var detailPatch = Mathf.PerlinNoise((position.x + 71f) * 0.071f, (position.z + 93f) * 0.071f);
+                var threshold = prefix == "Grass01"
+                    ? (layer == "tall" ? 0.47f : 0.31f)
+                    : 0.54f;
+                return broadPatch * 0.72f + detailPatch * 0.28f >= threshold;
+            });
     }
 
     private static void ScatterRocks(Transform parent, Terrain[] terrains, int count)
@@ -375,7 +404,15 @@ public static class ArenaBrawlFantasyForestBuilder
         });
     }
 
-    private static void Scatter(Transform parent, Terrain[] terrains, int count, float minRadius, float maxRadius, float clearingRadius, Action<int, Vector3> place)
+    private static void Scatter(
+        Transform parent,
+        Terrain[] terrains,
+        int count,
+        float minRadius,
+        float maxRadius,
+        float clearingRadius,
+        Action<int, Vector3> place,
+        Func<Vector3, bool> placementFilter = null)
     {
         var placed = 0;
         var attempts = 0;
@@ -387,6 +424,7 @@ public static class ArenaBrawlFantasyForestBuilder
             if (!TrySampleTerrain(terrains, position.x, position.z, out var y, out var normal)) continue;
             if (normal.y < 0.74f) continue;
             position.y = y;
+            if (placementFilter != null && !placementFilter(position)) continue;
             place(placed++, position);
         }
     }

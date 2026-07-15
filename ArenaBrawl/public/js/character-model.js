@@ -27,6 +27,15 @@ const oneShotTimers = new WeakMap();
 const aimStopTimers = new WeakMap();
 const poseEuler = new THREE.Euler();
 const poseQuaternion = new THREE.Quaternion();
+const ikJointPosition = new THREE.Vector3();
+const ikEffectorPosition = new THREE.Vector3();
+const ikTargetPosition = new THREE.Vector3();
+const ikCurrentDirection = new THREE.Vector3();
+const ikTargetDirection = new THREE.Vector3();
+const ikParentWorldQuaternion = new THREE.Quaternion();
+const ikDeltaWorldQuaternion = new THREE.Quaternion();
+const ikDeltaLocalQuaternion = new THREE.Quaternion();
+const ikDesiredQuaternion = new THREE.Quaternion();
 
 function loadTexture(loader, root, name) {
   return loader.loadAsync(`${root}${name}`).then((texture) => {
@@ -393,6 +402,52 @@ function createHumanSoldierJumpClip(model, prefix) {
   return new THREE.AnimationClip(`${prefix}_jump`, times[times.length - 1], tracks);
 }
 
+function createHumanSoldierProneClip(model, prefix, crawling = false) {
+  const times = crawling ? [0, 0.36, 0.72, 1.08] : [0, 0.8];
+  const steady = (value) => [value, value];
+  const cycle = (a, b) => [a, b, a, b];
+  const poses = {
+    "B-hips": crawling
+      ? cycle([0.02, -0.08, 0], [0.02, 0.08, 0])
+      : steady([0.02, 0, 0]),
+    "B-spine": crawling
+      ? cycle([-0.08, 0.07, 0], [-0.08, -0.07, 0])
+      : steady([-0.08, 0, 0]),
+    "B-chest": crawling
+      ? cycle([0.1, -0.08, 0], [0.1, 0.08, 0])
+      : steady([0.1, 0, 0]),
+    "B-neck": steady([-0.16, 0, 0]),
+    "B-thighL": crawling
+      ? cycle([-0.58, 0, 0.14], [-0.16, 0, 0.08])
+      : steady([-0.34, 0, 0.12]),
+    "B-thighR": crawling
+      ? cycle([-0.16, 0, -0.08], [-0.58, 0, -0.14])
+      : steady([-0.34, 0, -0.12]),
+    "B-shinL": crawling
+      ? cycle([0.92, 0, 0], [0.42, 0, 0])
+      : steady([0.66, 0, 0]),
+    "B-shinR": crawling
+      ? cycle([0.42, 0, 0], [0.92, 0, 0])
+      : steady([0.66, 0, 0]),
+    "B-footL": steady([-0.2, 0, 0]),
+    "B-footR": steady([-0.2, 0, 0])
+  };
+  const tracks = [];
+  Object.entries(poses).forEach(([boneName, rotations]) => {
+    const bone = model.getObjectByName(boneName);
+    if (!bone) return;
+    const values = [];
+    rotations.forEach(([x, y, z]) => {
+      const offset = new THREE.Quaternion().setFromEuler(new THREE.Euler(x, y, z));
+      const pose = bone.quaternion.clone().multiply(offset).normalize();
+      values.push(pose.x, pose.y, pose.z, pose.w);
+    });
+    tracks.push(new THREE.QuaternionKeyframeTrack(`${boneName}.quaternion`, times, values));
+  });
+  const name = crawling ? "prone_crawl" : "prone";
+  return new THREE.AnimationClip(`${prefix}_${name}`, times[times.length - 1], tracks);
+}
+
 function weaponGripPoint(weaponId = "") {
   if (["pistol_common", "heavy_pistol", "auto_pistol_weak", "revolver"].includes(weaponId)) {
     return new THREE.Vector3(0, -0.2, 0);
@@ -400,6 +455,57 @@ function weaponGripPoint(weaponId = "") {
   if (weaponId === "knife") return new THREE.Vector3(0, 0, 0.16);
   if (weaponId === "bow") return new THREE.Vector3(0, 0, 0);
   return new THREE.Vector3(0, -0.23, 0.24);
+}
+
+function weaponSupportPoint(weaponId = "") {
+  if (["knife", "bow"].includes(weaponId)) return null;
+  if (["pistol_common", "heavy_pistol", "auto_pistol_weak", "revolver"].includes(weaponId)) {
+    return new THREE.Vector3(-0.03, -0.12, -0.02);
+  }
+  if (weaponId === "sniper_rifle") return new THREE.Vector3(-0.02, -0.08, -0.68);
+  if (weaponId === "heavy_mg") return new THREE.Vector3(-0.02, -0.12, -0.54);
+  if (weaponId === "mini_shotgun") return new THREE.Vector3(-0.02, -0.1, -0.48);
+  if (weaponId === "crossbow") return new THREE.Vector3(-0.02, -0.08, -0.42);
+  if (weaponId === "smg") return new THREE.Vector3(-0.02, -0.1, -0.36);
+  return new THREE.Vector3(-0.02, -0.1, -0.5);
+}
+
+function rotateIkJointToward(joint, effector, target, weight) {
+  if (!joint?.parent || !effector || weight <= 0) return;
+  joint.updateWorldMatrix(true, true);
+  effector.getWorldPosition(ikEffectorPosition);
+  joint.getWorldPosition(ikJointPosition);
+  ikCurrentDirection.copy(ikEffectorPosition).sub(ikJointPosition);
+  ikTargetDirection.copy(target).sub(ikJointPosition);
+  if (ikCurrentDirection.lengthSq() < 1e-8 || ikTargetDirection.lengthSq() < 1e-8) return;
+  ikCurrentDirection.normalize();
+  ikTargetDirection.normalize();
+  ikDeltaWorldQuaternion.setFromUnitVectors(ikCurrentDirection, ikTargetDirection);
+  joint.parent.getWorldQuaternion(ikParentWorldQuaternion);
+  ikDeltaLocalQuaternion
+    .copy(ikParentWorldQuaternion)
+    .invert()
+    .multiply(ikDeltaWorldQuaternion)
+    .multiply(ikParentWorldQuaternion);
+  ikDesiredQuaternion.copy(joint.quaternion).premultiply(ikDeltaLocalQuaternion).normalize();
+  joint.quaternion.slerp(ikDesiredQuaternion, weight);
+  joint.updateWorldMatrix(true, true);
+}
+
+function applyWeaponSupportIk(avatar) {
+  const chain = avatar.weaponSupportChain;
+  const supportPoint = weaponSupportPoint(avatar.weaponId);
+  if (
+    !chain || !supportPoint || !avatar.gun?.visible || avatar.inVehicle ||
+    avatar.alive === false || performance.now() < (avatar.weaponIkSuppressedUntil || 0)
+  ) return;
+  avatar.gun.updateWorldMatrix(true, false);
+  ikTargetPosition.copy(supportPoint);
+  avatar.gun.localToWorld(ikTargetPosition);
+  for (let pass = 0; pass < 2; pass += 1) {
+    rotateIkJointToward(chain.forearm, chain.hand, ikTargetPosition, pass === 0 ? 0.72 : 0.48);
+    rotateIkJointToward(chain.upperArm, chain.hand, ikTargetPosition, pass === 0 ? 0.62 : 0.4);
+  }
 }
 
 function attachWeaponToHumanSoldier(avatar, model) {
@@ -442,7 +548,12 @@ async function attachHumanSoldierCharacter(avatar, characterId) {
   const model = prepareHumanSoldierScene(sourceModel, descriptor, avatar.team);
   avatar.root.add(model);
   const mixer = new THREE.AnimationMixer(model);
-  const clipSources = { ...clips, jump: createHumanSoldierJumpClip(model, descriptor.prefix) };
+  const clipSources = {
+    ...clips,
+    jump: createHumanSoldierJumpClip(model, descriptor.prefix),
+    prone: createHumanSoldierProneClip(model, descriptor.prefix),
+    proneCrawl: createHumanSoldierProneClip(model, descriptor.prefix, true)
+  };
   const actions = {};
   const locomotionAliases = {
     idle: "idle",
@@ -453,6 +564,8 @@ async function attachHumanSoldierCharacter(avatar, characterId) {
     land: "idle",
     crouch: "idle",
     crouchWalk: "walk_forward",
+    prone: "prone",
+    proneCrawl: "proneCrawl",
     drive: "idle",
     driveBike: "idle",
     drivePlane: "idle",
@@ -496,6 +609,10 @@ async function attachHumanSoldierCharacter(avatar, characterId) {
   avatar.currentAnimationAction = null;
   avatar.aimAnimationAction = null;
   avatar.crouchBlend = 0;
+  avatar.proneBlend = 0;
+  avatar.modelBasePosition = model.position.clone();
+  avatar.modelBaseRotationX = model.rotation.x;
+  model.rotation.order = "YXZ";
   avatar.crouchBones = {
     hips: model.getObjectByName("B-hips"),
     spine: model.getObjectByName("B-spine"),
@@ -503,6 +620,11 @@ async function attachHumanSoldierCharacter(avatar, characterId) {
     thighR: model.getObjectByName("B-thighR"),
     shinL: model.getObjectByName("B-shinL"),
     shinR: model.getObjectByName("B-shinR")
+  };
+  avatar.weaponSupportChain = {
+    upperArm: model.getObjectByName("B-upperArmL"),
+    forearm: model.getObjectByName("B-forearmL"),
+    hand: model.getObjectByName("B-handL")
   };
   avatar.humanSoldierCharacter = true;
   avatar.fpsCharacter = true;
@@ -534,6 +656,8 @@ async function attachFpsCharacter(avatar, characterId) {
     land: ["Land", "Idle"],
     crouch: ["CrouchIdle", "AimIdle"],
     crouchWalk: ["CrouchWalk", "CrouchIdle", "AimWalk"],
+    prone: ["CrouchIdle", "AimIdle", "Idle"],
+    proneCrawl: ["CrouchWalk", "AimWalk", "Walk"],
     drive: ["DriveCar"],
     driveBike: ["RideBike", "DriveCar"],
     drivePlane: ["PilotPlane", "DriveCar"],
@@ -602,6 +726,8 @@ export async function attachAnimatedCharacter(avatar) {
       jump: "jump_running",
       drive: "driving",
       crouch: "sitting",
+      prone: "drop_idle",
+      proneCrawl: "run",
       death: "drop_idle",
       dance: "rotate_left"
     };
@@ -694,6 +820,8 @@ export function setCharacterAnimation(avatar, name, immediate = false, speed = n
   if (avatar.fpsCharacter && name === "fall") defaultSpeed = 1;
   if (avatar.fpsCharacter && name === "land") defaultSpeed = 1.2;
   if (avatar.fpsCharacter && name === "crouchWalk") defaultSpeed = 0.95;
+  if (avatar.fpsCharacter && name === "prone") defaultSpeed = 0.78;
+  if (avatar.fpsCharacter && name === "proneCrawl") defaultSpeed = 0.72;
   if (avatar.fpsCharacter && name === "drive") defaultSpeed = 1;
   if (avatar.fpsCharacter && (name === "driveBike" || name === "drivePlane" || name === "driveJetski")) defaultSpeed = 1;
   if (avatar.fpsCharacter && name === "death") defaultSpeed = 1.35;
@@ -737,22 +865,62 @@ function applyBoneRotation(bone, x, y, z, weight) {
 
 export function updateCharacterPose(avatar, delta) {
   if (!avatar?.humanSoldierCharacter || !avatar.crouchBones) return;
-  const target = avatar.crouching && avatar.alive !== false && !avatar.inVehicle ? 1 : 0;
-  avatar.crouchBlend = THREE.MathUtils.damp(avatar.crouchBlend || 0, target, 13, Math.max(0, delta));
-  const blend = avatar.crouchBlend;
-  if (avatar.bodyHitbox) avatar.bodyHitbox.position.y = THREE.MathUtils.lerp(0.9, 0.68, blend);
-  if (avatar.lowerHitbox) avatar.lowerHitbox.position.y = THREE.MathUtils.lerp(0.32, 0.25, blend);
-  if (avatar.headMesh) avatar.headMesh.position.y = THREE.MathUtils.lerp(1.56, 1.22, blend);
-  if (blend <= 0.001) return;
+  const poseDelta = Math.max(0, delta);
+  const canPose = avatar.alive !== false && !avatar.inVehicle;
+  const proneTarget = avatar.prone && canPose ? 1 : 0;
+  const crouchTarget = avatar.crouching && canPose && !avatar.prone ? 1 : 0;
+  avatar.crouchBlend = THREE.MathUtils.damp(avatar.crouchBlend || 0, crouchTarget, 13, poseDelta);
+  avatar.proneBlend = THREE.MathUtils.damp(avatar.proneBlend || 0, proneTarget, 11, poseDelta);
+  const crouchBlend = avatar.crouchBlend;
+  const proneBlend = avatar.proneBlend;
+
+  if (avatar.model && avatar.modelBasePosition) {
+    avatar.model.position.copy(avatar.modelBasePosition);
+    avatar.model.position.y += 0.38 * proneBlend;
+    avatar.model.position.z += 0.22 * proneBlend;
+    avatar.model.rotation.x = (avatar.modelBaseRotationX || 0) - Math.PI * 0.5 * proneBlend;
+  }
+
+  if (avatar.bodyHitbox) {
+    avatar.bodyHitbox.position.set(
+      0,
+      THREE.MathUtils.lerp(THREE.MathUtils.lerp(0.9, 0.68, crouchBlend), 0.42, proneBlend),
+      THREE.MathUtils.lerp(0, -0.88, proneBlend)
+    );
+    avatar.bodyHitbox.scale.set(1, THREE.MathUtils.lerp(1, 0.42, proneBlend), THREE.MathUtils.lerp(1, 2.15, proneBlend));
+  }
+  if (avatar.lowerHitbox) {
+    avatar.lowerHitbox.position.set(
+      0,
+      THREE.MathUtils.lerp(THREE.MathUtils.lerp(0.32, 0.25, crouchBlend), 0.34, proneBlend),
+      THREE.MathUtils.lerp(0, -0.25, proneBlend)
+    );
+    avatar.lowerHitbox.scale.set(1, THREE.MathUtils.lerp(1, 0.55, proneBlend), THREE.MathUtils.lerp(1, 1.65, proneBlend));
+  }
+  if (avatar.headMesh) {
+    avatar.headMesh.position.set(
+      0,
+      THREE.MathUtils.lerp(THREE.MathUtils.lerp(1.56, 1.22, crouchBlend), 0.4, proneBlend),
+      THREE.MathUtils.lerp(0, -1.55, proneBlend)
+    );
+  }
+  if (avatar.tagSprite) {
+    avatar.tagSprite.position.y = THREE.MathUtils.lerp(1.95, 0.92, proneBlend);
+    avatar.tagSprite.position.z = THREE.MathUtils.lerp(0, -0.82, proneBlend);
+  }
 
   const bones = avatar.crouchBones;
-  if (bones.hips) bones.hips.position.y -= 30 * blend;
-  applyBoneRotation(bones.spine, 0.12, 0, 0, blend);
-  applyBoneRotation(bones.thighL, -0.7, 0, 0, blend);
-  applyBoneRotation(bones.thighR, -0.7, 0, 0, blend);
-  applyBoneRotation(bones.shinL, 1.15, 0, 0, blend);
-  applyBoneRotation(bones.shinR, 1.15, 0, 0, blend);
+  if (crouchBlend > 0.001) {
+    if (bones.hips) bones.hips.position.y -= 30 * crouchBlend;
+    applyBoneRotation(bones.spine, 0.12, 0, 0, crouchBlend);
+    applyBoneRotation(bones.thighL, -0.7, 0, 0, crouchBlend);
+    applyBoneRotation(bones.thighR, -0.7, 0, 0, crouchBlend);
+    applyBoneRotation(bones.shinL, 1.15, 0, 0, crouchBlend);
+    applyBoneRotation(bones.shinR, 1.15, 0, 0, crouchBlend);
+  }
 
+  avatar.model?.updateMatrixWorld(true);
+  applyWeaponSupportIk(avatar);
 }
 
 export function setCharacterAiming(avatar, weaponId, enabled) {
@@ -817,6 +985,9 @@ export function playCharacterAction(avatar, name, speed = 1) {
 
   if (name !== "death") {
     const durationMs = Math.max(140, (action.getClip().duration / Math.max(0.1, Number(speed) || 1)) * 1000);
+    if (name === "grenade" || name.startsWith("reload_")) {
+      avatar.weaponIkSuppressedUntil = performance.now() + durationMs;
+    }
     const timer = setTimeout(() => {
       const fadeSeconds = Math.min(0.16, durationMs / 3000);
       action.fadeOut(fadeSeconds);

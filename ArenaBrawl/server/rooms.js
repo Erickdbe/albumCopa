@@ -120,7 +120,7 @@ function createRoomsModule(io) {
       classId: normalizeClassId(className),
       team: null,
       x: 0, y: 0, z: 0, yaw: 0, pitch: 0,
-      moving: false, sprinting: false, jumping: false, crouching: false, aiming: false, slot: "primary",
+      moving: false, sprinting: false, jumping: false, crouching: false, prone: false, aiming: false, slot: "primary",
       moveForward: 0, moveStrafe: 0,
       health: 100,
       alive: true,
@@ -151,7 +151,7 @@ function createRoomsModule(io) {
     return {
       socketId: p.socketId, username: p.username, classId: p.classId, secondaryId: p.secondaryId, team: p.team,
       x: p.x, y: p.y, z: p.z, yaw: p.yaw, pitch: p.pitch,
-      moving: p.moving, sprinting: p.sprinting, jumping: p.jumping, crouching: p.crouching,
+      moving: p.moving, sprinting: p.sprinting, jumping: p.jumping, crouching: p.crouching, prone: p.prone,
       aiming: p.aiming, slot: p.slot,
       health: p.health, alive: p.alive, kills: p.kills, deaths: p.deaths, score: p.score,
       vehicleId: p.vehicleId || null
@@ -217,6 +217,7 @@ function createRoomsModule(io) {
     player.sprinting = false;
     player.jumping = false;
     player.crouching = false;
+    player.prone = false;
     player.aiming = false;
     player.slot = "primary";
     player.grenadeCharges = Object.fromEntries(Object.keys(GRENADES).map((id) => [id, GRENADE_CHARGES_PER_LIFE]));
@@ -316,7 +317,7 @@ function createRoomsModule(io) {
       io.to(room.roomId).volatile.emit("match:player-move", {
         socketId: player.socketId, x: player.x, y: player.y, z: player.z,
         yaw: player.yaw, pitch: player.pitch,
-        moving: false, sprinting: false, jumping: false, crouching: false, aiming: false, slot: player.slot
+        moving: false, sprinting: false, jumping: false, crouching: false, prone: false, aiming: false, slot: player.slot
       });
     }
     io.to(player.socketId).emit("vehicle:exited", { reason, x: player.x, y: player.y, z: player.z });
@@ -812,7 +813,7 @@ function createRoomsModule(io) {
         io.to(room.roomId).emit("match:emote-stop", { socketId: socket.id });
       }
       player.x = vehicle.x; player.y = vehicle.y; player.z = vehicle.z;
-      player.moving = false; player.sprinting = false; player.jumping = false; player.crouching = false; player.aiming = false;
+      player.moving = false; player.sprinting = false; player.jumping = false; player.crouching = false; player.prone = false; player.aiming = false;
       io.to(room.roomId).emit("vehicle:occupied", { vehicleId: vehicle.id, driverId: socket.id });
       socket.emit("vehicle:entered", publicVehicle(vehicle));
     });
@@ -944,6 +945,11 @@ function createRoomsModule(io) {
       player.sprinting = Boolean(state.sprinting);
       player.jumping = Boolean(state.jumping);
       player.crouching = Boolean(state.crouching);
+      player.prone = Boolean(state.prone) && !player.jumping;
+      if (player.prone) {
+        player.crouching = false;
+        player.sprinting = false;
+      }
       player.aiming = Boolean(state.aiming);
       player.slot = state.slot === "secondary" ? "secondary" : "primary";
       player.moveForward = Math.max(-1, Math.min(1, num(state.moveForward, 0)));
@@ -954,7 +960,7 @@ function createRoomsModule(io) {
       }
       socket.to(room.roomId).volatile.emit("match:player-move", {
         socketId: socket.id, x: player.x, y: player.y, z: player.z, yaw: player.yaw, pitch: player.pitch,
-        moving: player.moving, sprinting: player.sprinting, jumping: player.jumping, crouching: player.crouching,
+        moving: player.moving, sprinting: player.sprinting, jumping: player.jumping, crouching: player.crouching, prone: player.prone,
         aiming: player.aiming, slot: player.slot,
         moveForward: player.moveForward, moveStrafe: player.moveStrafe
       });

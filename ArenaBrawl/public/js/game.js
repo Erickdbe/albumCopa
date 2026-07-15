@@ -29,6 +29,8 @@ const GRENADE_RELEASE_MS = 950;
 const JUMP_HEIGHT_BASE = 1.5; // altura de pulo de referencia (multiplicada por jumpHeightMul)
 const DEFAULT_FOV = 78;
 const LADDER_SPEED = 4.8;
+const PRONE_SPEED_MUL = 0.3;
+const PRONE_EYE_OFFSET = 1.08;
 const DANCE_OPTIONS = {
   dance: { label: "Passinho", speed: 1, animation: "dance" },
   dance_fast: { label: "Energia", speed: 1.35, animation: "dance_fast" },
@@ -102,7 +104,9 @@ const local = {
   moveStrafe: 0,
   sprinting: false,
   crouching: false,
-  jumping: false
+  jumping: false,
+  prone: false,
+  proneExitUntil: 0
 };
 
 /* ── DOM ────────────────────────────────────────────────────────────── */
@@ -162,7 +166,10 @@ function ensureScene() {
     composer?.setSize(window.innerWidth, window.innerHeight);
   });
   window.addEventListener("keydown", (e) => { unlockAudio(); keys[e.code] = true; onKeyDown(e); });
-  window.addEventListener("keyup", (e) => { keys[e.code] = false; });
+  window.addEventListener("keyup", (e) => {
+    keys[e.code] = false;
+    if (e.code === "Space" && !Number.isFinite(local.proneExitUntil)) local.proneExitUntil = 0;
+  });
   document.addEventListener("mousedown", (event) => { unlockAudio(); onMouseDown(event); });
   document.addEventListener("mouseup", onMouseUp);
   dom.gameCanvas.addEventListener("click", () => { if (local.alive && !danceHubOpen) controls.lock(); });
@@ -343,6 +350,8 @@ function snapLocalToSafeGround() {
   local.jumpOffset = safe.y || 0;
   local.verticalVelocity = 0;
   local.onGround = true;
+  local.prone = false;
+  local.proneExitUntil = 0;
   localMoveVelocity.set(0, 0, 0);
   localMoveTarget.set(0, 0, 0);
   camera.position.set(safe.x || 0, EYE_HEIGHT + local.jumpOffset, safe.z || 0);
@@ -481,10 +490,12 @@ function directionalMoveAnimation(avatar, prefix) {
 function animationForAvatar(avatar) {
   if (!avatar.alive) return "death";
   if (avatar.inVehicle) return avatar.vehicleAnimation || "drive";
-  if (avatar.emoteUntil > performance.now() && !avatar.moving && !avatar.jumping) return avatar.emoteAnimation || "dance";
+  if (avatar.emoteUntil > performance.now() && !avatar.moving && !avatar.jumping && !avatar.prone) return avatar.emoteAnimation || "dance";
+  if (avatar.jumping) return "jump";
+  if (avatar.prone && avatar.moving) return "proneCrawl";
+  if (avatar.prone) return "prone";
   if (avatar.crouching && avatar.moving) return "crouchWalk";
   if (avatar.crouching) return "crouch";
-  if (avatar.jumping) return "jump";
   if (avatar.sprinting) return directionalMoveAnimation(avatar, "run");
   if (avatar.moving) return directionalMoveAnimation(avatar, "walk");
   return "idle";
@@ -576,7 +587,7 @@ function buildAvatar(p) {
 
   scene.add(root);
   const avatar = {
-    root, leftArm, rightArm, leftLeg, rightLeg, gun, teamMarker,
+    root, leftArm, rightArm, leftLeg, rightLeg, gun, teamMarker, tagSprite,
     bodyHitbox, lowerHitbox,
     hittable: [bodyHitbox, lowerHitbox, headHitbox],
     fallbackMeshes: [torso, head, leftArm, rightArm, leftLeg, rightLeg],
@@ -585,7 +596,7 @@ function buildAvatar(p) {
     username: p.username, classId: p.classId, secondaryId: p.secondaryId || "pistol_common",
     kills: p.kills || 0, deaths: p.deaths || 0, team: p.team,
     alive: p.alive !== false,
-    moving: Boolean(p.moving), sprinting: Boolean(p.sprinting), jumping: Boolean(p.jumping), crouching: Boolean(p.crouching),
+    moving: Boolean(p.moving), sprinting: Boolean(p.sprinting), jumping: Boolean(p.jumping), crouching: Boolean(p.crouching), prone: Boolean(p.prone),
     aiming: Boolean(p.aiming), slot: p.slot === "secondary" ? "secondary" : "primary", weaponId: remoteWeaponId,
     moveForward: Number(p.moveForward) || 0, moveStrafe: Number(p.moveStrafe) || 0,
     model: null, mixer: null, actions: null, animationName: null, desiredAnimation: "idle",
@@ -645,6 +656,7 @@ function updateLocalViewAvatar(delta) {
   localViewAvatar.sprinting = local.sprinting;
   localViewAvatar.jumping = local.jumping;
   localViewAvatar.crouching = local.crouching;
+  localViewAvatar.prone = local.prone;
   localViewAvatar.aiming = local.aiming;
   localViewAvatar.weaponId = currentWeapon().id;
   localViewAvatar.moveForward = local.moveForward;
@@ -683,6 +695,7 @@ function spawnOrUpdateRemote(p) {
   avatar.sprinting = Boolean(p.sprinting);
   avatar.jumping = Boolean(p.jumping);
   avatar.crouching = Boolean(p.crouching);
+  avatar.prone = Boolean(p.prone);
   avatar.secondaryId = p.secondaryId || avatar.secondaryId;
   avatar.aiming = Boolean(p.aiming);
   avatar.slot = p.slot === "secondary" ? "secondary" : "primary";
@@ -965,7 +978,7 @@ function setupDanceHub() {
 }
 
 function openDanceHub() {
-  if (!local.alive || local.vehicleId || room?.status !== "playing") return;
+  if (!local.alive || local.vehicleId || local.prone || room?.status !== "playing") return;
   danceHubOpen = true;
   cancelCharge();
   setAiming(false);
@@ -985,7 +998,7 @@ function closeDanceHub({ relock = false } = {}) {
 }
 
 function selectDance(emote) {
-  if (!DANCE_OPTIONS[emote] || !socket || !local.alive || local.vehicleId) return;
+  if (!DANCE_OPTIONS[emote] || !socket || !local.alive || local.vehicleId || local.prone) return;
   socket.emit("match:emote", { emote });
   closeDanceHub({ relock: true });
 }
@@ -1462,7 +1475,7 @@ function onKeyDown(e) {
     closeDanceHub({ relock: false });
     return;
   }
-  if (e.code === "KeyB" && !local.vehicleId) {
+  if (e.code === "KeyB" && !local.vehicleId && !local.prone) {
     if (danceHubOpen) closeDanceHub({ relock: true });
     else openDanceHub();
     return;
@@ -1477,6 +1490,19 @@ function onKeyDown(e) {
   }
   if (e.code === "Space" && vehicles.get(local.vehicleId)?.target.type === "cannon") {
     socket.emit("vehicle:launch-self", { vehicleId: local.vehicleId });
+    return;
+  }
+  if (e.code === "KeyZ" && !e.repeat && !local.vehicleId && local.onGround && !local.climbing) {
+    local.prone = !local.prone;
+    local.crouching = false;
+    local.sprinting = false;
+    local.proneExitUntil = 0;
+    stopLocalEmote();
+    return;
+  }
+  if (e.code === "Space" && local.prone) {
+    local.prone = false;
+    local.proneExitUntil = Number.POSITIVE_INFINITY;
     return;
   }
   if (e.code === "KeyC") {
@@ -1532,12 +1558,14 @@ function updateMovement(delta) {
     localMoveTarget.set(0, 0, 0);
     return;
   }
+  if (local.prone && !local.onGround) local.prone = false;
   const weapon = currentWeapon(local.slot);
-  const sprinting = Boolean(keys.ShiftLeft || keys.ShiftRight);
-  const crouching = Boolean(keys.ControlLeft || keys.ControlRight);
+  const prone = Boolean(local.prone);
+  const sprinting = !prone && Boolean(keys.ShiftLeft || keys.ShiftRight);
+  const crouching = !prone && Boolean(keys.ControlLeft || keys.ControlRight);
   const sketchbookFeel = room.settings.mapId === "sketchbook";
   const speed = WALK_SPEED * (sketchbookFeel ? 0.74 : 1) * (weapon.speedMul || 1) * room.settings.moveSpeedMul *
-    (sprinting ? SPRINT_MUL : 1) * (crouching ? CROUCH_MUL : 1) *
+    (sprinting ? SPRINT_MUL : 1) * (crouching ? CROUCH_MUL : 1) * (prone ? PRONE_SPEED_MUL : 1) *
     (local.abilityActive && CLASSES[local.classId].ability.id === "sprint_tatico" ? 1.8 : 1) *
     (local.abilityActive && CLASSES[local.classId].ability.id === "supressao" ? 0.5 : 1);
 
@@ -1546,7 +1574,7 @@ function updateMovement(delta) {
   local.moveForward = forward;
   local.moveStrafe = strafe;
   const ladder = findLadderAt(camera.position.x, camera.position.z, local.jumpOffset);
-  const climbing = Boolean(ladder && forward !== 0 && !keys.Space);
+  const climbing = Boolean(!prone && ladder && forward !== 0 && !keys.Space);
   local.climbing = climbing;
 
   const rawMoveInput = new THREE.Vector3(strafe, 0, climbing ? 0 : -forward);
@@ -1565,6 +1593,7 @@ function updateMovement(delta) {
   local.moving = moving;
   local.sprinting = sprinting;
   local.crouching = crouching;
+  local.prone = prone;
   local.jumping = !local.onGround || climbing;
   if (wantsMove || climbing) stopLocalEmote();
 
@@ -1645,7 +1674,7 @@ function updateMovement(delta) {
       local.onGround = true;
     }
   } else {
-    if (keys.Space && local.onGround) {
+    if (keys.Space && !prone && local.onGround && performance.now() >= local.proneExitUntil) {
       local.verticalVelocity = Math.sqrt(2 * Math.abs(GRAVITY) * jumpHeight);
       local.onGround = false;
     }
@@ -1662,11 +1691,12 @@ function updateMovement(delta) {
       }
     }
   }
-  camera.position.y = EYE_HEIGHT + local.jumpOffset - (crouching ? 0.35 : 0);
+  const stanceOffset = prone ? PRONE_EYE_OFFSET : crouching ? 0.35 : 0;
+  camera.position.y = EYE_HEIGHT + local.jumpOffset - stanceOffset;
   local.jumping = !local.onGround || climbing;
 
   const now = performance.now();
-  if (moving && local.onGround && now - lastFootstepAt > (sprinting ? 260 : 390)) {
+  if (moving && local.onGround && !prone && now - lastFootstepAt > (sprinting ? 260 : 390)) {
     lastFootstepAt = now;
     playFootstep(null, sprinting);
   }
@@ -1679,7 +1709,7 @@ function updateMovement(delta) {
     socket.emit("match:move", {
       x: camera.position.x, y: Math.max(0, local.jumpOffset), z: camera.position.z,
       yaw: _readEuler.y, pitch: _readEuler.x,
-      moving, sprinting, jumping: !local.onGround || climbing, crouching, aiming: local.aiming, slot: local.slot,
+      moving, sprinting, jumping: !local.onGround || climbing, crouching, prone: local.prone, aiming: local.aiming, slot: local.slot,
       moveForward: forward, moveStrafe: strafe
     });
   }
@@ -1742,11 +1772,12 @@ function renderWithCameraMode(delta) {
   const eyeQuaternion = camera.quaternion.clone();
   const viewDirection = new THREE.Vector3(0, 0, -1).applyQuaternion(eyeQuaternion).normalize();
   const rightDirection = new THREE.Vector3(1, 0, 0).applyQuaternion(eyeQuaternion).setY(0).normalize();
-  const lookTarget = new THREE.Vector3(eyePosition.x, local.jumpOffset + 1.28, eyePosition.z);
+  const lookHeight = local.prone ? 0.5 : local.crouching ? 0.96 : 1.28;
+  const lookTarget = new THREE.Vector3(eyePosition.x, local.jumpOffset + lookHeight, eyePosition.z);
   const desired = lookTarget.clone()
     .addScaledVector(viewDirection, -6.8)
     .addScaledVector(rightDirection, 0.42);
-  desired.y = Math.max(local.jumpOffset + 0.78, desired.y + 0.5);
+  desired.y = Math.max(local.jumpOffset + (local.prone ? 0.42 : 0.78), desired.y + (local.prone ? 0.28 : 0.5));
   const aimTarget = lookTarget.clone().addScaledVector(viewDirection, 10.5);
   const direction = desired.clone().sub(lookTarget);
   const distance = direction.length();
@@ -1975,6 +2006,8 @@ export function attachSocket(activeSocket) {
     local.moving = false;
     local.sprinting = false;
     local.crouching = false;
+    local.prone = false;
+    local.proneExitUntil = 0;
     local.jumping = false;
     local.externalVelocity.set(0, 0, 0);
     local.pendingFallDamage = 0;
@@ -2027,6 +2060,8 @@ export function attachSocket(activeSocket) {
     local.moving = false;
     local.sprinting = false;
     local.crouching = false;
+    local.prone = false;
+    local.proneExitUntil = 0;
     local.jumping = false;
     dom.pauseHint.hidden = true;
     closeDanceHub({ relock: false });
@@ -2046,6 +2081,8 @@ export function attachSocket(activeSocket) {
     local.moving = false;
     local.sprinting = false;
     local.crouching = false;
+    local.prone = false;
+    local.proneExitUntil = 0;
     local.jumping = false;
     weaponRig.visible = true;
     camera.position.set(Number(x) || camera.position.x, EYE_HEIGHT + (Number(y) || 0), Number(z) || camera.position.z);
@@ -2097,6 +2134,7 @@ export function attachSocket(activeSocket) {
     avatar.sprinting = Boolean(p.sprinting);
     avatar.jumping = Boolean(p.jumping);
     avatar.crouching = Boolean(p.crouching);
+    avatar.prone = Boolean(p.prone);
     avatar.aiming = Boolean(p.aiming);
     avatar.slot = p.slot === "secondary" ? "secondary" : "primary";
     avatar.weaponId = avatar.slot === "secondary"
@@ -2168,6 +2206,8 @@ export function attachSocket(activeSocket) {
       local.moving = false;
       local.sprinting = false;
       local.crouching = false;
+      local.prone = false;
+      local.proneExitUntil = 0;
       local.jumping = false;
       local.grenadeThrowPending = false;
       closeDanceHub({ relock: false });
@@ -2189,6 +2229,7 @@ export function attachSocket(activeSocket) {
         a.deaths += 1;
         a.alive = false;
         a.moving = false;
+        a.prone = false;
         a.emoteUntil = 0;
         a.emoteSpeed = 1;
         a.emoteAnimation = "dance";
@@ -2217,6 +2258,8 @@ export function attachSocket(activeSocket) {
       local.moving = false;
       local.sprinting = false;
       local.crouching = false;
+      local.prone = false;
+      local.proneExitUntil = 0;
       local.jumping = false;
       local.externalVelocity.set(0, 0, 0);
       local.pendingFallDamage = 0;
@@ -2258,6 +2301,7 @@ export function attachSocket(activeSocket) {
         a.sprinting = false;
         a.jumping = false;
         a.crouching = false;
+        a.prone = false;
         a.emoteUntil = 0;
         a.emoteSpeed = 1;
         a.emoteAnimation = "dance";

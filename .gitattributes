@@ -7,6 +7,7 @@ casaSombria/Build/Build/*.unityweb -filter -diff -merge -text
 *.data filter=lfs diff=lfs merge=lfs -text
 ArenaBrawl/public/assets/models/rpg-poly-lite/** -filter -diff -merge -text
 ArenaBrawl/public/assets/models/human-soldier/** -filter -diff -merge -text
+ArenaBrawl/public/assets/models/toon-soldier/** -filter -diff -merge -text
 ArenaBrawl/public/assets/models/fantasy-mountain/** -filter -diff -merge -text
 aventura3d/Build/*.wasm -filter -diff -merge -text
 aventura3d/Build/*.js -filter -diff -merge -text

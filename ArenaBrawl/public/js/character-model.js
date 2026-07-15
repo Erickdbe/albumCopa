@@ -11,6 +11,7 @@ const MODEL_ROOTS = {
 const FPS_CHARACTER_PACK = "./assets/models/fps-characters/arena_brawl_fps_characters_enhanced_export.glb";
 const TOON_SOLDIER_MODEL = "./assets/models/toon-soldier/toon-soldier.glb";
 const TOON_SOLDIER_ANIMATION_ROOT = "./assets/models/toon-soldier/animations";
+const TOON_SOLDIER_ASSET_VERSION = "20260715-2";
 const TOON_UPPER_BODY_BONES = new Set([
   "Bip001_Spine", "Bip001_Neck", "Bip001_Head",
   "Bip001_L_Clavicle", "Bip001_L_UpperArm", "Bip001_L_Forearm", "Bip001_L_Hand",
@@ -284,7 +285,9 @@ function humanSoldierDescriptor(characterId) {
 function loadToonSoldierModel() {
   if (!toonSoldierModelPromise) {
     const loader = new GLTFLoader();
-    toonSoldierModelPromise = loader.loadAsync(TOON_SOLDIER_MODEL).then((gltf) => gltf.scene);
+    toonSoldierModelPromise = loader
+      .loadAsync(`${TOON_SOLDIER_MODEL}?v=${TOON_SOLDIER_ASSET_VERSION}`)
+      .then((gltf) => gltf.scene);
   }
   return toonSoldierModelPromise;
 }
@@ -312,10 +315,10 @@ async function loadHumanSoldierPack(characterId) {
     const loader = new FBXLoader();
     const promise = Promise.all([
       loadToonSoldierModel(),
-      loader.loadAsync(`${TOON_SOLDIER_ANIMATION_ROOT}/infantry_combat_idle.fbx`),
-      loader.loadAsync(`${TOON_SOLDIER_ANIMATION_ROOT}/infantry_combat_run.fbx`),
-      loader.loadAsync(`${TOON_SOLDIER_ANIMATION_ROOT}/infantry_combat_shoot.fbx`),
-      loader.loadAsync(`${TOON_SOLDIER_ANIMATION_ROOT}/infantry_guard_idle.fbx`)
+      loader.loadAsync(`${TOON_SOLDIER_ANIMATION_ROOT}/infantry_combat_idle.fbx?v=${TOON_SOLDIER_ASSET_VERSION}`),
+      loader.loadAsync(`${TOON_SOLDIER_ANIMATION_ROOT}/infantry_combat_run.fbx?v=${TOON_SOLDIER_ASSET_VERSION}`),
+      loader.loadAsync(`${TOON_SOLDIER_ANIMATION_ROOT}/infantry_combat_shoot.fbx?v=${TOON_SOLDIER_ASSET_VERSION}`),
+      loader.loadAsync(`${TOON_SOLDIER_ANIMATION_ROOT}/infantry_guard_idle.fbx?v=${TOON_SOLDIER_ASSET_VERSION}`)
     ]).then(([toonModel, idleAsset, runAsset, shootAsset, guardAsset]) => {
       const idle = toonClip(idleAsset.animations?.[0], "idle");
       const run = toonClip(runAsset.animations?.[0], "run");

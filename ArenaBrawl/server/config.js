@@ -58,10 +58,11 @@ const SECONDARY_IDS = Object.keys(SECONDARY_WEAPONS);
 
 // Granadas, limitadas por vida (padrao 2 cargas).
 const GRENADES = {
-  explosive: { id: "explosive", name: "Explosiva", radius: 5, damage: 70, minDamage: 10, fuseMs: 1600, detonateOnImpact: false },
-  smoke: { id: "smoke", name: "Fumaca", radius: 6, damage: 0, fuseMs: 900, durationMs: 6000, detonateOnImpact: false },
-  flash: { id: "flash", name: "Flash", radius: 7, damage: 0, fuseMs: 900, blindMs: 2500, detonateOnImpact: false },
-  impact: { id: "impact", name: "Impacto", radius: 4, damage: 55, minDamage: 10, fuseMs: 0, detonateOnImpact: true }
+  explosive: { id: "explosive", name: "Explosiva", radius: 7, damage: 82, minDamage: 12, fuseMs: 1600, detonateOnImpact: false },
+  smoke: { id: "smoke", name: "Fumaca", radius: 8, damage: 0, fuseMs: 900, durationMs: 7000, detonateOnImpact: false },
+  flash: { id: "flash", name: "Flashbang", radius: 9, damage: 0, fuseMs: 900, blindMs: 3000, detonateOnImpact: false },
+  molotov: { id: "molotov", name: "Molotov", radius: 6.5, damage: 26, minDamage: 8, fuseMs: 700, burnDamage: 9, burnTicks: 5, burnTickMs: 900, durationMs: 5200, detonateOnImpact: true },
+  impact: { id: "impact", name: "Impacto", radius: 5.5, damage: 62, minDamage: 12, fuseMs: 0, detonateOnImpact: true }
 };
 const GRENADE_IDS = Object.keys(GRENADES);
 const GRENADE_CHARGES_PER_LIFE = 2;

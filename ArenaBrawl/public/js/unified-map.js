@@ -107,7 +107,7 @@ function addLadderToBox(world, spec, side = "east") {
     east: { x: 1, z: 0 }, west: { x: -1, z: 0 }
   }[side] || { x: 1, z: 0 };
   const alongX = outward.z !== 0;
-  const faceDistance = alongX ? spec.depth * 0.5 + 0.38 : spec.width * 0.5 + 0.38;
+  const faceDistance = alongX ? spec.depth * 0.36 + 0.18 : spec.width * 0.36 + 0.18;
   const centerX = spec.x + outward.x * faceDistance;
   const centerZ = spec.z + outward.z * faceDistance;
   const baseY = 0.22;
@@ -140,7 +140,7 @@ function addLadderToBox(world, spec, side = "east") {
   }
 
   const halfWidth = ladderWidth * 0.74;
-  const reach = 1.02;
+  const reach = 0.84;
   world.ladders.push({
     centerX,
     centerZ,
@@ -172,7 +172,7 @@ function makeWorld(scene) {
     raycastMeshes: [],
     requireExplicitGround: true,
     safeSpawn: { x: -145, y: 0.12, z: 53, yaw: Math.PI },
-    animated: { trees: [], waves: [], sharks: [], debris: [], craters: [], elapsed: 0 },
+    animated: { trees: [], waves: [], sharks: [], debris: [], craters: [], soccerBalls: [], elapsed: 0 },
     water: null,
     tsunami: null,
     tornado: null,
@@ -264,7 +264,7 @@ function addCityBuilding(world, spec) {
   anchor.add(fallback);
   world.root.add(anchor);
 
-  const collision = obstacle(spec.x, spec.z, spec.width * 0.88, spec.depth * 0.88, spec.height, true, -0.16);
+  const collision = obstacle(spec.x, spec.z, spec.width * 0.64, spec.depth * 0.64, spec.height, true, -0.22);
   world.obstacles.push(collision);
   if (spec.height >= 12) addLadderToBox(world, spec, spec.ladderSide || "east");
   fallback.traverse((child) => { if (child.isMesh) world.raycastMeshes.push(child); });
@@ -336,6 +336,55 @@ function addCityProp(world, file, x, z, options = {}) {
   }
 }
 
+function addSoccerField(world) {
+  const x = -231;
+  const z = -238;
+  const width = 38;
+  const depth = 23;
+  const y = 0.19;
+  const turf = mesh(world, new THREE.BoxGeometry(width, 0.08, depth), standardMaterial(0x3c8a45, { roughness: 0.96 }), [x, y, z]);
+  turf.castShadow = false;
+  world.groundRaycastMeshes.push(turf);
+  world.raycastMeshes.push(turf);
+
+  const lineMaterial = new THREE.MeshBasicMaterial({ color: 0xf1f7e7 });
+  const addLine = (lx, lz, lw, ld) => {
+    const line = mesh(world, new THREE.BoxGeometry(lw, 0.025, ld), lineMaterial, [lx, y + 0.065, lz]);
+    line.castShadow = false;
+  };
+  addLine(x, z - depth * 0.5 + 0.35, width - 1.5, 0.18);
+  addLine(x, z + depth * 0.5 - 0.35, width - 1.5, 0.18);
+  addLine(x - width * 0.5 + 0.35, z, 0.18, depth - 1.2);
+  addLine(x + width * 0.5 - 0.35, z, 0.18, depth - 1.2);
+  addLine(x, z, 0.18, depth - 1.2);
+  const center = mesh(world, new THREE.TorusGeometry(3.4, 0.06, 6, 42), lineMaterial, [x, y + 0.08, z], [Math.PI / 2, 0, 0]);
+  center.castShadow = false;
+
+  const goalMaterial = standardMaterial(0xd8ded2, { roughness: 0.7 });
+  for (const side of [-1, 1]) {
+    const gx = x + side * (width * 0.5 - 0.45);
+    const postA = mesh(world, new THREE.BoxGeometry(0.12, 1.55, 0.12), goalMaterial, [gx, y + 0.82, z - 3.2]);
+    const postB = mesh(world, new THREE.BoxGeometry(0.12, 1.55, 0.12), goalMaterial, [gx, y + 0.82, z + 3.2]);
+    const cross = mesh(world, new THREE.BoxGeometry(0.14, 0.12, 6.55), goalMaterial, [gx, y + 1.58, z]);
+    postA.castShadow = postB.castShadow = cross.castShadow = true;
+  }
+
+  const ball = new THREE.Mesh(
+    new THREE.SphereGeometry(0.42, 18, 14),
+    new THREE.MeshStandardMaterial({ color: 0xf4f4ed, roughness: 0.55 })
+  );
+  ball.position.set(x, y + 0.48, z);
+  ball.castShadow = true;
+  world.root.add(ball);
+  world.animated.soccerBalls.push({
+    mesh: ball,
+    velocity: new THREE.Vector3(),
+    bounds: { minX: x - width * 0.5 + 1.2, maxX: x + width * 0.5 - 1.2, minZ: z - depth * 0.5 + 1.2, maxZ: z + depth * 0.5 - 1.2 },
+    y: y + 0.48,
+    lastKickAt: 0
+  });
+}
+
 function addCity(world) {
   const slab = mesh(world, new THREE.BoxGeometry(278, 0.16, 330), standardMaterial(0x77827f), [-151, 0, -75]);
   slab.castShadow = false;
@@ -393,6 +442,7 @@ function addCity(world) {
     ["Vehicle_Car.fbx", -154, 53, 4.2, Math.PI]
   ];
   traffic.forEach(([file, x, z, size, yaw]) => addCityProp(world, file, x, z, { size, yaw, collision: [size * 0.75, size * 0.36, 2.3] }));
+  addSoccerField(world);
 }
 
 function isForestPlacementClear(x, z) {
@@ -609,7 +659,7 @@ function addCabin(world, x, z, yaw = 0) {
   group.add(body, cap);
   group.traverse((child) => { if (child.isMesh) { child.castShadow = true; child.receiveShadow = true; } });
   world.root.add(group);
-  world.obstacles.push(obstacle(x, z, 8, 6, y + 6, true, -0.15));
+  world.obstacles.push(obstacle(x, z, 6.3, 4.8, y + 6, true, -0.22));
   world.raycastMeshes.push(body, cap);
 }
 
@@ -674,6 +724,23 @@ function addEventVisuals(world) {
 
 function updateUnified(world, elapsed, delta, event) {
   world.updateWaterWorks?.(elapsed);
+  world.animated.soccerBalls.forEach((ball) => {
+    ball.mesh.position.x += ball.velocity.x * delta;
+    ball.mesh.position.z += ball.velocity.z * delta;
+    ball.velocity.multiplyScalar(Math.pow(0.91, delta * 60));
+    if (ball.mesh.position.x < ball.bounds.minX || ball.mesh.position.x > ball.bounds.maxX) {
+      ball.mesh.position.x = THREE.MathUtils.clamp(ball.mesh.position.x, ball.bounds.minX, ball.bounds.maxX);
+      ball.velocity.x *= -0.48;
+    }
+    if (ball.mesh.position.z < ball.bounds.minZ || ball.mesh.position.z > ball.bounds.maxZ) {
+      ball.mesh.position.z = THREE.MathUtils.clamp(ball.mesh.position.z, ball.bounds.minZ, ball.bounds.maxZ);
+      ball.velocity.z *= -0.48;
+    }
+    ball.mesh.position.y = ball.y;
+    ball.mesh.rotation.x += ball.velocity.z * delta * 1.8;
+    ball.mesh.rotation.z -= ball.velocity.x * delta * 1.8;
+    if (ball.velocity.lengthSq() < 0.006) ball.velocity.set(0, 0, 0);
+  });
   world.animated.trees.forEach(({ trunk, phase }) => {
     const wind = event?.type === "tornado" && event.phase === "active" ? 0.07 : 0.008;
     trunk.rotation.z = Math.sin(elapsed * 1.4 + phase) * wind;
@@ -712,5 +779,21 @@ export function buildUnifiedMap(scene) {
   addWoodBridge(world, "unified-bridge-south", 58, 108, 26, -0.08, 0.9);
   addEventVisuals(world);
   world.updateUnified = (elapsed, delta, event) => updateUnified(world, elapsed, delta, event);
+  world.kickSoccerBalls = (playerPosition, viewDirection) => {
+    const flatView = new THREE.Vector3(viewDirection.x, 0, viewDirection.z);
+    if (flatView.lengthSq() < 0.001) flatView.set(0, 0, -1);
+    flatView.normalize();
+    const now = performance.now();
+    world.animated.soccerBalls.forEach((ball) => {
+      const dx = ball.mesh.position.x - playerPosition.x;
+      const dz = ball.mesh.position.z - playerPosition.z;
+      const distance = Math.hypot(dx, dz);
+      if (distance > 1.45 || now - ball.lastKickAt < 240) return;
+      const away = distance > 0.001 ? new THREE.Vector3(dx / distance, 0, dz / distance) : flatView.clone();
+      ball.velocity.add(flatView.multiplyScalar(8.5)).add(away.multiplyScalar(4.2));
+      ball.velocity.clampLength(0, 16);
+      ball.lastKickAt = now;
+    });
+  };
   return world;
 }

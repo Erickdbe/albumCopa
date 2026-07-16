@@ -1020,7 +1020,7 @@ function createRoomsModule(io) {
       setTimeout(() => {
         if (rooms.get(room.roomId) !== room || room.status !== "playing") return;
         const currentShooter = room.players.find((item) => item.socketId === socket.id) || null;
-        const radius = 9;
+        const radius = 16;
         io.to(room.roomId).emit("vehicle:bomb-exploded", {
           vehicleId: vehicle.id,
           x: targetPoint.x,
@@ -1032,12 +1032,12 @@ function createRoomsModule(io) {
           const distance = Math.hypot(player.x - targetPoint.x, player.z - targetPoint.z);
           if (distance > radius) return;
           const falloff = Math.max(0, 1 - distance / radius);
-          applyDamage(room, player.socketId === currentShooter?.socketId ? null : currentShooter, player, 24 + 76 * falloff, false);
+          applyDamage(room, player.socketId === currentShooter?.socketId ? null : currentShooter, player, 32 + 98 * falloff, false);
         });
         room.vehicles.forEach((targetVehicle) => {
           if (targetVehicle.destroyed || targetVehicle.id === vehicle.id) return;
           const distance = Math.hypot(targetVehicle.x - targetPoint.x, targetVehicle.z - targetPoint.z);
-          if (distance <= radius + 2) damageVehicle(room, targetVehicle, 90 + 210 * Math.max(0, 1 - distance / (radius + 2)), currentShooter);
+          if (distance <= radius + 2) damageVehicle(room, targetVehicle, 140 + 320 * Math.max(0, 1 - distance / (radius + 2)), currentShooter);
         });
         room.worldObjects.forEach((object) => {
           if (Math.hypot(object.x - targetPoint.x, object.z - targetPoint.z) <= radius + 2) {
@@ -1337,6 +1337,23 @@ function createRoomsModule(io) {
           const dmg = grenade.minDamage + (grenade.damage - grenade.minDamage) * falloff;
           applyDamage(room, target.socketId === thrower.socketId ? null : thrower, target, dmg, false);
         });
+      }
+      if (grenade.id === "molotov") {
+        const burnTicks = Math.max(1, Math.min(8, grenade.burnTicks || 5));
+        const tickMs = Math.max(350, Math.min(1500, grenade.burnTickMs || 900));
+        for (let tick = 1; tick <= burnTicks; tick++) {
+          setTimeout(() => {
+            if (rooms.get(room.roomId) !== room || room.status !== "playing") return;
+            const currentThrower = room.players.find((player) => player.socketId === socket.id) || null;
+            room.players.forEach((target) => {
+              if (!target.alive) return;
+              const d = distance3({ x: point.x, y: 0, z: point.z }, { x: target.x, y: 0, z: target.z });
+              if (d > grenade.radius) return;
+              const falloff = Math.max(0.25, 1 - d / grenade.radius);
+              applyDamage(room, target.socketId === currentThrower?.socketId ? null : currentThrower, target, grenade.burnDamage * falloff, false);
+            });
+          }, tick * tickMs);
+        }
       }
       if (grenade.id === "flash" || grenade.id === "smoke") {
         room.players.forEach((target) => {

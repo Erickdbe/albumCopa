@@ -51,12 +51,13 @@ export const SECONDARY_WEAPONS = {
 export const SECONDARY_ORDER = ["pistol_common", "revolver", "mini_shotgun", "auto_pistol_weak", "knife"];
 
 export const GRENADES = {
-  explosive: { id: "explosive", name: "Explosiva", radius: 5, fuseMs: 1600, color: 0x333333 },
-  smoke: { id: "smoke", name: "Fumaca", radius: 6, fuseMs: 900, durationMs: 6000, color: 0xaaaaaa },
-  flash: { id: "flash", name: "Flash", radius: 7, fuseMs: 900, color: 0xffffff },
-  impact: { id: "impact", name: "Impacto", radius: 4, fuseMs: 0, color: 0x883333 }
+  explosive: { id: "explosive", name: "Explosiva", radius: 7, fuseMs: 1600, color: 0x333333 },
+  smoke: { id: "smoke", name: "Fumaca", radius: 8, fuseMs: 900, durationMs: 7000, color: 0xaaaaaa },
+  flash: { id: "flash", name: "Flashbang", radius: 9, fuseMs: 900, color: 0xffffff },
+  molotov: { id: "molotov", name: "Molotov", radius: 6.5, fuseMs: 700, durationMs: 5200, detonateOnImpact: true, color: 0xff7a22 },
+  impact: { id: "impact", name: "Impacto", radius: 5.5, fuseMs: 0, color: 0x883333 }
 };
-export const GRENADE_ORDER = ["explosive", "smoke", "flash", "impact"];
+export const GRENADE_ORDER = ["explosive", "smoke", "flash", "molotov", "impact"];
 export const GRENADE_CHARGES_PER_LIFE = 2;
 
 export const MAP_META = {

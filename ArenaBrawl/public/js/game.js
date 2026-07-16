@@ -4,7 +4,7 @@ import { BloomEffect, EffectComposer, EffectPass, RenderPass, VignetteEffect } f
 import { buildMap } from "./maps.js";
 import { buildWeaponModel, setBowChargeVisual } from "./weapon-models.js";
 import { buildVehicleModel, createAirBomb, createCannonProjectile, createExplosion } from "./vehicle-models.js";
-import { emitExplosionFx, emitImpactFx, emitMuzzleFx, preloadWarFx } from "./war-fx.js";
+import { emitExplosionFx, emitImpactFx, emitMuzzleFx, emitNapalmExplosionFx, preloadWarFx } from "./war-fx.js";
 import { UNIFIED_RIVER_POINTS } from "./water-world.js";
 import {
   attachAnimatedCharacter,
@@ -1475,8 +1475,8 @@ function renderPlaneBomb({ origin, target, flightMs }) {
 
 function renderPlaneBombExplosion({ x, y, z }) {
   const point = new THREE.Vector3(Number(x) || 0, Number(y) || 0, Number(z) || 0);
-  createExplosion(scene, point, 0xff6b28);
-  mapWorld?.showExplosionImpact?.(point.x, point.z, 1.8);
+  emitNapalmExplosionFx(scene, point, 1.75);
+  mapWorld?.showExplosionImpact?.(point.x, point.z, 3.2);
   playExplosionSound(point);
 }
 
@@ -1582,7 +1582,11 @@ function simulateGrenadeArc(id, origin, dir, isLocal, fromSocketId) {
 
   const fuseMs = grenade.fuseMs || 900;
   if (isLocal) {
-    setTimeout(() => detonateGrenade(state), grenade.detonateOnImpact ? 0 : fuseMs);
+    if (grenade.detonateOnImpact) {
+      if (fuseMs > 0) setTimeout(() => detonateGrenade(state), fuseMs + 1400);
+    } else {
+      setTimeout(() => detonateGrenade(state), fuseMs);
+    }
   }
 }
 
@@ -1595,37 +1599,41 @@ function detonateGrenade(state) {
   if (state.isLocal) {
     socket.emit("match:grenadeDetonate", { grenadeId: state.id, x: pos.x, z: pos.z });
     const grenade = GRENADES[state.id];
+    const environmentDamage = state.id === "molotov" ? 28 : state.id === "explosive" || state.id === "impact" ? 75 : 0;
     mapWorld?.destructiblesNear(pos.x, pos.z, grenade.radius + 2).forEach((object) => {
+      if (!environmentDamage) return;
       socket.emit("world:hit", {
         id: object.id,
-        damage: state.id === "explosive" || state.id === "impact" ? 65 : 0,
+        damage: environmentDamage,
         x: object.mesh.position.x,
         z: object.mesh.position.z
       });
     });
-    socket.emit("world:blast", { x: pos.x, z: pos.z, radius: grenade.radius + 2, damage: 65 });
+    if (environmentDamage) socket.emit("world:blast", { x: pos.x, z: pos.z, radius: grenade.radius + 2, damage: environmentDamage });
   }
 }
 
 function renderGrenadeExplosionVisual(grenadeId, x, z) {
   const grenade = GRENADES[grenadeId];
-  if (grenadeId === "explosive" || grenadeId === "impact") {
+  if (grenadeId === "molotov") {
+    emitNapalmExplosionFx(scene, new THREE.Vector3(x, 0.45, z), 0.82);
+  } else if (grenadeId === "explosive" || grenadeId === "impact") {
     emitExplosionFx(
       scene,
       new THREE.Vector3(x, 0.55, z),
       grenadeId === "impact" ? 0xffb04d : 0xff6b28,
-      grenadeId === "impact" ? 0.72 : 1
+      grenadeId === "impact" ? 0.9 : 1.25
     );
   }
   const flashMesh = new THREE.Mesh(new THREE.SphereGeometry(grenade.radius * (grenadeId === "explosive" || grenadeId === "impact" ? 0.6 : 1), 12, 12), new THREE.MeshBasicMaterial({ color: grenade.color, transparent: true, opacity: 0.65 }));
   flashMesh.position.set(x, 1, z);
   scene.add(flashMesh);
-  const duration = grenadeId === "smoke" ? (grenade.durationMs || 6000) : 500;
+  const duration = grenadeId === "smoke" || grenadeId === "molotov" ? (grenade.durationMs || 6000) : 500;
   const start = performance.now();
   (function fade() {
     const t = (performance.now() - start) / duration;
     flashMesh.material.opacity = Math.max(0, 0.65 * (1 - t));
-    flashMesh.scale.setScalar(1 + t * (grenadeId === "smoke" ? 1.5 : 0.6));
+    flashMesh.scale.setScalar(1 + t * (grenadeId === "smoke" ? 1.5 : grenadeId === "molotov" ? 0.35 : 0.6));
     if (t < 1) requestAnimationFrame(fade);
     else scene.remove(flashMesh);
   })();
@@ -2199,6 +2207,9 @@ function render() {
     updateVehiclePresentation(delta);
     applyWorldLighting(delta);
     updateMovement(delta);
+    if (!local.vehicleId && mapWorld?.kickSoccerBalls) {
+      mapWorld.kickSoccerBalls(camera.position, new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion));
+    }
     updateGrenadesPhysics(delta);
     updateBallistics(delta);
     animateAvatars(delta);

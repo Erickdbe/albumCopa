@@ -194,6 +194,64 @@ export function emitExplosionFx(scene, position, color = 0xff762f, scale = 1) {
   return group;
 }
 
+export function emitNapalmExplosionFx(scene, position, scale = 1) {
+  const group = new THREE.Group();
+  group.position.copy(position);
+  scene.add(group);
+
+  const stem = sprite("WFX_T_FlamesBig A8.tga", 0xff7a22, 1, true);
+  stem.position.y = 1.2 * scale;
+  stem.scale.set(2.4 * scale, 4.8 * scale, 2.4 * scale);
+  group.add(stem);
+
+  const capSprites = Array.from({ length: 9 }, (_, index) => {
+    const smoke = sprite("WFX_T_SmokeLoopAlpha Average.tga", index % 2 ? 0x4a4038 : 0x2f3032, 0.78, false);
+    const angle = index / 9 * Math.PI * 2;
+    smoke.position.set(Math.cos(angle) * 1.1 * scale, 4.2 * scale, Math.sin(angle) * 1.1 * scale);
+    smoke.scale.setScalar((2.4 + (index % 3) * 0.34) * scale);
+    smoke.userData.velocity = new THREE.Vector3(Math.cos(angle) * 1.05, 1.15, Math.sin(angle) * 1.05).multiplyScalar(scale);
+    group.add(smoke);
+    return smoke;
+  });
+
+  const groundFire = Array.from({ length: 14 }, (_, index) => {
+    const flame = sprite("WFX_T_FlamesBig A8.tga", index % 2 ? 0xff9b2f : 0xff4b19, 0.82, true);
+    const angle = index / 14 * Math.PI * 2;
+    const radius = (1.6 + (index % 5) * 0.55) * scale;
+    flame.position.set(Math.cos(angle) * radius, 0.28 * scale, Math.sin(angle) * radius);
+    flame.scale.setScalar((0.9 + (index % 4) * 0.22) * scale);
+    group.add(flame);
+    return flame;
+  });
+  const sparks = sparkBurst(group, Math.round(44 * scale), 1.65 * scale, 0xff8a2e);
+
+  animateFor(2400, (progress, delta) => {
+    stem.material.opacity = Math.max(0, 1 - progress * 1.55);
+    stem.scale.y = 4.8 * scale * (1 + progress * 0.85);
+    stem.scale.x = stem.scale.z = 2.4 * scale * (1 + progress * 1.2);
+    capSprites.forEach((smoke, index) => {
+      smoke.position.addScaledVector(smoke.userData.velocity, delta);
+      smoke.position.y += Math.sin(progress * 10 + index) * delta * 0.55;
+      smoke.scale.multiplyScalar(1 + delta * 0.58);
+      smoke.material.opacity = 0.78 * Math.max(0, 1 - progress * 0.72);
+    });
+    groundFire.forEach((flame, index) => {
+      flame.scale.y = (0.9 + (index % 4) * 0.22) * scale * (1 + Math.sin(progress * 32 + index) * 0.18);
+      flame.material.opacity = Math.max(0, 0.82 - progress * 1.2);
+    });
+    for (let i = 0; i < sparks.velocities.length; i++) {
+      const velocity = sparks.velocities[i];
+      velocity.y -= 8 * delta;
+      sparks.positions[i * 3] += velocity.x * delta;
+      sparks.positions[i * 3 + 1] += velocity.y * delta;
+      sparks.positions[i * 3 + 2] += velocity.z * delta;
+    }
+    sparks.points.geometry.attributes.position.needsUpdate = true;
+    sparks.points.material.opacity = Math.max(0, 1 - progress * 1.45);
+  }, () => disposeObject(group));
+  return group;
+}
+
 export function preloadWarFx() {
   return Promise.all([
     "WFX_T_MF FrontRear RIFLE1 A8.png",

@@ -17,19 +17,24 @@ const MESHY_WEAPONS = {
   pistol_common: { asset: "pistol", targetSize: 0.72, align: "negative-x-to-z" }
 };
 
+// Poses de mira (ADS). Antes ficavam centralizadas (x=0) e um pouco altas, o
+// que tampava a mira: a arma cobria o centro da tela. Agora ficam recolhidas
+// para a direita e mais baixas, deixando o centro (crosshair) sempre visivel.
+// A mira mesmo vem do zoom (FOV) + reducao de espalhamento em game.js.
+// O sniper esconde a arma e usa a luneta, entao pode vir mais centralizado.
 const AIM_POSES = {
-  sniper_rifle: [0, -0.2, -2],
-  bow: [0, -0.03, -1.18],
-  crossbow: [0, -0.12, -1.55],
-  smg: [0, -0.12, -1.35],
-  assault_rifle: [0, -0.13, -1.75],
-  heavy_mg: [0, -0.14, -1.85],
-  mini_shotgun: [0, -0.13, -1.65],
-  revolver: [0, -0.12, -0.95],
-  heavy_pistol: [0, -0.12, -0.95],
-  auto_pistol_weak: [0, -0.12, -0.9],
-  pistol_common: [0, -0.12, -0.9],
-  knife: [0.14, -0.28, -0.82]
+  sniper_rifle: [0.05, -0.22, -1.7],
+  bow: [0.17, -0.16, -1.0],
+  crossbow: [0.17, -0.26, -1.3],
+  smg: [0.18, -0.27, -1.12],
+  assault_rifle: [0.18, -0.29, -1.32],
+  heavy_mg: [0.2, -0.31, -1.4],
+  mini_shotgun: [0.18, -0.29, -1.28],
+  revolver: [0.16, -0.25, -0.85],
+  heavy_pistol: [0.16, -0.25, -0.85],
+  auto_pistol_weak: [0.16, -0.25, -0.82],
+  pistol_common: [0.16, -0.25, -0.82],
+  knife: [0.16, -0.3, -0.8]
 };
 
 const MAT = {

@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { attachCityModel } from "./unity-pack-assets.js";
 import { addUnifiedWater, UNIFIED_RIVER_POINTS } from "./water-world.js";
 
-export const UNIFIED_HALF = 300;
+export const UNIFIED_HALF = 260;
 
 const textureLoader = new THREE.TextureLoader();
 const grassTexture = textureLoader.load("./assets/textures/forest-grass.jpg");
@@ -101,6 +101,61 @@ function mesh(world, geometry, material, position, rotation = null) {
   return object;
 }
 
+function addLadderToBox(world, spec, side = "east") {
+  const outward = {
+    south: { x: 0, z: 1 }, north: { x: 0, z: -1 },
+    east: { x: 1, z: 0 }, west: { x: -1, z: 0 }
+  }[side] || { x: 1, z: 0 };
+  const alongX = outward.z !== 0;
+  const faceDistance = alongX ? spec.depth * 0.5 + 0.38 : spec.width * 0.5 + 0.38;
+  const centerX = spec.x + outward.x * faceDistance;
+  const centerZ = spec.z + outward.z * faceDistance;
+  const baseY = 0.22;
+  const height = Math.max(4.2, spec.height - 0.85);
+  const ladderWidth = 1.2;
+  const railOffset = ladderWidth * 0.45;
+  const material = standardMaterial(0x6f5438, { roughness: 0.9 });
+
+  for (const offset of [-railOffset, railOffset]) {
+    mesh(
+      world,
+      new THREE.CylinderGeometry(0.055, 0.055, height, 7),
+      material,
+      [
+        centerX + (alongX ? offset : 0),
+        baseY + height * 0.5,
+        centerZ + (alongX ? 0 : offset)
+      ]
+    ).castShadow = false;
+  }
+  const rungs = Math.max(7, Math.floor(height / 0.45));
+  for (let i = 0; i <= rungs; i++) {
+    const y = baseY + 0.22 + (height - 0.35) * (i / rungs);
+    mesh(
+      world,
+      new THREE.BoxGeometry(alongX ? ladderWidth : 0.12, 0.07, alongX ? 0.12 : ladderWidth),
+      material,
+      [centerX, y, centerZ]
+    ).castShadow = false;
+  }
+
+  const halfWidth = ladderWidth * 0.74;
+  const reach = 1.02;
+  world.ladders.push({
+    centerX,
+    centerZ,
+    alongX,
+    minX: centerX - (alongX ? halfWidth : reach),
+    maxX: centerX + (alongX ? halfWidth : reach),
+    minZ: centerZ - (alongX ? reach : halfWidth),
+    maxZ: centerZ + (alongX ? reach : halfWidth),
+    bottomY: baseY,
+    topY: baseY + height + 0.3,
+    dismountX: -outward.x * 1.2,
+    dismountZ: -outward.z * 1.2
+  });
+}
+
 function makeWorld(scene) {
   const root = new THREE.Group();
   root.name = "world-mundo";
@@ -160,7 +215,7 @@ function addTerrain(world) {
   world.groundRaycastMeshes.push(terrain);
   world.raycastMeshes.push(terrain);
 
-  const sand = mesh(world, new THREE.PlaneGeometry(596, 82, 44, 8), new THREE.MeshStandardMaterial({
+  const sand = mesh(world, new THREE.PlaneGeometry(516, 82, 44, 8), new THREE.MeshStandardMaterial({
     map: sandTexture,
     color: 0xffe6a1,
     roughness: 0.97
@@ -211,6 +266,7 @@ function addCityBuilding(world, spec) {
 
   const collision = obstacle(spec.x, spec.z, spec.width * 0.88, spec.depth * 0.88, spec.height, true, -0.16);
   world.obstacles.push(collision);
+  if (spec.height >= 12) addLadderToBox(world, spec, spec.ladderSide || "east");
   fallback.traverse((child) => { if (child.isMesh) world.raycastMeshes.push(child); });
   attachCityModel(anchor, spec.file, {
     targetHeight: spec.height,
@@ -378,8 +434,8 @@ function addForest(world) {
   let treeIndex = 0;
   let attempts = 0;
   while (treeIndex < treeCount && attempts++ < treeCount * 12) {
-    const x = 10 + random() * 278;
-    const z = -282 + random() * 388;
+    const x = 10 + random() * 238;
+    const z = -242 + random() * 350;
     if (!isForestPlacementClear(x, z)) continue;
     const y = unifiedTerrainHeight(x, z);
     const scale = 0.72 + random() * 0.78;
@@ -396,8 +452,8 @@ function addForest(world) {
     let x;
     let z;
     do {
-      x = 20 + random() * 258;
-      z = -270 + random() * 360;
+      x = 20 + random() * 220;
+      z = -238 + random() * 340;
     } while (!isForestPlacementClear(x, z));
     const anchor = new THREE.Group();
     anchor.position.set(x, unifiedTerrainHeight(x, z), z);
@@ -436,8 +492,8 @@ function addForest(world) {
     let x;
     let z;
     do {
-      x = 4 + random() * 286;
-      z = -288 + random() * 405;
+      x = 4 + random() * 244;
+      z = -248 + random() * 360;
     } while (!isForestPlacementClear(x, z));
     const height = 0.5 + random() * 1.45;
     setInstanceMatrix(grass, i, x, unifiedTerrainHeight(x, z) + height * 0.5, z, 0.6 + random() * 0.9, height, 0.6 + random() * 0.9, random() * Math.PI);
@@ -446,8 +502,8 @@ function addForest(world) {
     let x;
     let z;
     do {
-      x = 5 + random() * 283;
-      z = -285 + random() * 398;
+      x = 5 + random() * 242;
+      z = -245 + random() * 355;
     } while (!isForestPlacementClear(x, z));
     const scale = 0.55 + random() * 1.25;
     setInstanceMatrix(bushes, i, x, unifiedTerrainHeight(x, z) + 0.45 * scale, z, scale * 1.2, scale * 0.7, scale, random() * Math.PI);
@@ -456,8 +512,8 @@ function addForest(world) {
     let x;
     let z;
     do {
-      x = 12 + random() * 270;
-      z = -276 + random() * 378;
+      x = 12 + random() * 232;
+      z = -240 + random() * 338;
     } while (!isForestPlacementClear(x, z));
     const y = unifiedTerrainHeight(x, z);
     setInstanceMatrix(flowers, i, x, y + 0.38, z, 1, 1, 1, 0);
@@ -472,8 +528,8 @@ function addForest(world) {
     let x;
     let z;
     do {
-      x = 14 + random() * 272;
-      z = -282 + random() * 390;
+      x = 14 + random() * 232;
+      z = -242 + random() * 350;
     } while (Math.hypot(x - 126, z + 62) < 36 || distanceToRiver(x, z) < 11);
     const scale = 0.55 + random() * 2.1;
     setInstanceMatrix(rocks, i, x, unifiedTerrainHeight(x, z) + scale * 0.42, z, scale, scale * (0.55 + random() * 0.45), scale * (0.75 + random() * 0.35), random() * Math.PI);
@@ -559,7 +615,7 @@ function addCabin(world, x, z, yaw = 0) {
 
 function addBeach(world) {
   for (let i = 0; i < 24; i++) {
-    const x = -275 + random() * 550;
+    const x = -250 + random() * 500;
     const z = 126 + random() * 51;
     const palm = new THREE.Group();
     palm.position.set(x, 0.14, z);

@@ -68,17 +68,17 @@ export const MAP_META = {
 };
 export const MAP_ORDER = ["mundo"];
 
-export const MAP_HALF_SIZES = { mundo: 300, sketchbook: 190, praia: 128, cidade: 124, floresta: 168 };
+export const MAP_HALF_SIZES = { mundo: 260, sketchbook: 190, praia: 128, cidade: 124, floresta: 168 };
 export const SKETCHBOOK_GROUND_Y = 5.35;
 
 export const VEHICLE_SPAWNS = {
   mundo: [
-    { id: "world-humvee-a", type: "car", x: -258, y: 0.2, z: -92, yaw: 0 },
+    { id: "world-humvee-a", type: "car", x: -238, y: 0.2, z: -92, yaw: 0 },
     { id: "world-humvee-b", type: "car", x: -102, y: 0.2, z: 52, yaw: Math.PI },
     { id: "world-bike-a", type: "motorcycle", x: -154, y: 0.2, z: -181, yaw: 0 },
     { id: "world-bike-b", type: "motorcycle", x: -50, y: 0.2, z: 24, yaw: Math.PI },
     { id: "world-quad", type: "quad", x: -23, y: 0.25, z: 82, yaw: -Math.PI / 2 },
-    { id: "world-plane", type: "plane", x: -276, y: 0.35, z: 55, yaw: -Math.PI / 2 },
+    { id: "world-plane", type: "plane", x: -238, y: 0.35, z: 55, yaw: -Math.PI / 2 },
     { id: "world-helicopter", type: "helicopter", x: -180, y: 45.2, z: -195, yaw: Math.PI },
     { id: "world-jetski-a", type: "jetski", x: -62, y: 0.25, z: 224, yaw: Math.PI },
     { id: "world-jetski-b", type: "jetski", x: 54, y: 0.25, z: 230, yaw: Math.PI }

@@ -521,6 +521,33 @@ function createRoomsModule(io) {
 
   function updatePlaneVehicle(vehicle, stats, input, driver, delta) {
     if (!driver) {
+      if (vehicle.type === "plane" && vehicle.y > 3.12) {
+        vehicle.crashRollDirection ||= Math.random() < 0.5 ? -1 : 1;
+        vehicle.enginePower = approach(vehicle.enginePower || 0.2, 0, delta * 0.35);
+        vehicle.speed = approach(Math.max(7, vehicle.speed || stats.maxSpeed * 0.35), stats.maxSpeed * 0.28, stats.acceleration * delta * 0.18);
+        vehicle.pitch = lerp(vehicle.pitch || 0, -0.5, delta * 1.35);
+        vehicle.roll = lerp(vehicle.roll || 0, vehicle.crashRollDirection * 0.74, delta * 0.9);
+        vehicle.yaw += Math.sin(vehicle.roll || 0) * stats.turnSpeed * 0.28 * delta;
+        const forward = {
+          x: -Math.sin(vehicle.yaw) * Math.cos(vehicle.pitch || 0),
+          z: -Math.cos(vehicle.yaw) * Math.cos(vehicle.pitch || 0)
+        };
+        vehicle.x += forward.x * vehicle.speed * delta;
+        vehicle.z += forward.z * vehicle.speed * delta;
+        vehicle.verticalVelocity = (vehicle.verticalVelocity || -1.4) - 9.6 * delta;
+        vehicle.y += vehicle.verticalVelocity * delta;
+        if (vehicle.y <= 3) {
+          const impactSpeed = Math.abs(vehicle.verticalVelocity || 0);
+          vehicle.y = 3;
+          vehicle.verticalVelocity = 0;
+          vehicle.speed = Math.max(0, vehicle.speed * 0.18);
+          vehicle.pitch = -0.18;
+          vehicle.roll = clamp(vehicle.roll || 0, -0.55, 0.55);
+          vehicle.pendingCrashDamage = impactSpeed > 8 ? 360 : 180;
+        }
+        vehicle.lastSpeed = vehicle.speed;
+        return;
+      }
       vehicle.enginePower = approach(vehicle.enginePower || 0, 0, delta * 0.8);
       vehicle.speed = approach(vehicle.speed || 0, 0, stats.acceleration * delta);
       vehicle.pitch = lerp(vehicle.pitch || 0, 0, delta * 2.4);
@@ -589,6 +616,11 @@ function createRoomsModule(io) {
         vehicle.roll = 0;
       } else if (vehicle.type === "plane" || vehicle.type === "helicopter") {
         updatePlaneVehicle(vehicle, stats, input, driver, delta);
+        if (vehicle.pendingCrashDamage) {
+          const crashDamage = vehicle.pendingCrashDamage;
+          vehicle.pendingCrashDamage = 0;
+          damageVehicle(room, vehicle, crashDamage, null);
+        }
       } else {
         updateGroundVehicle(vehicle, stats, input, driver, delta, vehicle.type === "jetski");
       }

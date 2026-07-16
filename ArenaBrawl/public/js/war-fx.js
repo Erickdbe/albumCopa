@@ -4,6 +4,16 @@ import { TGALoader } from "three/addons/loaders/TGALoader.js";
 const ROOT = "./assets/unity-packs/warfx/";
 const textureCache = new Map();
 
+// Orcamento de efeitos simultaneos. Sob fogo intenso (varios jogadores
+// atirando juntos) o excesso de sprites/particulas e loops de animacao era o
+// que travava o jogo. Limitamos os efeitos leves (fogacho/impacto) a um teto;
+// explosoes (raras) nao entram no teto para nao sumirem.
+const MAX_LIGHT_FX = 26;
+let activeLightFx = 0;
+function fxBudgetAvailable() {
+  return activeLightFx < MAX_LIGHT_FX;
+}
+
 function assetUrl(file) {
   return `${ROOT}${encodeURIComponent(file)}`;
 }
@@ -60,6 +70,12 @@ function animateFor(durationMs, update, complete) {
 }
 
 export function emitMuzzleFx(scene, origin, direction = new THREE.Vector3(0, 0, -1), scale = 1) {
+  // Sem PointLight aqui: uma luz dinamica por disparo (x N jogadores atirando)
+  // era a principal causa do lag/travamento. Os sprites aditivos ja dao o
+  // brilho do fogacho. O jogador local ainda tem uma unica luz de cano
+  // reutilizada (muzzleFlash em game.js).
+  if (!fxBudgetAvailable()) return null;
+  activeLightFx += 1;
   const group = new THREE.Group();
   group.position.copy(origin);
   group.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), direction.clone().normalize());
@@ -73,16 +89,13 @@ export function emitMuzzleFx(scene, origin, direction = new THREE.Vector3(0, 0, 
   side.position.z = 0.18 * scale;
   group.add(side);
 
-  const light = new THREE.PointLight(0xff9c42, 5.5 * scale, 5.5 * scale, 2);
-  group.add(light);
   animateFor(95, (progress) => {
     const pulse = 1 + progress * 0.65;
     front.scale.setScalar(0.72 * scale * pulse);
     side.scale.multiplyScalar(1 + progress * 0.05);
     front.material.opacity = 1 - progress;
     side.material.opacity = 0.92 * (1 - progress);
-    light.intensity = 5.5 * scale * (1 - progress);
-  }, () => disposeObject(group));
+  }, () => { activeLightFx -= 1; disposeObject(group); });
   return group;
 }
 
@@ -111,6 +124,8 @@ function sparkBurst(group, count, strength, color = 0xffb348) {
 }
 
 export function emitImpactFx(scene, point, strength = 1) {
+  if (!fxBudgetAvailable()) return null;
+  activeLightFx += 1;
   const group = new THREE.Group();
   group.position.copy(point);
   scene.add(group);
@@ -130,7 +145,7 @@ export function emitImpactFx(scene, point, strength = 1) {
     sparks.points.material.opacity = 1 - progress;
     flash.material.opacity = Math.max(0, 0.95 - progress * 2.4);
     flash.scale.setScalar(0.45 * strength * (1 + progress * 1.8));
-  }, () => disposeObject(group));
+  }, () => { activeLightFx -= 1; disposeObject(group); });
   return group;
 }
 
@@ -155,16 +170,11 @@ export function emitExplosionFx(scene, position, color = 0xff762f, scale = 1) {
     return particle;
   });
   const sparks = sparkBurst(group, Math.round(26 * scale), 1.15 * scale);
-  const light = new THREE.PointLight(color, 13 * scale, 15 * scale, 2);
-  light.position.y = 1.1;
-  group.add(light);
-
   animateFor(1550, (progress, delta) => {
     core.material.opacity = Math.max(0, 1 - progress * 1.9);
     core.scale.setScalar(3.2 * scale * (1 + progress * 1.4));
     glow.material.opacity = Math.max(0, 0.9 - progress * 2.7);
     glow.scale.setScalar(4.5 * scale * (1 + progress * 2.2));
-    light.intensity = 13 * scale * Math.max(0, 1 - progress * 2.8);
     smoke.forEach((particle, index) => {
       particle.position.addScaledVector(particle.userData.velocity, delta);
       particle.position.x += Math.sin(progress * 8 + index) * delta * 0.32;

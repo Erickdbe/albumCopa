@@ -75,7 +75,7 @@ const MAP_META = {
   floresta: { id: "floresta", name: "Floresta" }
 };
 
-const MAP_HALF_SIZES = { mundo: 300, sketchbook: 190, praia: 128, cidade: 124, floresta: 168 };
+const MAP_HALF_SIZES = { mundo: 260, sketchbook: 190, praia: 128, cidade: 124, floresta: 168 };
 const SKETCHBOOK_GROUND_Y = 5.35;
 const SKETCHBOOK_PLAYABLE_AREAS = [
   { minX: -74, maxX: 74, minZ: -58, maxZ: 53 },
@@ -85,12 +85,12 @@ const SKETCHBOOK_PLAYABLE_AREAS = [
 
 const VEHICLE_SPAWNS = {
   mundo: [
-    { id: "world-humvee-a", type: "car", x: -258, y: 0.2, z: -92, yaw: 0 },
+    { id: "world-humvee-a", type: "car", x: -238, y: 0.2, z: -92, yaw: 0 },
     { id: "world-humvee-b", type: "car", x: -102, y: 0.2, z: 52, yaw: Math.PI },
     { id: "world-bike-a", type: "motorcycle", x: -154, y: 0.2, z: -181, yaw: 0 },
     { id: "world-bike-b", type: "motorcycle", x: -50, y: 0.2, z: 24, yaw: Math.PI },
     { id: "world-quad", type: "quad", x: -23, y: 0.25, z: 82, yaw: -Math.PI / 2 },
-    { id: "world-plane", type: "plane", x: -276, y: 0.35, z: 55, yaw: -Math.PI / 2 },
+    { id: "world-plane", type: "plane", x: -238, y: 0.35, z: 55, yaw: -Math.PI / 2 },
     { id: "world-helicopter", type: "helicopter", x: -180, y: 45.2, z: -195, yaw: Math.PI },
     { id: "world-jetski-a", type: "jetski", x: -62, y: 0.25, z: 224, yaw: Math.PI },
     { id: "world-jetski-b", type: "jetski", x: 54, y: 0.25, z: 230, yaw: Math.PI }
@@ -145,7 +145,7 @@ const MAP_SPAWNS = {
     ffa: [
       { x: -206, y: 0.2, z: 53, yaw: Math.PI },
       { x: -102, y: 0.2, z: 53, yaw: Math.PI },
-      { x: -258, y: 0.2, z: -136, yaw: Math.PI / 2 },
+      { x: -238, y: 0.2, z: -136, yaw: Math.PI / 2 },
       { x: -154, y: 0.2, z: -224, yaw: 0 },
       { x: -50, y: 0.2, z: -108, yaw: -Math.PI / 2 },
       { x: -32, y: 0.2, z: 62, yaw: -Math.PI / 2 },
@@ -154,7 +154,7 @@ const MAP_SPAWNS = {
     ],
     teams: {
       red: [
-        { x: -258, y: 0.2, z: -136, yaw: Math.PI / 2 },
+        { x: -238, y: 0.2, z: -136, yaw: Math.PI / 2 },
         { x: -206, y: 0.2, z: 53, yaw: Math.PI },
         { x: -154, y: 0.2, z: -224, yaw: 0 },
         { x: -50, y: 0.2, z: -108, yaw: -Math.PI / 2 }
@@ -163,7 +163,7 @@ const MAP_SPAWNS = {
         { x: -32, y: 0.2, z: 62, yaw: -Math.PI / 2 },
         { x: 182, y: 0.2, z: 146, yaw: Math.PI },
         { x: 78, y: 0.2, z: 145, yaw: Math.PI },
-        { x: 255, y: 0.2, z: 154, yaw: Math.PI }
+        { x: 235, y: 0.2, z: 154, yaw: Math.PI }
       ]
     }
   },

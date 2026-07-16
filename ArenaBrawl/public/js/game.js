@@ -55,6 +55,25 @@ let selfId = null;
 let onEndCallback = null;
 
 const keys = {};
+// Teclas usadas pelo jogo — enquanto a partida esta ativa, seguramos o default
+// do navegador nelas (inclui Control e Shift, o que neutraliza Ctrl+A / Ctrl+Shift+A).
+const GAME_KEY_CODES = new Set([
+  "KeyW", "KeyA", "KeyS", "KeyD", "KeyE", "KeyF", "KeyG", "KeyQ", "KeyR",
+  "KeyV", "KeyB", "KeyC", "KeyZ", "Space", "Tab",
+  "ShiftLeft", "ShiftRight", "ControlLeft", "ControlRight", "AltLeft",
+  "Digit1", "Digit2", "Digit3", "Digit4",
+  "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"
+]);
+function shouldCaptureGameKey(e) {
+  // So intercepta quando o jogo esta em foco (ponteiro travado) e o alvo nao e
+  // um campo de texto. Preserva F5, F11, F12 e Ctrl+Shift+I pro usuario nunca
+  // ficar preso.
+  if (!controls?.isLocked) return false;
+  const tag = e.target?.tagName;
+  if (tag === "INPUT" || tag === "TEXTAREA" || e.target?.isContentEditable) return false;
+  if (e.key === "F5" || e.key === "F11" || e.key === "F12") return false;
+  return GAME_KEY_CODES.has(e.code);
+}
 const remotePlayers = new Map();
 const vehicles = new Map();
 const activeGrenades = [];
@@ -179,8 +198,18 @@ function ensureScene() {
     renderer.setSize(window.innerWidth, window.innerHeight);
     composer?.setSize(window.innerWidth, window.innerHeight);
   });
-  window.addEventListener("keydown", (e) => { unlockAudio(); keys[e.code] = true; onKeyDown(e); });
+  window.addEventListener("keydown", (e) => {
+    unlockAudio();
+    // Durante a partida (ponteiro travado), impede que as teclas de controle
+    // acionem atalhos do navegador: Ctrl+A selecionava a pagina (fica azul),
+    // Ctrl+Shift+A e afins fechavam/atrapalhavam, e Espaco rolava a pagina.
+    // Fora do jogo (menus/lobby) nao interferimos.
+    if (shouldCaptureGameKey(e)) e.preventDefault();
+    keys[e.code] = true;
+    onKeyDown(e);
+  });
   window.addEventListener("keyup", (e) => {
+    if (shouldCaptureGameKey(e)) e.preventDefault();
     keys[e.code] = false;
     if (e.code === "Space" && !Number.isFinite(local.proneExitUntil)) local.proneExitUntil = 0;
   });
@@ -1194,8 +1223,21 @@ function traceBallistic(origin, direction, speed, gravity, range, targets = []) 
   return { points, hit: null, distance: traveled };
 }
 
+const MAX_ACTIVE_BALLISTICS = 90;
 function spawnBallisticVisual(trace, speed, kind = "bullet", audibleImpact = false) {
   if (!trace?.points?.length || trace.points.length < 2) return;
+  // Teto de tracejados simultaneos: sob fogo intenso o array crescia demais e
+  // enchia a cena de malhas. Ao estourar o teto, descarta o mais antigo.
+  if (activeBallistics.length >= MAX_ACTIVE_BALLISTICS) {
+    const oldest = activeBallistics.shift();
+    if (oldest) {
+      scene.remove(oldest.mesh, oldest.trail);
+      oldest.mesh.geometry.dispose();
+      oldest.mesh.material.dispose();
+      oldest.trail.geometry.dispose();
+      oldest.trail.material.dispose();
+    }
+  }
   const isArrow = kind === "arrow";
   const mesh = new THREE.Mesh(
     isArrow ? new THREE.BoxGeometry(0.035, 0.035, 0.52) : new THREE.SphereGeometry(0.045, 6, 6),
@@ -1384,12 +1426,21 @@ function dropPlaneBomb() {
   if (Date.now() < readyAt) return;
 
   const origin = entry.model.position.clone().add(new THREE.Vector3(0, -0.45, 0));
-  vehicleForward.set(0, 0, -1).applyEuler(new THREE.Euler(0, entry.state.yaw, 0, "YXZ")).normalize();
+  const aimDirection = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion).normalize();
   const groundBelow = terrainSurfaceHeightAt(origin.x, origin.z, 0);
-  const fallSeconds = THREE.MathUtils.clamp(Math.sqrt(2 * Math.max(1, origin.y - groundBelow) / 16), 0.65, 2.5);
-  const travel = Math.max(5, Math.abs(entry.state.speed || 0) * fallSeconds * 0.72);
-  const targetX = origin.x + vehicleForward.x * travel;
-  const targetZ = origin.z + vehicleForward.z * travel;
+  const fallbackFallSeconds = THREE.MathUtils.clamp(Math.sqrt(2 * Math.max(1, origin.y - groundBelow) / 16), 0.65, 2.5);
+  const fallbackTravel = Math.max(12, Math.abs(entry.state.speed || 0) * fallbackFallSeconds * 0.72);
+  let travel = fallbackTravel;
+  if (aimDirection.y < -0.08) {
+    const roughGround = terrainSurfaceHeightAt(
+      origin.x + aimDirection.x * fallbackTravel,
+      origin.z + aimDirection.z * fallbackTravel,
+      groundBelow
+    );
+    travel = THREE.MathUtils.clamp((origin.y - roughGround) / Math.abs(aimDirection.y), 12, 86);
+  }
+  const targetX = origin.x + aimDirection.x * travel;
+  const targetZ = origin.z + aimDirection.z * travel;
   const targetY = terrainSurfaceHeightAt(targetX, targetZ, groundBelow) + 0.12;
   socket.emit("vehicle:bomb", {
     vehicleId: local.vehicleId,
@@ -2155,8 +2206,9 @@ function render() {
     updateAbilityHud();
     updateWeaponPresentation(delta);
     updateAudioListener(camera);
-    const drivenVehicle = vehicles.get(local.vehicleId)?.target;
-    updateVehicleEngine(Boolean(drivenVehicle), drivenVehicle?.speed || 0);
+    // Som de motor dos veiculos removido a pedido: mantemos o motor sempre
+    // desligado (silencia qualquer node que por acaso esteja tocando).
+    updateVehicleEngine(false, 0);
     if (performance.now() - lastMinimapDrawAt > 80) {
       lastMinimapDrawAt = performance.now();
       drawMinimap();
@@ -2408,9 +2460,9 @@ export function attachSocket(activeSocket) {
     if (!avatar) return;
     avatar.revealedUntil = performance.now() + 1800;
     playCharacterWeaponAction(avatar, weaponId, "shoot");
-    const flash = new THREE.PointLight(0xffddaa, 5, 4);
-    avatar.gun.add(flash);
-    setTimeout(() => avatar.gun.remove(flash), 60);
+    // Sem PointLight por disparo remoto: com varios jogadores atirando juntos,
+    // uma luz dinamica por tiro multiplicava o custo de iluminacao por pixel e
+    // travava o jogo. O fogacho (emitMuzzleFx) ja da o brilho visual.
     const weapon = weaponById(weaponId);
     const shotOrigin = new THREE.Vector3(Number(origin?.x) || avatar.root.position.x, Number(origin?.y) || avatar.root.position.y + 1.3, Number(origin?.z) || avatar.root.position.z);
     playWeaponSound(weaponId, shotOrigin);

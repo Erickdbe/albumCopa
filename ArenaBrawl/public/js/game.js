@@ -126,6 +126,8 @@ const local = {
   vehicleLookYaw: 0,
   vehicleLookPitch: 0,
   vehicleBombReadyAt: 0,
+  harpoonSlowUntil: 0,
+  harpoonSlowStrength: 1,
   emoteActive: false,
   emoteUntil: 0,
   emoteSpeed: 1,
@@ -506,7 +508,7 @@ function updateWeaponPresentation(delta) {
   if (!camera || !currentWeaponMesh) return;
   const weapon = currentWeapon();
   const scoped = local.aiming && weapon.id === "sniper_rifle";
-  const abilityZoom = local.abilityActive && local.classId === "sniper";
+  const abilityZoom = local.abilityActive && CLASSES[local.classId]?.ability?.id === "foco_letal";
   const targetFov = scoped ? 28 : local.aiming ? 58 : abilityZoom ? 62 : DEFAULT_FOV;
   camera.fov = THREE.MathUtils.lerp(camera.fov, targetFov, Math.min(1, delta * 13));
   camera.updateProjectionMatrix();
@@ -1640,9 +1642,196 @@ function renderGrenadeExplosionVisual(grenadeId, x, z) {
 }
 
 /* ── Habilidade ─────────────────────────────────────────────────────── */
+function vectorPayload(v) {
+  return { x: Number(v.x) || 0, y: Number(v.y) || 0, z: Number(v.z) || 0 };
+}
+
+function aimedDirection() {
+  return new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion).normalize();
+}
+
+function shooterAbilityOrigin(socketId) {
+  if (socketId === selfId) {
+    return currentWeaponMesh?.visible ? muzzleWorldPosition() : camera.getWorldPosition(new THREE.Vector3());
+  }
+  const avatar = remotePlayers.get(socketId);
+  if (!avatar) return null;
+  return avatar.root.position.clone().add(new THREE.Vector3(0, 1.35, 0));
+}
+
+function disposeAbilityObject(object) {
+  object.traverse?.((child) => {
+    child.geometry?.dispose?.();
+    const materials = Array.isArray(child.material) ? child.material : [child.material];
+    materials.forEach((material) => material?.dispose?.());
+  });
+}
+
+function temporarySceneObject(object, durationMs) {
+  scene.add(object);
+  setTimeout(() => {
+    scene.remove(object);
+    disposeAbilityObject(object);
+  }, Math.max(120, Number(durationMs) || 600));
+  return object;
+}
+
+function pickAimPoint({ maxDistance = 72, includeSolids = true, requireGround = false } = {}) {
+  scene.updateMatrixWorld(true);
+  const origin = camera.getWorldPosition(new THREE.Vector3());
+  const dir = aimedDirection();
+  const groundMeshes = mapWorld?.groundRaycastMeshes || [];
+  const targets = [
+    ...(includeSolids ? solidMeshesForRaycast : []),
+    ...groundMeshes
+  ];
+  raycaster.set(origin, dir);
+  raycaster.far = maxDistance;
+  const hit = raycaster.intersectObjects(targets, false)
+    .find((item) => item.object.visible !== false && item.distance > 1.05);
+  if (hit) {
+    const point = hit.point.clone();
+    if (!requireGround && includeSolids && !groundMeshes.includes(hit.object)) {
+      const box = new THREE.Box3().setFromObject(hit.object);
+      if (Number.isFinite(box.max.y) && box.max.y > point.y + 1) point.y = Math.min(box.max.y - 0.25, point.y + 8);
+    }
+    if (requireGround) point.y = terrainSurfaceHeightAt(point.x, point.z, point.y);
+    return point;
+  }
+  const fallback = origin.addScaledVector(dir, maxDistance * 0.58);
+  fallback.y = terrainSurfaceHeightAt(fallback.x, fallback.z, local.jumpOffset);
+  return fallback;
+}
+
+function pickHarpoonTarget(maxDistance = 66) {
+  scene.updateMatrixWorld(true);
+  const origin = camera.getWorldPosition(new THREE.Vector3());
+  raycaster.set(origin, aimedDirection());
+  raycaster.far = maxDistance;
+  const hits = raycaster.intersectObjects(gatherHittable(), false)
+    .filter((hit) => hit.object.visible !== false && hit.distance > 1);
+  return hits[0]?.object.userData.socketId || null;
+}
+
+function renderGrappleAbility(socketId, target) {
+  const origin = shooterAbilityOrigin(socketId);
+  if (!origin || !target) return;
+  const targetPoint = new THREE.Vector3(Number(target.x) || 0, Number(target.y) || 0, Number(target.z) || 0);
+  const group = new THREE.Group();
+  const cable = new THREE.Line(
+    new THREE.BufferGeometry().setFromPoints([origin, targetPoint]),
+    new THREE.LineBasicMaterial({ color: 0x9dd7ff, transparent: true, opacity: 0.92 })
+  );
+  const hook = new THREE.Mesh(
+    new THREE.SphereGeometry(0.2, 10, 8),
+    new THREE.MeshBasicMaterial({ color: 0xdff6ff })
+  );
+  hook.position.copy(targetPoint);
+  group.add(cable, hook);
+  temporarySceneObject(group, 720);
+  playImpactSound(targetPoint, false);
+}
+
+function renderArrowRainAbility(target, radius = 7.5, warningMs = 650, durationMs = 4200) {
+  if (!target) return;
+  const center = new THREE.Vector3(Number(target.x) || 0, Number(target.y) || 0, Number(target.z) || 0);
+  center.y = terrainSurfaceHeightAt(center.x, center.z, center.y) + 0.04;
+  const group = new THREE.Group();
+  const warning = new THREE.Mesh(
+    new THREE.RingGeometry(radius * 0.78, radius, 64),
+    new THREE.MeshBasicMaterial({ color: 0xffd05c, transparent: true, opacity: 0.56, side: THREE.DoubleSide })
+  );
+  warning.rotation.x = -Math.PI / 2;
+  warning.position.copy(center);
+  group.add(warning);
+  temporarySceneObject(group, durationMs + warningMs + 500);
+
+  const start = performance.now();
+  const arrows = [];
+  function spawnArrow() {
+    const angle = Math.random() * Math.PI * 2;
+    const distance = Math.sqrt(Math.random()) * radius;
+    const x = center.x + Math.cos(angle) * distance;
+    const z = center.z + Math.sin(angle) * distance;
+    const y = terrainSurfaceHeightAt(x, z, center.y) + 8 + Math.random() * 5;
+    const arrow = new THREE.Mesh(
+      new THREE.BoxGeometry(0.035, 0.035, 0.86),
+      new THREE.MeshStandardMaterial({ color: 0x7b5736, roughness: 0.7 })
+    );
+    arrow.position.set(x, y, z);
+    arrow.rotation.x = Math.PI * 0.48;
+    group.add(arrow);
+    arrows.push({ mesh: arrow, speed: 10 + Math.random() * 4 });
+  }
+
+  (function animate() {
+    const elapsed = performance.now() - start;
+    const active = elapsed >= warningMs && elapsed <= warningMs + durationMs;
+    warning.material.opacity = elapsed < warningMs
+      ? 0.34 + Math.sin(elapsed * 0.025) * 0.18
+      : Math.max(0.12, 0.42 * (1 - (elapsed - warningMs) / durationMs));
+    if (active && arrows.length < 54 && Math.random() < 0.72) spawnArrow();
+    for (let i = arrows.length - 1; i >= 0; i--) {
+      const item = arrows[i];
+      item.mesh.position.y -= item.speed * 0.016;
+      const ground = terrainSurfaceHeightAt(item.mesh.position.x, item.mesh.position.z, center.y) + 0.12;
+      if (item.mesh.position.y <= ground) {
+        emitImpactFx(scene, item.mesh.position, 0.35);
+        group.remove(item.mesh);
+        disposeAbilityObject(item.mesh);
+        arrows.splice(i, 1);
+      }
+    }
+    if (elapsed < warningMs + durationMs + 450) requestAnimationFrame(animate);
+  })();
+}
+
+function renderHarpoonAbility(socketId, targetSocketId, target, heavy = false) {
+  const origin = shooterAbilityOrigin(socketId);
+  if (!origin) return;
+  const avatar = targetSocketId ? remotePlayers.get(targetSocketId) : null;
+  const targetPoint = target
+    ? new THREE.Vector3(Number(target.x) || 0, Number(target.y) || 0, Number(target.z) || 0)
+    : avatar?.root.position.clone().add(new THREE.Vector3(0, 1.05, 0));
+  if (!targetPoint) return;
+  const group = new THREE.Group();
+  const chain = new THREE.Line(
+    new THREE.BufferGeometry().setFromPoints([origin, targetPoint]),
+    new THREE.LineBasicMaterial({ color: heavy ? 0xffb35a : 0xd7d7d7, transparent: true, opacity: 0.95 })
+  );
+  const bolt = new THREE.Mesh(
+    new THREE.ConeGeometry(0.14, 0.55, 8),
+    new THREE.MeshStandardMaterial({ color: heavy ? 0xff824a : 0xced6dc, metalness: 0.25, roughness: 0.45 })
+  );
+  bolt.position.copy(targetPoint);
+  bolt.lookAt(origin);
+  group.add(chain, bolt);
+  temporarySceneObject(group, 820);
+  emitImpactFx(scene, targetPoint, heavy ? 0.65 : 0.45);
+}
+
 function useAbility() {
   const now = performance.now();
   if (now < local.abilityCooldownUntil) return;
+  const ability = CLASSES[local.classId]?.ability;
+  if (!ability || !socket || !local.alive || local.vehicleId) return;
+  if (ability.id === "gancho_reposicionamento") {
+    const target = pickAimPoint({ maxDistance: 78, includeSolids: true });
+    if (!target || target.y < local.jumpOffset + 1.8) return;
+    socket.emit("match:ability", { target: vectorPayload(target) });
+    return;
+  }
+  if (ability.id === "chuva_flechas") {
+    const target = pickAimPoint({ maxDistance: 92, includeSolids: true, requireGround: true });
+    socket.emit("match:ability", { target: vectorPayload(target) });
+    return;
+  }
+  if (ability.id === "arpao_corrente") {
+    const targetSocketId = pickHarpoonTarget();
+    if (!targetSocketId) return;
+    socket.emit("match:ability", { targetSocketId });
+    return;
+  }
   socket.emit("match:ability");
 }
 /* ── Input ──────────────────────────────────────────────────────────── */
@@ -1814,10 +2003,12 @@ function updateMovement(delta) {
   const sprinting = !prone && Boolean(keys.ShiftLeft || keys.ShiftRight);
   const crouching = !prone && Boolean(keys.ControlLeft || keys.ControlRight);
   const sketchbookFeel = room.settings.mapId === "sketchbook";
+  const harpoonSlowMul = performance.now() < local.harpoonSlowUntil ? local.harpoonSlowStrength : 1;
   const speed = WALK_SPEED * (sketchbookFeel ? 0.74 : 1) * (weapon.speedMul || 1) * room.settings.moveSpeedMul *
     (sprinting ? SPRINT_MUL : 1) * (crouching ? CROUCH_MUL : 1) * (prone ? PRONE_SPEED_MUL : 1) *
     (local.abilityActive && CLASSES[local.classId].ability.id === "sprint_tatico" ? 1.8 : 1) *
-    (local.abilityActive && CLASSES[local.classId].ability.id === "supressao" ? 0.5 : 1);
+    (local.abilityActive && CLASSES[local.classId].ability.id === "supressao" ? 0.5 : 1) *
+    harpoonSlowMul;
 
   const forward = Number(Boolean(keys.KeyW)) - Number(Boolean(keys.KeyS));
   const strafe = Number(Boolean(keys.KeyD)) - Number(Boolean(keys.KeyA));
@@ -2311,6 +2502,8 @@ export function attachSocket(activeSocket) {
     local.jumping = false;
     local.externalVelocity.set(0, 0, 0);
     local.pendingFallDamage = 0;
+    local.harpoonSlowUntil = 0;
+    local.harpoonSlowStrength = 1;
     localMoveVelocity.set(0, 0, 0);
     localMoveTarget.set(0, 0, 0);
     thirdPersonCameraReady = false;
@@ -2531,6 +2724,8 @@ export function attachSocket(activeSocket) {
       closeDanceHub({ relock: false });
       local.externalVelocity.set(0, 0, 0);
       local.pendingFallDamage = 0;
+      local.harpoonSlowUntil = 0;
+      local.harpoonSlowStrength = 1;
       weaponRig.visible = true;
       dom.vehicleStatus.classList.remove("active");
       setAiming(false);
@@ -2581,6 +2776,8 @@ export function attachSocket(activeSocket) {
       local.jumping = false;
       local.externalVelocity.set(0, 0, 0);
       local.pendingFallDamage = 0;
+      local.harpoonSlowUntil = 0;
+      local.harpoonSlowStrength = 1;
       local.classId = classId || local.classId;
       local.secondaryId = secondaryId || local.secondaryId;
       local.team = team || local.team;
@@ -2628,11 +2825,20 @@ export function attachSocket(activeSocket) {
     }
   });
 
-  socket.on("match:ability", ({ socketId, abilityId, durationMs }) => {
+  socket.on("match:harpoon-slow", ({ durationMs, strength }) => {
+    local.harpoonSlowUntil = performance.now() + Math.max(250, Number(durationMs) || 1200);
+    local.harpoonSlowStrength = THREE.MathUtils.clamp(Number(strength) || 0.55, 0.25, 1);
+  });
+
+  socket.on("match:ability", ({ socketId, abilityId, durationMs, target, radius, warningMs, targetSocketId, heavy }) => {
+    if (abilityId === "gancho_reposicionamento") renderGrappleAbility(socketId, target);
+    if (abilityId === "chuva_flechas") renderArrowRainAbility(target, Number(radius) || 7.5, Number(warningMs) || 650, Number(durationMs) || 4200);
+    if (abilityId === "arpao_corrente") renderHarpoonAbility(socketId, targetSocketId, target, Boolean(heavy));
     if (socketId === selfId) {
+      const duration = Math.max(0, Number(durationMs) || 0);
       local.abilityActive = true;
-      local.abilityExpiresAt = performance.now() + durationMs;
-      if (durationMs > 0) setTimeout(() => { local.abilityActive = false; }, durationMs);
+      local.abilityExpiresAt = performance.now() + duration;
+      if (duration > 0) setTimeout(() => { local.abilityActive = false; }, duration);
     }
   });
   socket.on("match:emote", ({ socketId, emote, animation, speed, durationMs }) => {

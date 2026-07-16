@@ -11,17 +11,17 @@ const CLASSES = {
   sniper: {
     id: "sniper", name: "Sniper", color: "#4fd1ff",
     primary: { id: "sniper_rifle", name: "Rifle Sniper", damage: 90, fireRateMs: 1300, magSize: 5, reloadMs: 2300, spread: 0.001, range: 140, kind: "hitscan", speedMul: 0.85 },
-    ability: { id: "foco_letal", name: "Foco Letal", cooldownMs: 18000, durationMs: 4000 }
+    ability: { id: "gancho_reposicionamento", name: "Gancho de Reposicionamento", cooldownMs: 14000, durationMs: 900 }
   },
   archer: {
     id: "archer", name: "Arqueiro", color: "#8bd450",
     primary: { id: "bow", name: "Arco", damage: 55, fireRateMs: 750, magSize: 6, reloadMs: 1400, spread: 0.01, range: 90, kind: "projectile", projectileSpeed: 55, speedMul: 1.05, chargeable: true, chargeMs: 1100, minChargeDamageMul: 0.35 },
-    ability: { id: "flecha_explosiva", name: "Flecha Explosiva", cooldownMs: 14000, durationMs: 0 }
+    ability: { id: "chuva_flechas", name: "Chuva de Flechas", cooldownMs: 18000, durationMs: 4200 }
   },
   crossbow: {
     id: "crossbow", name: "Besteiro", color: "#c98bff",
     primary: { id: "crossbow", name: "Besta", damage: 75, fireRateMs: 1100, magSize: 4, reloadMs: 2000, spread: 0.005, range: 100, kind: "projectile", projectileSpeed: 70, speedMul: 0.95 },
-    ability: { id: "disparo_perfurante", name: "Disparo Perfurante", cooldownMs: 16000, durationMs: 0 }
+    ability: { id: "arpao_corrente", name: "Arpao de Corrente", cooldownMs: 16000, durationMs: 3200 }
   },
   smg: {
     id: "smg", name: "SMG", color: "#ffd23f",

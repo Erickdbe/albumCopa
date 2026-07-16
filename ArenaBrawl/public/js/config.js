@@ -6,17 +6,17 @@ export const CLASSES = {
   sniper: {
     id: "sniper", name: "Sniper", color: "#4fd1ff", desc: "Dano altissimo, cadencia baixa, alcance longo.",
     primary: { id: "sniper_rifle", name: "Rifle Sniper", damage: 90, fireRateMs: 1300, magSize: 5, reloadMs: 2300, spread: 0.001, range: 140, kind: "hitscan", speedMul: 0.85 },
-    ability: { id: "foco_letal", name: "Foco Letal", desc: "Zoom, mira estavel e realce de inimigos distantes.", cooldownMs: 18000, durationMs: 4000 }
+    ability: { id: "gancho_reposicionamento", name: "Gancho de Reposicionamento", desc: "Dispara um cabo e sobe rapido ate estruturas altas.", cooldownMs: 14000, durationMs: 900 }
   },
   archer: {
     id: "archer", name: "Arqueiro", color: "#8bd450", desc: "Disparo silencioso, flechas com trajetoria.",
     primary: { id: "bow", name: "Arco", damage: 55, fireRateMs: 750, magSize: 6, reloadMs: 1400, spread: 0.01, range: 90, kind: "projectile", projectileSpeed: 55, speedMul: 1.05, chargeable: true, chargeMs: 1100, minChargeDamageMul: 0.35 },
-    ability: { id: "flecha_explosiva", name: "Flecha Explosiva", desc: "Proximo disparo explode em area.", cooldownMs: 14000, durationMs: 0 }
+    ability: { id: "chuva_flechas", name: "Chuva de Flechas", desc: "Marca uma area: flechas caem por alguns segundos.", cooldownMs: 18000, durationMs: 4200 }
   },
   crossbow: {
     id: "crossbow", name: "Besteiro", color: "#c98bff", desc: "Mais lento, dano e precisao maiores.",
     primary: { id: "crossbow", name: "Besta", damage: 75, fireRateMs: 1100, magSize: 4, reloadMs: 2000, spread: 0.005, range: 100, kind: "projectile", projectileSpeed: 70, speedMul: 0.95 },
-    ability: { id: "disparo_perfurante", name: "Disparo Perfurante", desc: "Atravessa o primeiro inimigo.", cooldownMs: 16000, durationMs: 0 }
+    ability: { id: "arpao_corrente", name: "Arpao de Corrente", desc: "Puxa inimigos leves; inimigos pesados ficam lentos.", cooldownMs: 16000, durationMs: 3200 }
   },
   smg: {
     id: "smg", name: "SMG", color: "#ffd23f", desc: "Cadencia alta, dano baixo, mobilidade otima.",

@@ -1234,7 +1234,7 @@ function createRoomsModule(io) {
       });
     });
 
-    socket.on("match:ability", () => {
+    socket.on("match:ability", (payload = {}) => {
       const room = findRoomBySocket(socket.id);
       if (!room || room.status !== "playing") return;
       const player = room.players.find((p) => p.socketId === socket.id);
@@ -1242,10 +1242,79 @@ function createRoomsModule(io) {
       const now = Date.now();
       if (now < player.abilityCooldownUntil) return;
       const ability = CLASSES[player.classId].ability;
+      const half = MAP_HALF_SIZES[room.settings.mapId] || ARENA_HALF;
+      const pointFromPayload = () => ({
+        x: clamp(payload?.target?.x, -half + 2, half - 2),
+        y: clamp(payload?.target?.y, -1, 55),
+        z: clamp(payload?.target?.z, -half + 2, half - 2)
+      });
+      let eventPayload = {};
+      if (ability.id === "gancho_reposicionamento") {
+        const target = pointFromPayload();
+        const dx = target.x - player.x;
+        const dz = target.z - player.z;
+        const horizontal = Math.hypot(dx, dz);
+        if (horizontal > 78 || target.y < player.y + 1.8) return;
+        const nx = horizontal > 0.001 ? dx / horizontal : -Math.sin(player.yaw || 0);
+        const nz = horizontal > 0.001 ? dz / horizontal : -Math.cos(player.yaw || 0);
+        io.to(socket.id).emit("world:force", {
+          x: nx * Math.min(26, horizontal * 0.95),
+          y: Math.max(12, Math.min(24, target.y - player.y + 7)),
+          z: nz * Math.min(26, horizontal * 0.95),
+          fallDamage: 0
+        });
+        eventPayload = { target };
+      } else if (ability.id === "chuva_flechas") {
+        const target = pointFromPayload();
+        if (Math.hypot(target.x - player.x, target.z - player.z) > 92) return;
+        const radius = 7.5;
+        const ticks = 8;
+        const tickMs = 430;
+        for (let tick = 1; tick <= ticks; tick++) {
+          setTimeout(() => {
+            if (rooms.get(room.roomId) !== room || room.status !== "playing") return;
+            const archer = room.players.find((item) => item.socketId === socket.id) || null;
+            room.players.forEach((targetPlayer) => {
+              if (!targetPlayer.alive) return;
+              const distance = Math.hypot(targetPlayer.x - target.x, targetPlayer.z - target.z);
+              if (distance > radius) return;
+              const falloff = Math.max(0.45, 1 - distance / radius);
+              applyDamage(room, targetPlayer.socketId === archer?.socketId ? null : archer, targetPlayer, 8.5 * falloff, false);
+            });
+          }, 650 + tick * tickMs);
+        }
+        eventPayload = { target, radius, warningMs: 650 };
+      } else if (ability.id === "arpao_corrente") {
+        const target = room.players.find((item) => item.socketId === String(payload?.targetSocketId || ""));
+        if (!target || !target.alive || target.socketId === socket.id || target.vehicleId) return;
+        const dx = player.x - target.x;
+        const dz = player.z - target.z;
+        const distance = Math.hypot(dx, dz);
+        if (distance > 64) return;
+        const nx = distance > 0.001 ? dx / distance : Math.sin(player.yaw || 0);
+        const nz = distance > 0.001 ? dz / distance : Math.cos(player.yaw || 0);
+        const heavyTarget = target.classId === "heavy";
+        if (heavyTarget) {
+          io.to(target.socketId).emit("match:harpoon-slow", { durationMs: ability.durationMs, strength: 0.42 });
+        } else {
+          io.to(target.socketId).emit("world:force", {
+            x: nx * Math.min(21, distance * 0.86),
+            y: 5.5,
+            z: nz * Math.min(21, distance * 0.86),
+            fallDamage: 0
+          });
+          io.to(target.socketId).emit("match:harpoon-slow", { durationMs: 1350, strength: 0.62 });
+        }
+        eventPayload = {
+          targetSocketId: target.socketId,
+          target: { x: target.x, y: target.y + 1.1, z: target.z },
+          heavy: heavyTarget
+        };
+      }
       player.abilityActive = true;
       player.abilityExpiresAt = now + ability.durationMs;
       player.abilityCooldownUntil = now + ability.cooldownMs;
-      io.to(room.roomId).emit("match:ability", { socketId: socket.id, abilityId: ability.id, durationMs: ability.durationMs });
+      io.to(room.roomId).emit("match:ability", { socketId: socket.id, abilityId: ability.id, durationMs: ability.durationMs, ...eventPayload });
       socket.emit("match:ability-state", { cooldownUntil: player.abilityCooldownUntil });
       if (ability.durationMs > 0) {
         setTimeout(() => { player.abilityActive = false; }, ability.durationMs);

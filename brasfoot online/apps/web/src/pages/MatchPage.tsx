@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { io, type Socket } from "socket.io-client";
 import { Card, Title, Text, TextInput, Button, Group, Stack, Timeline, Badge } from "@mantine/core";
 
-const REALTIME_URL = import.meta.env.VITE_REALTIME_URL ?? "http://localhost:4001";
+const REALTIME_URL = import.meta.env.VITE_REALTIME_URL ?? window.location.origin;
 
 // Minimal local shapes mirroring @brfut/shared-types' realtime contracts —
 // duplicated here rather than imported so this proof-of-pipeline page has

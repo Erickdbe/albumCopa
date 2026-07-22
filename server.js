@@ -19,6 +19,7 @@ const { setupFpsShooter } = require("./fps-shooter-api");
 const { createRoomsModule: createArenaBrawlRoomsModule } = require("./ArenaBrawl/server/rooms");
 const { createRetroArenaModule } = require("./retro-arena-server");
 const { createDeckHeroesModule } = require("./DeckHeroes/server/rooms");
+const { setupBrasfootFallbackApi } = require("./brasfoot-fallback-api");
 
 function loadLocalEnv() {
   const envFile = path.join(__dirname, ".env");
@@ -1035,6 +1036,18 @@ function authMiddleware(req, res, next) {
 }
 
 // ─── REST: Perfil ──────────────────────────────────────────────────────────
+const brasfootFallback = setupBrasfootFallbackApi({
+  app,
+  authMiddleware,
+  bcrypt,
+  signToken,
+  db,
+  loadDb,
+  saveDb,
+  normalizeUserProgress,
+  saltRounds: SALT_ROUNDS
+});
+
 setupCardWarsApiRoutes({
   app,
   authMiddleware,
@@ -6419,6 +6432,7 @@ io.on("connection", (socket) => {
       players: [makeBrasfootPlayer(socket, "host")]
     };
     brasfootRooms.set(roomId, room);
+    brasfootFallback.ensureRoomLeague(roomId, socket.userId, socket.username);
     socket.join(roomId);
     setOnlineBrasfoot(socket.id, roomId);
 

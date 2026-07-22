@@ -34,6 +34,10 @@ export function DashboardPage() {
     loadMyClub();
   }, []);
 
+  function getInviteRoomId() {
+    return new URLSearchParams(window.location.search).get("room")?.trim() || "";
+  }
+
   async function loadMyClub() {
     setLoadingClub(true);
     try {
@@ -54,7 +58,17 @@ export function DashboardPage() {
   async function loadLeagues() {
     try {
       const data = await apiFetch<{ leagues: League[] }>("/leagues");
-      setLeagues(data.leagues);
+      const inviteRoomId = getInviteRoomId();
+      if (!inviteRoomId) {
+        setLeagues(data.leagues);
+        return;
+      }
+
+      const room = await apiFetch<League>(`/leagues/${inviteRoomId}`);
+      setLeagues([room, ...data.leagues.filter((league) => league.id !== room.id)]);
+      setSelectedLeagueId(room.id);
+      const clubsData = await apiFetch<{ clubs: ClubSummary[] }>(`/leagues/${room.id}/clubs`);
+      setLeagueClubs(clubsData.clubs);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to load leagues");
     }

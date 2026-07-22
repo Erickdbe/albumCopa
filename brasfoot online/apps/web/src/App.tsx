@@ -23,6 +23,10 @@ function RequireAuth({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
+function DashboardRedirect() {
+  return <Navigate to={{ pathname: "/dashboard", search: window.location.search }} replace />;
+}
+
 function Shell({ children }: { children: ReactNode }) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
@@ -129,7 +133,7 @@ export function App() {
                   </RequireAuth>
                 }
               />
-              <Route path="*" element={<Navigate to="/dashboard" replace />} />
+              <Route path="*" element={<DashboardRedirect />} />
             </Routes>
           </Shell>
         </AuthProvider>

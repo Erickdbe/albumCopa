@@ -1,13 +1,17 @@
 import * as THREE from "three";
 import { FBXLoader } from "three/addons/loaders/FBXLoader.js";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
 import { buildWeaponModel } from "./weapon-models.js";
 import { CLASSES, SECONDARY_WEAPONS, GRENADES } from "./config.js";
 
-const ZOMBIE_ASSET_ROOT = "./assets/models/quaternius/zombie-apocalypse/";
+const ZOMBIE_ASSET_ROOT = "./assets/models/quaternius/zombie-apocalypse/Characters/glTF/";
+const SURVIVAL_ASSET_ROOT = "./assets/models/quaternius/survival-pack/FBX/";
 const ZOMBIE_ASSETS = {
-  basic: "Zombie_Basic.fbx",
-  chubby: "Zombie_Chubby.fbx",
-  ribcage: "Zombie_Ribcage.fbx"
+  basic: "Zombie_Basic.gltf",
+  chubby: "Zombie_Chubby.gltf",
+  ribcage: "Zombie_Ribcage.gltf",
+  arm: "Zombie_Basic.gltf"
 };
 
 const lootEntries = new Map();
@@ -15,7 +19,9 @@ const zombieEntries = new Map();
 const zombieHittable = [];
 const reusableColor = new THREE.Color();
 const zombieLoader = new FBXLoader();
+const zombieGltfLoader = new GLTFLoader();
 const zombieSourcePromises = new Map();
+const survivalSourcePromises = new Map();
 let zombieAtlasPromise = null;
 
 function terrainY(terrainHeightAt, x, z, fallback = 0) {
@@ -31,6 +37,7 @@ function labelForLoot(loot) {
   }
   if (loot.kind === "grenade") return GRENADES[loot.grenadeId]?.name || "Granada";
   if (loot.kind === "fuel") return "Gasolina";
+  if (loot.kind === "medkit") return "Kit medico";
   return "Municao";
 }
 
@@ -103,6 +110,66 @@ function makeFuelCan() {
   return group;
 }
 
+function makeMedkitModel() {
+  const group = new THREE.Group();
+  const white = new THREE.MeshStandardMaterial({ color: 0xe5e9e1, roughness: 0.72 });
+  const red = new THREE.MeshStandardMaterial({ color: 0xb22d2d, roughness: 0.7 });
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.44, 0.38), white);
+  body.position.y = 0.42;
+  body.castShadow = true;
+  group.add(body);
+  const crossA = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.34, 0.04), red);
+  crossA.position.set(0, 0.43, -0.21);
+  group.add(crossA);
+  const crossB = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.1, 0.04), red);
+  crossB.position.set(0, 0.43, -0.215);
+  group.add(crossB);
+  return group;
+}
+
+function survivalSource(file) {
+  if (!survivalSourcePromises.has(file)) {
+    survivalSourcePromises.set(file, zombieLoader.loadAsync(`${SURVIVAL_ASSET_ROOT}${file}`));
+  }
+  return survivalSourcePromises.get(file);
+}
+
+function normalizeLootAsset(model, targetHeight = 0.62) {
+  model.updateMatrixWorld(true);
+  const bounds = new THREE.Box3().setFromObject(model);
+  const size = bounds.getSize(new THREE.Vector3());
+  const scale = size.y > 0 ? targetHeight / size.y : 1;
+  model.scale.multiplyScalar(scale);
+  model.updateMatrixWorld(true);
+  const nextBounds = new THREE.Box3().setFromObject(model);
+  model.position.x -= (nextBounds.min.x + nextBounds.max.x) / 2;
+  model.position.y -= nextBounds.min.y;
+  model.position.z -= (nextBounds.min.z + nextBounds.max.z) / 2;
+}
+
+function attachSurvivalLootAsset(group, fallback, file, options = {}) {
+  survivalSource(file).then((source) => {
+    if (!group.parent) return;
+    const model = source.clone(true);
+    normalizeLootAsset(model, options.targetHeight || 0.62);
+    model.rotation.y = options.yaw || 0;
+    model.traverse((child) => {
+      if (!child.isMesh) return;
+      child.castShadow = true;
+      child.receiveShadow = true;
+      child.userData.ignoreRaycast = true;
+      const material = child.material?.clone?.() || new THREE.MeshStandardMaterial();
+      material.roughness = 0.82;
+      if (options.tint && material.color) material.color.lerp(new THREE.Color(options.tint), 0.34);
+      child.material = material;
+    });
+    fallback.visible = false;
+    group.add(model);
+  }).catch(() => {
+    fallback.visible = true;
+  });
+}
+
 function makeGrenadeModel(color) {
   const group = new THREE.Group();
   const body = new THREE.Mesh(
@@ -140,6 +207,10 @@ function makeLootModel(loot) {
     model.position.y = 0.46;
   } else if (loot.kind === "fuel") {
     model = makeFuelCan();
+    attachSurvivalLootAsset(group, model, "GasCan.fbx", { targetHeight: 0.82, tint: 0xb6382c });
+  } else if (loot.kind === "medkit") {
+    model = makeMedkitModel();
+    attachSurvivalLootAsset(group, model, "FirstAidKit.fbx", { targetHeight: 0.58, tint: 0xe1e1d4 });
   } else if (loot.kind === "grenade") {
     model = makeGrenadeModel(GRENADES[loot.grenadeId]?.color || 0xdddddd);
   } else {
@@ -156,7 +227,7 @@ function makeLootModel(loot) {
 
 function zombieTexture() {
   if (!zombieAtlasPromise) {
-    zombieAtlasPromise = new THREE.TextureLoader().loadAsync(`${ZOMBIE_ASSET_ROOT}Zombie_Atlas.png`)
+    zombieAtlasPromise = new THREE.TextureLoader().loadAsync("./assets/models/quaternius/zombie-apocalypse/Zombie_Atlas.png")
       .then((texture) => {
         texture.colorSpace = THREE.SRGBColorSpace;
         texture.flipY = true;
@@ -171,7 +242,7 @@ function zombieTexture() {
 function zombieSource(kind) {
   const file = ZOMBIE_ASSETS[kind] || ZOMBIE_ASSETS.basic;
   if (!zombieSourcePromises.has(file)) {
-    zombieSourcePromises.set(file, zombieLoader.loadAsync(`${ZOMBIE_ASSET_ROOT}${file}`));
+    zombieSourcePromises.set(file, zombieGltfLoader.loadAsync(`${ZOMBIE_ASSET_ROOT}${file}`));
   }
   return zombieSourcePromises.get(file);
 }
@@ -237,9 +308,9 @@ function normalizeAssetModel(model, targetHeight = 1.85) {
 
 async function attachQuaterniusZombie(entry, kind) {
   try {
-    const [source, atlas] = await Promise.all([zombieSource(kind), zombieTexture()]);
+    const source = await zombieSource(kind);
     if (!entry.root.parent) return;
-    const model = source.clone(true);
+    const model = cloneSkeleton(source.scene);
     model.name = `quaternius-${kind || "basic"}-zombie`;
     normalizeAssetModel(model, kind === "chubby" ? 1.9 : 1.84);
     model.traverse((child) => {
@@ -247,14 +318,11 @@ async function attachQuaterniusZombie(entry, kind) {
       child.castShadow = true;
       child.receiveShadow = true;
       child.userData.zombieId = entry.id;
-      if (atlas) {
-        const material = child.material?.clone?.() || new THREE.MeshStandardMaterial();
-        material.map = atlas;
-        material.roughness = 0.86;
-        material.metalness = 0.02;
-        material.needsUpdate = true;
-        child.material = material;
-      }
+      const material = child.material?.clone?.() || new THREE.MeshStandardMaterial();
+      material.roughness = 0.86;
+      material.metalness = 0.02;
+      material.needsUpdate = true;
+      child.material = material;
     });
     entry.fallback.visible = false;
     entry.assetModel = model;

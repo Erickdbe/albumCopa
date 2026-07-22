@@ -110,13 +110,14 @@ let lastFootstepAt = 0;
 let lastMinimapDrawAt = 0;
 let danceHubOpen = false;
 let hitMarkerTimer = null;
+let survivalStatus = { wave: 1, activeZombies: 0 };
 
 const local = {
   x: 0, y: 0, z: 0, jumpOffset: 0, verticalVelocity: 0, onGround: true,
   health: 100, alive: true, classId: "rifle", secondaryId: "pistol_common",
   kills: 0, deaths: 0, score: 0, team: null,
   slot: EMPTY_SLOT,
-  inventory: { primary: false, secondary: false, grenades: {}, fuel: 0 },
+  inventory: { primary: false, secondary: false, grenades: {}, fuel: 0, medkits: 0 },
   ammo: { primary: 0, secondary: 0 },
   reloadUntil: { primary: 0, secondary: 0 },
   lastShotAt: { primary: 0, secondary: 0 },
@@ -162,9 +163,9 @@ function cacheDom() {
     "scoreboardList", "killFeed", "deathScreen", "deathBy", "pauseHint", "hudTopLeft",
     "hudBottomRight", "hudTopRight", "abilityFill", "abilityName", "grenadeCount", "grenadeName",
     "matchTimer", "endScreen", "endResults", "gameRoot", "scopeOverlay", "chargeMeter", "chargeFill",
-    "eventAlert", "vehicleStatus", "vehicleHealthFill", "vehicleHealthText", "vehicleAbility", "respawnClassSelect", "respawnSecondarySelect",
+    "eventAlert", "interactionHint", "vehicleStatus", "vehicleHealthFill", "vehicleHealthText", "vehicleAbility", "respawnClassSelect", "respawnSecondarySelect",
     "respawnLoadoutStatus", "minimap", "minimapCanvas", "hitMarker", "danceHub", "danceGrid", "closeDanceHub",
-    "cameraToggle"
+    "cameraToggle", "medkitCount", "fuelCount", "survivalWave", "zombieCount"
   ].forEach((id) => { dom[id] = document.getElementById(id); });
 }
 
@@ -559,9 +560,15 @@ function colorFromId(id) {
 }
 
 function characterIdForPlayer(player) {
+  const seed = String(player?.socketId || player?.username || "");
+  if (room?.settings?.mapId === "alagado") {
+    const survivors = ["quaternius_sam", "quaternius_lis", "quaternius_matt", "quaternius_shaun"];
+    let survivorHash = 0;
+    for (let i = 0; i < seed.length; i += 1) survivorHash = (survivorHash * 31 + seed.charCodeAt(i)) >>> 0;
+    return survivors[survivorHash % survivors.length];
+  }
   if (player?.team === "red") return "fps_female";
   if (player?.team === "blue") return "fps_male";
-  const seed = String(player?.socketId || player?.username || "");
   let hash = 0;
   for (let i = 0; i < seed.length; i += 1) hash = (hash * 31 + seed.charCodeAt(i)) >>> 0;
   return hash % 2 === 0 ? "fps_male" : "fps_female";
@@ -931,6 +938,47 @@ function nearestVehicle() {
   return nearest;
 }
 
+function labelForLootPrompt(loot) {
+  if (!loot) return "";
+  if (loot.kind === "weapon") {
+    if (loot.slot === "secondary") return SECONDARY_WEAPONS[loot.weaponId]?.name || "arma";
+    const primary = Object.values(CLASSES).find((classInfo) => classInfo.primary.id === loot.weaponId)?.primary;
+    return primary?.name || "arma";
+  }
+  if (loot.kind === "ammo") return "municao";
+  if (loot.kind === "fuel") return "gasolina";
+  if (loot.kind === "medkit") return "kit medico";
+  if (loot.kind === "grenade") return GRENADES[loot.grenadeId]?.name || "granada";
+  return "item";
+}
+
+function updateInteractionHint() {
+  if (!dom.interactionHint) return;
+  if (!room || room.status !== "playing" || !local.alive || !controls?.isLocked) {
+    dom.interactionHint.hidden = true;
+    return;
+  }
+  if (local.vehicleId) {
+    dom.interactionHint.textContent = "E - Sair do veiculo";
+    dom.interactionHint.hidden = false;
+    return;
+  }
+  const loot = nearestSurvivalLoot(camera.position);
+  if (loot) {
+    dom.interactionHint.textContent = `E - Coletar ${labelForLootPrompt(loot)}`;
+    dom.interactionHint.hidden = false;
+    return;
+  }
+  const vehicle = nearestVehicle();
+  if (vehicle) {
+    const fuel = Math.max(0, Math.round(local.inventory.fuel || 0));
+    dom.interactionHint.textContent = fuel > 0 ? `E - Entrar no veiculo (${fuel} gasolina)` : "E - Entrar no veiculo (sem gasolina)";
+    dom.interactionHint.hidden = false;
+    return;
+  }
+  dom.interactionHint.hidden = true;
+}
+
 function isAirVehicleType(type) {
   return type === "plane" || type === "helicopter";
 }
@@ -1121,7 +1169,8 @@ function applyInventorySnapshot(snapshot = {}) {
     primary: Boolean(snapshot.inventory?.primary),
     secondary: Boolean(snapshot.inventory?.secondary),
     grenades: { ...(snapshot.inventory?.grenades || {}) },
-    fuel: Number(snapshot.inventory?.fuel) || 0
+    fuel: Number(snapshot.inventory?.fuel) || 0,
+    medkits: Number(snapshot.inventory?.medkits) || 0
   };
   local.ammo.primary = Math.max(0, Number(snapshot.ammo?.primary) || 0);
   local.ammo.secondary = Math.max(0, Number(snapshot.ammo?.secondary) || 0);
@@ -1134,6 +1183,7 @@ function applyInventorySnapshot(snapshot = {}) {
   local.slot = normalizeSlot(snapshot.slot);
   refreshEquippedWeapon(local.slot);
   syncLocalAvatarLoadout();
+  updateSurvivalHud();
 }
 function updateHealthHud() {
   dom.healthFill.style.width = `${Math.max(0, local.health)}%`;
@@ -1153,6 +1203,17 @@ function updateGrenadeHud() {
   const g = GRENADES[local.grenadeSelected];
   dom.grenadeCount.textContent = local.grenadeCharges[local.grenadeSelected] ?? 0;
   dom.grenadeName.textContent = g.name;
+}
+function updateSurvivalHud() {
+  if (dom.medkitCount) dom.medkitCount.textContent = `Kit ${Math.max(0, Math.round(local.inventory.medkits || 0))}`;
+  if (dom.fuelCount) dom.fuelCount.textContent = `Gasolina ${Math.max(0, Math.round(local.inventory.fuel || 0))}`;
+  if (dom.survivalWave) dom.survivalWave.textContent = `Onda ${Math.max(1, Math.round(survivalStatus.wave || room?.survivalWave || 1))}`;
+  if (dom.zombieCount) {
+    const active = Number.isFinite(Number(survivalStatus.activeZombies))
+      ? Number(survivalStatus.activeZombies)
+      : (room?.zombies || []).filter((zombie) => zombie.alive !== false).length;
+    dom.zombieCount.textContent = `Zumbis ${Math.max(0, Math.round(active))}`;
+  }
 }
 function updateAbilityHud() {
   const ability = CLASSES[local.classId].ability;
@@ -1685,6 +1746,12 @@ function reload() {
   setTimeout(() => { local.ammo[local.slot] = weapon.magSize; updateAmmoHud(); }, weapon.reloadMs);
 }
 
+function useMedkit() {
+  if (!socket || local.vehicleId || !local.alive) return;
+  if ((local.inventory.medkits || 0) <= 0 || local.health >= 100) return;
+  socket.emit("survival:use-medkit");
+}
+
 function switchSlot(slot) {
   if (local.vehicleId && slot === "primary") return;
   if (slot === "secondary" && !room.settings.secondaryEnabled) return;
@@ -2058,6 +2125,10 @@ function onKeyDown(e) {
   }
   if (e.code === "KeyF" && local.vehicleId) {
     dropPlaneBomb();
+    return;
+  }
+  if (e.code === "KeyF") {
+    useMedkit();
     return;
   }
   if (e.code === "KeyZ" && !e.repeat && !local.vehicleId && local.onGround && !local.climbing) {
@@ -2566,6 +2637,8 @@ function render() {
     mapWorld?.update(delta, activeWorldEvent);
     updateAbilityHud();
     updateWeaponPresentation(delta);
+    updateInteractionHint();
+    updateSurvivalHud();
     updateAudioListener(camera);
     // Som de motor dos veiculos removido a pedido: mantemos o motor sempre
     // desligado (silencia qualquer node que por acaso esteja tocando).
@@ -2611,6 +2684,10 @@ export function attachSocket(activeSocket) {
     clearSceneObjects();
     room = roomState;
     selfId = socket.id;
+    survivalStatus = {
+      wave: roomState.survivalWave || 1,
+      activeZombies: (roomState.zombies || []).filter((zombie) => zombie.alive !== false).length
+    };
     if (room.settings.mapId === "sketchbook") {
       cameraMode = "third";
       thirdPersonCameraReady = false;
@@ -2689,7 +2766,7 @@ export function attachSocket(activeSocket) {
     closeDanceHub({ relock: false });
     dom.vehicleStatus.classList.remove("active");
     dom.eventAlert.classList.remove("active");
-    updateHealthHud(); updateAmmoHud(); updateGrenadeHud(); updateScoreboard();
+    updateHealthHud(); updateAmmoHud(); updateGrenadeHud(); updateSurvivalHud(); updateScoreboard();
     controls.lock();
   });
 
@@ -2797,10 +2874,32 @@ export function attachSocket(activeSocket) {
     updateGrenadeHud();
   });
 
+  socket.on("survival:healed", (snapshot) => {
+    local.health = Math.max(0, Math.min(100, Number(snapshot?.health) || local.health));
+    applyInventorySnapshot(snapshot || {});
+    updateHealthHud();
+    updateSurvivalHud();
+  });
+
+  socket.on("survival:fuel-empty", () => {
+    pushKillFeed("Veiculo sem gasolina");
+  });
+
+  socket.on("survival:status", (status = {}) => {
+    survivalStatus = {
+      wave: Math.max(1, Number(status.wave) || survivalStatus.wave || 1),
+      activeZombies: Math.max(0, Number(status.activeZombies) || 0)
+    };
+    if (room) room.survivalWave = survivalStatus.wave;
+    updateSurvivalHud();
+  });
+
   socket.on("survival:zombies", (zombies) => {
     if (!scene) return;
     if (room) room.zombies = zombies || [];
     syncSurvivalZombies(scene, zombies || [], terrainSurfaceHeightAt);
+    survivalStatus.activeZombies = (zombies || []).filter((zombie) => zombie.alive !== false).length;
+    updateSurvivalHud();
   });
 
   socket.on("survival:zombie-damaged", ({ byId }) => {
@@ -2817,6 +2916,8 @@ export function attachSocket(activeSocket) {
     const nextZombies = Array.isArray(zombies) ? zombies : room?.zombies || [];
     if (room) room.zombies = nextZombies;
     syncSurvivalZombies(scene, nextZombies, terrainSurfaceHeightAt);
+    survivalStatus.activeZombies = nextZombies.filter((zombie) => zombie.alive !== false).length;
+    updateSurvivalHud();
   });
 
   socket.on("survival:zombie-attack", ({ targetSocketId }) => {
@@ -2998,7 +3099,7 @@ export function attachSocket(activeSocket) {
       weaponRig.visible = Boolean(currentWeaponMesh);
       applyInventorySnapshot({ slot, inventory, ammo, grenadeCharges, classId: local.classId, secondaryId: local.secondaryId });
       dom.vehicleStatus.classList.remove("active");
-      updateHealthHud(); updateAmmoHud(); updateGrenadeHud();
+      updateHealthHud(); updateAmmoHud(); updateGrenadeHud(); updateSurvivalHud();
       dom.deathScreen.hidden = true;
       dom.pauseHint.textContent = "Clique para voltar a partida";
       dom.pauseHint.hidden = false;

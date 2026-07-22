@@ -161,6 +161,13 @@ html, body {
 }
 .event-alert.active { opacity: 1; transform: translate(-50%, 0); }
 
+.interaction-hint {
+  position: absolute; left: 50%; bottom: 18%; z-index: 12; transform: translateX(-50%);
+  padding: 8px 13px; border: 1px solid rgba(255,255,255,0.18); border-radius: 6px;
+  background: rgba(8,11,14,0.72); color: #f4f6f0; font-size: 0.82rem; font-weight: 700;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.8); pointer-events: none;
+}
+
 .camera-toggle {
   position: absolute; top: 20px; left: 50%; z-index: 12; transform: translateX(-50%);
   display: none; border: 1px solid rgba(255,255,255,0.16); border-radius: 8px;
@@ -190,9 +197,15 @@ html, body {
 .hud-ability-bar { width: 120px; height: 8px; border-radius: 4px; background: rgba(0,0,0,0.5); overflow: hidden; }
 .hud-ability-fill { height: 100%; width: 0%; background: #4fd1ff; transition: width 0.2s; }
 #abilityName { font-size: 0.72rem; color: #cfe3ff; }
+.hud-survival {
+  display: grid; grid-template-columns: repeat(2, max-content); gap: 4px 8px; margin-top: 8px;
+  width: max-content; max-width: 220px; padding: 7px 9px; border-left: 3px solid #91a875;
+  background: rgba(9,13,12,0.58); color: #dce6d8; font-size: 0.72rem; font-weight: 800;
+}
+.hud-survival span { white-space: nowrap; }
 
 .minimap {
-  top: 92px; left: 20px; z-index: 8; display: none; width: 180px; height: 180px;
+  top: 136px; left: 20px; z-index: 8; display: none; width: 180px; height: 180px;
   border: 1px solid rgba(255,255,255,0.28); border-radius: 6px; overflow: hidden;
   background: rgba(8,12,15,0.76); box-shadow: 0 2px 10px rgba(0,0,0,0.42);
 }
@@ -264,9 +277,10 @@ html, body {
 .pause-hint { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.45); font-size: 1.1rem; z-index: 12; cursor: pointer; }
 
 @media (max-width: 620px) {
-  .minimap { top: 88px; left: 12px; width: 132px; height: 132px; }
+  .minimap { top: 136px; left: 12px; width: 132px; height: 132px; }
   .minimap canvas { width: 132px; height: 132px; }
   .hud-top-left { left: 12px; }
   .hud-top-right { right: 12px; width: 174px; }
+  .camera-toggle { top: auto; bottom: 112px; left: 12px; transform: none; padding: 6px 9px; }
   .scoreboard-stats small { display: block; margin-left: 0; }
 }

@@ -3,6 +3,7 @@ casaSombria/Build/Build/*.unityweb -filter -diff -merge -text
 *.wasm filter=lfs diff=lfs merge=lfs -text
 *.zip filter=lfs diff=lfs merge=lfs -text
 *.fbx filter=lfs diff=lfs merge=lfs -text
+*.gltf filter=lfs diff=lfs merge=lfs -text
 *.png filter=lfs diff=lfs merge=lfs -text
 *.data filter=lfs diff=lfs merge=lfs -text
 ArenaBrawl/public/assets/models/rpg-poly-lite/** -filter -diff -merge -text

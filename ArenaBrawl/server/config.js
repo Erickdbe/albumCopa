@@ -67,16 +67,17 @@ const GRENADES = {
 const GRENADE_IDS = Object.keys(GRENADES);
 const GRENADE_CHARGES_PER_LIFE = 2;
 
-const MAP_IDS = ["mundo"];
+const MAP_IDS = ["mundo", "alagado"];
 const MAP_META = {
   mundo: { id: "mundo", name: "Mundo Unificado" },
   sketchbook: { id: "sketchbook", name: "Sketchbook" },
   praia: { id: "praia", name: "Praia" },
   cidade: { id: "cidade", name: "Cidade" },
-  floresta: { id: "floresta", name: "Floresta" }
+  floresta: { id: "floresta", name: "Floresta" },
+  alagado: { id: "alagado", name: "Vilarejo Alagado" }
 };
 
-const MAP_HALF_SIZES = { mundo: 260, sketchbook: 190, praia: 128, cidade: 124, floresta: 168 };
+const MAP_HALF_SIZES = { mundo: 260, sketchbook: 190, praia: 128, cidade: 124, floresta: 168, alagado: 212 };
 const SKETCHBOOK_GROUND_Y = 5.35;
 const SKETCHBOOK_PLAYABLE_AREAS = [
   { minX: -74, maxX: 74, minZ: -58, maxZ: 53 },
@@ -125,6 +126,13 @@ const VEHICLE_SPAWNS = {
     { id: "beach-quad", type: "quad", x: -62, y: 0, z: -24, yaw: Math.PI / 2 },
     { id: "beach-plane", type: "plane", x: 72, y: 7, z: 28, yaw: -Math.PI / 2 },
     { id: "beach-car-dunes", type: "car", x: 54, y: 0, z: -64, yaw: -0.7 }
+  ],
+  alagado: [
+    { id: "flooded-pickup-gate", type: "car", x: -18, y: 0.18, z: -148, yaw: 0.05 },
+    { id: "flooded-car-village", type: "car", x: 72, y: 0.18, z: -104, yaw: -0.7 },
+    { id: "flooded-quad-greenhouse", type: "quad", x: 104, y: 0.18, z: -46, yaw: 0.35 },
+    { id: "flooded-bike-church", type: "motorcycle", x: -96, y: 0.18, z: 42, yaw: 1.15 },
+    { id: "flooded-jetski-marsh", type: "jetski", x: 118, y: 0.2, z: 72, yaw: 0.92 }
   ]
 };
 
@@ -228,6 +236,32 @@ const MAP_SPAWNS = {
     teams: {
       red: [{ x: -64, y: 0, z: -72, yaw: 0.7 }, { x: -84, y: 0, z: -28, yaw: 1.2 }, { x: -38, y: 0, z: -92, yaw: 0.35 }, { x: -96, y: 0, z: 12, yaw: Math.PI / 2 }],
       blue: [{ x: 64, y: 0, z: 72, yaw: -2.45 }, { x: 84, y: 0, z: 28, yaw: -1.95 }, { x: 38, y: 0, z: 92, yaw: -2.8 }, { x: 96, y: 0, z: -12, yaw: -Math.PI / 2 }]
+    }
+  },
+  alagado: {
+    ffa: [
+      { x: 0, y: 0, z: -162, yaw: Math.PI },
+      { x: -54, y: 0, z: -104, yaw: 0.58 },
+      { x: 48, y: 0, z: -92, yaw: -0.35 },
+      { x: 92, y: 0, z: -42, yaw: -1.1 },
+      { x: 66, y: 0, z: 48, yaw: -2.35 },
+      { x: -112, y: 0, z: 48, yaw: 1.4 },
+      { x: -138, y: 0, z: 104, yaw: 2.1 },
+      { x: 124, y: 0, z: 92, yaw: -2.55 }
+    ],
+    teams: {
+      red: [
+        { x: -18, y: 0, z: -162, yaw: Math.PI },
+        { x: -54, y: 0, z: -116, yaw: 0.6 },
+        { x: -86, y: 0, z: -48, yaw: 0.95 },
+        { x: -122, y: 0, z: 46, yaw: 1.4 }
+      ],
+      blue: [
+        { x: 126, y: 0, z: 92, yaw: -2.55 },
+        { x: 68, y: 0, z: 54, yaw: -2.4 },
+        { x: 116, y: 0, z: -48, yaw: -1.12 },
+        { x: 34, y: 0, z: -94, yaw: -0.34 }
+      ]
     }
   }
 };

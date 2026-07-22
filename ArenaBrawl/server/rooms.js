@@ -30,6 +30,8 @@ const EMPTY_SLOT = "hands";
 const SURVIVAL_PICKUP_RADIUS = 3.2;
 const ZOMBIE_ATTACK_RADIUS = 1.42;
 const ZOMBIE_ATTACK_MS = 1250;
+const MEDKIT_HEAL = 38;
+const MEDKIT_MAX = 5;
 const PRIMARY_CLASS_BY_WEAPON_ID = Object.fromEntries(Object.values(CLASSES).map((classInfo) => [classInfo.primary.id, classInfo.id]));
 const SURVIVAL_LOOT_SPAWNS = {
   mundo: [
@@ -45,6 +47,30 @@ const SURVIVAL_LOOT_SPAWNS = {
     { id: "loot-molotov-woods", kind: "grenade", grenadeId: "molotov", charges: 1, x: 214, y: 3.4, z: -61 },
     { id: "loot-gas-city", kind: "fuel", amount: 35, x: -238, y: 0.2, z: 71 },
     { id: "loot-gas-forest", kind: "fuel", amount: 35, x: 91, y: 0.8, z: 69 }
+  ],
+  alagado: [
+    { id: "flooded-loot-pistol-gate", kind: "weapon", slot: "secondary", weaponId: "pistol_common", ammo: 10, x: -22, y: 0.2, z: -166 },
+    { id: "flooded-loot-rifle-village", kind: "weapon", slot: "primary", weaponId: "assault_rifle", ammo: 28, x: -106, y: 0.2, z: -84 },
+    { id: "flooded-loot-smg-cabin", kind: "weapon", slot: "primary", weaponId: "smg", ammo: 32, x: 36, y: 0.2, z: -64 },
+    { id: "flooded-loot-revolver-church", kind: "weapon", slot: "secondary", weaponId: "revolver", ammo: 6, x: -118, y: 0.2, z: 62 },
+    { id: "flooded-loot-shotgun-greenhouse", kind: "weapon", slot: "secondary", weaponId: "mini_shotgun", ammo: 4, x: 126, y: 0.2, z: -82 },
+    { id: "flooded-loot-sniper-mansion", kind: "weapon", slot: "primary", weaponId: "sniper_rifle", ammo: 5, x: 62, y: 0.2, z: 32 },
+    { id: "flooded-loot-knife-pier", kind: "weapon", slot: "secondary", weaponId: "knife", ammo: 1, x: 108, y: 0.2, z: 82 },
+    { id: "flooded-loot-primary-ammo-road", kind: "ammo", slot: "primary", ammo: 28, x: -6, y: 0.2, z: -126 },
+    { id: "flooded-loot-primary-ammo-mansion", kind: "ammo", slot: "primary", ammo: 32, x: 42, y: 0.2, z: 52 },
+    { id: "flooded-loot-primary-ammo-forest", kind: "ammo", slot: "primary", ammo: 28, x: -154, y: 0.2, z: 132 },
+    { id: "flooded-loot-secondary-ammo-greenhouse", kind: "ammo", slot: "secondary", ammo: 12, x: 116, y: 0.2, z: -54 },
+    { id: "flooded-loot-secondary-ammo-church", kind: "ammo", slot: "secondary", ammo: 10, x: -136, y: 0.2, z: 92 },
+    { id: "flooded-loot-medkit-start", kind: "medkit", amount: 1, x: 18, y: 0.2, z: -156 },
+    { id: "flooded-loot-medkit-cabin", kind: "medkit", amount: 1, x: 74, y: 0.2, z: -20 },
+    { id: "flooded-loot-medkit-church", kind: "medkit", amount: 1, x: -108, y: 0.2, z: 108 },
+    { id: "flooded-loot-medkit-mansion", kind: "medkit", amount: 1, x: 72, y: 0.2, z: 48 },
+    { id: "flooded-loot-gas-gate", kind: "fuel", amount: 34, x: -16, y: 0.2, z: -144 },
+    { id: "flooded-loot-gas-greenhouse", kind: "fuel", amount: 42, x: 104, y: 0.2, z: -44 },
+    { id: "flooded-loot-gas-dock", kind: "fuel", amount: 30, x: 112, y: 0.2, z: 96 },
+    { id: "flooded-loot-flash-village", kind: "grenade", grenadeId: "flash", charges: 1, x: -72, y: 0.2, z: -44 },
+    { id: "flooded-loot-molotov-mansion", kind: "grenade", grenadeId: "molotov", charges: 1, x: 38, y: 0.2, z: 18 },
+    { id: "flooded-loot-impact-swamp", kind: "grenade", grenadeId: "impact", charges: 1, x: 148, y: 0.2, z: 24 }
   ]
 };
 const SURVIVAL_ZOMBIE_SPAWNS = {
@@ -57,6 +83,23 @@ const SURVIVAL_ZOMBIE_SPAWNS = {
     { id: "zombie-city-02", kind: "basic", x: -231, y: 0.2, z: -105, yaw: -1.2 },
     { id: "zombie-road-01", kind: "chubby", x: -54, y: 0.2, z: -112, yaw: 2.4 },
     { id: "zombie-beach-01", kind: "basic", x: 43, y: 0.4, z: 154, yaw: Math.PI }
+  ],
+  alagado: [
+    { id: "flooded-zombie-road-01", kind: "basic", x: -34, y: 0.2, z: -76, yaw: 0.4 },
+    { id: "flooded-zombie-road-02", kind: "ribcage", x: 18, y: 0.2, z: -70, yaw: -0.6 },
+    { id: "flooded-zombie-village-01", kind: "basic", x: -58, y: 0.2, z: -66, yaw: 1.2 },
+    { id: "flooded-zombie-village-02", kind: "chubby", x: 28, y: 0.2, z: -38, yaw: -1.8 },
+    { id: "flooded-zombie-village-03", kind: "ribcage", x: 78, y: 0.2, z: -98, yaw: 0.8 },
+    { id: "flooded-zombie-mansion-01", kind: "basic", x: 42, y: 0.2, z: 18, yaw: 2.4 },
+    { id: "flooded-zombie-mansion-02", kind: "chubby", x: 82, y: 0.2, z: 64, yaw: -2.2 },
+    { id: "flooded-zombie-church-01", kind: "ribcage", x: -106, y: 0.2, z: 66, yaw: 1.7 },
+    { id: "flooded-zombie-church-02", kind: "basic", x: -146, y: 0.2, z: 112, yaw: -2.8 },
+    { id: "flooded-zombie-greenhouse-01", kind: "basic", x: 128, y: 0.2, z: -58, yaw: -0.3 },
+    { id: "flooded-zombie-greenhouse-02", kind: "basic", x: 156, y: 0.2, z: -88, yaw: 0.7 },
+    { id: "flooded-zombie-swamp-01", kind: "basic", x: 112, y: 0.2, z: 88, yaw: -2.5 },
+    { id: "flooded-zombie-swamp-02", kind: "chubby", x: 162, y: 0.2, z: 44, yaw: 2.2 },
+    { id: "flooded-zombie-forest-01", kind: "basic", x: -176, y: 0.2, z: 22, yaw: 1.1 },
+    { id: "flooded-zombie-forest-02", kind: "ribcage", x: -162, y: 0.2, z: 152, yaw: -1.4 }
   ]
 };
 
@@ -139,7 +182,8 @@ function publicInventory(player) {
     primary: Boolean(player.inventory?.primary),
     secondary: Boolean(player.inventory?.secondary),
     grenades: { ...(player.grenadeCharges || {}) },
-    fuel: Math.max(0, Math.round(Number(player.inventory?.fuel) || 0))
+    fuel: Math.max(0, Math.round(Number(player.inventory?.fuel) || 0)),
+    medkits: Math.max(0, Math.round(Number(player.inventory?.medkits) || 0))
   };
 }
 
@@ -160,6 +204,7 @@ function publicLoot(loot) {
     ammo: loot.ammo || 0,
     charges: loot.charges || 0,
     amount: loot.amount || 0,
+    heal: loot.heal || 0,
     x: loot.x, y: loot.y, z: loot.z,
     active: loot.active !== false
   };
@@ -187,7 +232,8 @@ function makeSurvivalLoot(mapId) {
 }
 
 function makeZombies(mapId) {
-  return (SURVIVAL_ZOMBIE_SPAWNS[mapId] || []).map((zombie, index) => ({
+  const initialLimit = mapId === "alagado" ? 13 : 8;
+  return (SURVIVAL_ZOMBIE_SPAWNS[mapId] || []).slice(0, initialLimit).map((zombie, index) => ({
     ...zombie,
     id: zombie.id || `${mapId}-zombie-${index}`,
     health: zombie.kind === "chubby" ? 155 : zombie.kind === "ribcage" ? 95 : 115,
@@ -197,6 +243,76 @@ function makeZombies(mapId) {
     lastAttackAt: 0,
     speedMul: 1
   }));
+}
+
+function zombieStats(kind, wave = 1) {
+  const healthBase = kind === "chubby" ? 155 : kind === "ribcage" ? 95 : 115;
+  const waveBoost = Math.max(0, wave - 1);
+  return {
+    health: Math.round(healthBase + waveBoost * (kind === "chubby" ? 18 : 11)),
+    maxHealth: Math.round(healthBase + waveBoost * (kind === "chubby" ? 18 : 11))
+  };
+}
+
+function canSpawnZombieAt(room, spawn) {
+  return room.players.every((player) => {
+    if (!player.alive) return true;
+    const dx = spawn.x - player.x;
+    const dz = spawn.z - player.z;
+    const distance = Math.hypot(dx, dz);
+    if (distance < 24) return false;
+    const forwardX = -Math.sin(player.yaw || 0);
+    const forwardZ = -Math.cos(player.yaw || 0);
+    const dot = distance > 0 ? (dx / distance) * forwardX + (dz / distance) * forwardZ : 1;
+    return !(distance < 54 && dot > 0.56);
+  });
+}
+
+function spawnProgressiveZombie(room, now) {
+  const pool = SURVIVAL_ZOMBIE_SPAWNS[room.settings.mapId] || [];
+  if (!pool.length) return false;
+  room.zombieSerial = (room.zombieSerial || 0) + 1;
+  const start = room.zombieSerial % pool.length;
+  let chosen = null;
+  for (let i = 0; i < pool.length; i++) {
+    const candidate = pool[(start + i) % pool.length];
+    if (canSpawnZombieAt(room, candidate)) {
+      chosen = candidate;
+      break;
+    }
+  }
+  if (!chosen) return false;
+  const wave = Math.max(1, room.survivalWave || 1);
+  const stats = zombieStats(chosen.kind, wave);
+  room.zombies.push({
+    ...chosen,
+    ...stats,
+    id: `${room.settings.mapId}-zombie-wave-${wave}-${room.zombieSerial}`,
+    alive: true,
+    targetId: null,
+    lastAttackAt: 0,
+    speedMul: 1 + Math.min(0.45, (wave - 1) * 0.04),
+    spawnedAt: now
+  });
+  return true;
+}
+
+function updateZombieSpawns(room, now) {
+  const pool = SURVIVAL_ZOMBIE_SPAWNS[room.settings.mapId] || [];
+  if (!pool.length) return;
+  room.zombies = (room.zombies || []).filter((zombie) => zombie.alive !== false || now - (zombie.deadAt || now) < 12000);
+  const elapsed = Math.max(0, now - (room.startedAt || now));
+  const wave = 1 + Math.floor(elapsed / 45000);
+  room.survivalWave = Math.max(room.survivalWave || 1, wave);
+  const maxActive = room.settings.mapId === "alagado" ? Math.min(30, 15 + room.survivalWave * 2) : Math.min(16, 8 + room.survivalWave);
+  const active = room.zombies.filter((zombie) => zombie.alive !== false).length;
+  if (active >= maxActive) return;
+  if (!room.nextZombieSpawnAt || now >= room.nextZombieSpawnAt) {
+    const spawned = spawnProgressiveZombie(room, now);
+    const baseInterval = room.settings.mapId === "alagado" ? 4300 : 6500;
+    const interval = Math.max(1500, baseInterval - room.survivalWave * 280);
+    room.nextZombieSpawnAt = now + (spawned ? interval : 1400);
+  }
 }
 
 function createRoomsModule(io) {
@@ -242,7 +358,7 @@ function createRoomsModule(io) {
       deaths: 0,
       score: 0,
       grenadeCharges: makeEmptyGrenades(),
-      inventory: { primary: false, secondary: false, fuel: 0 },
+      inventory: { primary: false, secondary: false, fuel: 0, medkits: 0 },
       ammo: { primary: 0, secondary: 0 },
       lastShotAt: { primary: 0, secondary: 0 },
       reloadUntil: { primary: 0, secondary: 0 },
@@ -295,6 +411,7 @@ function createRoomsModule(io) {
       vehicles: (room.vehicles || []).map(publicVehicle),
       survivalLoot: (room.survivalLoot || []).filter((loot) => loot.active !== false).map(publicLoot),
       zombies: (room.zombies || []).map(publicZombie),
+      survivalWave: room.survivalWave || 1,
       worldEvent: room.worldEvent || null,
       worldTime: room.worldTime || null,
       endsAt: room.endsAt || null
@@ -325,7 +442,12 @@ function createRoomsModule(io) {
   function resetSurvivalLoadout(player) {
     player.slot = EMPTY_SLOT;
     player.aiming = false;
-    player.inventory = { primary: false, secondary: false, fuel: Number(player.inventory?.fuel) || 0 };
+    player.inventory = {
+      primary: false,
+      secondary: false,
+      fuel: Number(player.inventory?.fuel) || 0,
+      medkits: Number(player.inventory?.medkits) || 0
+    };
     player.ammo = { primary: 0, secondary: 0 };
     player.grenadeCharges = makeEmptyGrenades();
     player.reloadUntil = { primary: 0, secondary: 0 };
@@ -456,10 +578,12 @@ function createRoomsModule(io) {
     } else if (loot.kind === "ammo") {
       const slot = loot.slot === "secondary" ? "secondary" : "primary";
       if (slot === "secondary" && player.inventory.secondary) {
-        player.ammo.secondary = Math.max(player.ammo.secondary || 0, loot.ammo || SECONDARY_WEAPONS[player.secondaryId]?.magSize || 10);
+        const maxAmmo = Math.max(SECONDARY_WEAPONS[player.secondaryId]?.magSize || 10, (loot.ammo || 10) * 3);
+        player.ammo.secondary = Math.min(maxAmmo, (player.ammo.secondary || 0) + (loot.ammo || SECONDARY_WEAPONS[player.secondaryId]?.magSize || 10));
         consumed = true;
       } else if (slot === "primary" && player.inventory.primary) {
-        player.ammo.primary = Math.max(player.ammo.primary || 0, loot.ammo || CLASSES[player.classId]?.primary?.magSize || 28);
+        const maxAmmo = Math.max(CLASSES[player.classId]?.primary?.magSize || 28, (loot.ammo || 28) * 3);
+        player.ammo.primary = Math.min(maxAmmo, (player.ammo.primary || 0) + (loot.ammo || CLASSES[player.classId]?.primary?.magSize || 28));
         consumed = true;
       }
     } else if (loot.kind === "grenade" && GRENADES[loot.grenadeId]) {
@@ -467,6 +591,9 @@ function createRoomsModule(io) {
       consumed = true;
     } else if (loot.kind === "fuel") {
       player.inventory.fuel = Math.min(100, (Number(player.inventory.fuel) || 0) + Math.max(1, loot.amount || 25));
+      consumed = true;
+    } else if (loot.kind === "medkit") {
+      player.inventory.medkits = Math.min(MEDKIT_MAX, (Number(player.inventory.medkits) || 0) + Math.max(1, loot.amount || 1));
       consumed = true;
     }
 
@@ -612,7 +739,7 @@ function createRoomsModule(io) {
   }
 
   function worldTimeForRoom(room, now) {
-    const lengthMs = room.settings.mapId === "mundo" ? 300000 : room.settings.mapId === "cidade" ? 210000 : room.settings.mapId === "floresta" ? 240000 : 195000;
+    const lengthMs = room.settings.mapId === "mundo" ? 300000 : room.settings.mapId === "alagado" ? 270000 : room.settings.mapId === "cidade" ? 210000 : room.settings.mapId === "floresta" ? 240000 : 195000;
     const rawProgress = ((now - room.startedAt) % lengthMs) / lengthMs;
     const progress = (rawProgress + 0.44) % 1;
     const sun = Math.sin(progress * Math.PI * 2 - Math.PI * 0.42) * 0.5 + 0.5;
@@ -821,6 +948,34 @@ function createRoomsModule(io) {
     vehicle.lastSpeed = vehicle.speed;
   }
 
+  function applyVehicleFuel(room, vehicle, driver, input, delta, now) {
+    if (!driver || vehicle.type === "cannon") return input;
+    const activeInput = Math.abs(Number(input.throttle) || 0) + Math.abs(Number(input.lift) || 0) + Math.abs(Number(input.pitch) || 0) * 0.35;
+    if (activeInput <= 0.03) return input;
+    const currentFuel = Math.max(0, Number(driver.inventory?.fuel) || 0);
+    if (currentFuel <= 0) {
+      if (now - (driver.lastFuelWarningAt || 0) > 1800) {
+        driver.lastFuelWarningAt = now;
+        io.to(driver.socketId).emit("survival:fuel-empty", { vehicleId: vehicle.id });
+      }
+      return { ...input, throttle: 0, lift: 0, pitch: 0, roll: input.roll || 0, yaw: input.yaw || 0 };
+    }
+    const burnRate = vehicle.type === "plane" || vehicle.type === "helicopter" ? 2.1 : vehicle.type === "jetski" ? 1.45 : 1.05;
+    driver.inventory.fuel = Math.max(0, currentFuel - burnRate * activeInput * delta);
+    if (now - (driver.lastFuelSyncAt || 0) > 900 || driver.inventory.fuel <= 0) {
+      driver.lastFuelSyncAt = now;
+      io.to(driver.socketId).emit("survival:inventory", {
+        slot: driver.slot,
+        inventory: publicInventory(driver),
+        ammo: publicAmmo(driver),
+        grenadeCharges: { ...(driver.grenadeCharges || {}) },
+        classId: driver.classId,
+        secondaryId: driver.secondaryId
+      });
+    }
+    return input;
+  }
+
   function updateVehicles(room, delta, now) {
     const half = MAP_HALF_SIZES[room.settings.mapId] || ARENA_HALF;
     const groundY = room.settings.mapId === "sketchbook" ? SKETCHBOOK_GROUND_Y : 0;
@@ -829,7 +984,8 @@ function createRoomsModule(io) {
       const stats = VEHICLE_STATS[vehicle.type];
       const driver = room.players.find((player) => player.socketId === vehicle.driverId && player.alive);
       if (!driver && vehicle.driverId) vehicle.driverId = null;
-      const input = driver ? vehicle.input : { throttle: 0, steer: 0, lift: 0, pitch: 0, roll: 0, yaw: 0, brake: 0 };
+      let input = driver ? vehicle.input : { throttle: 0, steer: 0, lift: 0, pitch: 0, roll: 0, yaw: 0, brake: 0 };
+      input = applyVehicleFuel(room, vehicle, driver, input, delta, now);
 
       if (vehicle.type === "cannon") {
         vehicle.yaw += input.steer * stats.turnSpeed * delta;
@@ -898,6 +1054,9 @@ function createRoomsModule(io) {
     room.worldObjects = new Map();
     room.survivalLoot = makeSurvivalLoot(room.settings.mapId);
     room.zombies = makeZombies(room.settings.mapId);
+    room.survivalWave = 1;
+    room.zombieSerial = room.zombies.length;
+    room.nextZombieSpawnAt = room.startedAt + 6500;
     room.worldEvent = null;
     room.worldTime = worldTimeForRoom(room, room.startedAt);
     room.worldTick = 0;
@@ -909,6 +1068,7 @@ function createRoomsModule(io) {
       room.worldTime = worldTimeForRoom(room, now);
       updateVehicles(room, WORLD_TICK_MS / 1000, now);
       updateZombies(room, WORLD_TICK_MS / 1000, now);
+      updateZombieSpawns(room, now);
       applyWorldEventForces(room, event, now);
       room.worldTick += 1;
       if (room.worldTick % 2 === 0) {
@@ -919,6 +1079,12 @@ function createRoomsModule(io) {
       }
       if (room.worldTick % 10 === 0) {
         io.to(room.roomId).volatile.emit("arena-world:time", room.worldTime);
+      }
+      if (room.worldTick % 20 === 0) {
+        io.to(room.roomId).volatile.emit("survival:status", {
+          wave: room.survivalWave || 1,
+          activeZombies: room.zombies.filter((zombie) => zombie.alive !== false).length
+        });
       }
       if (room.worldTick % 4 === 0) {
         io.to(room.roomId).volatile.emit("survival:zombies", room.zombies.map(publicZombie));
@@ -1348,6 +1514,30 @@ function createRoomsModule(io) {
       });
     });
 
+    socket.on("survival:use-medkit", () => {
+      const room = findRoomBySocket(socket.id);
+      const player = room?.players.find((item) => item.socketId === socket.id);
+      if (!room || room.status !== "playing" || !player?.alive || player.vehicleId) return;
+      if ((Number(player.inventory?.medkits) || 0) <= 0 || player.health >= 100) return;
+      player.inventory.medkits = Math.max(0, (Number(player.inventory.medkits) || 0) - 1);
+      player.health = Math.min(100, player.health + MEDKIT_HEAL);
+      socket.emit("survival:healed", {
+        health: player.health,
+        slot: player.slot,
+        inventory: publicInventory(player),
+        ammo: publicAmmo(player),
+        grenadeCharges: { ...(player.grenadeCharges || {}) },
+        classId: player.classId,
+        secondaryId: player.secondaryId
+      });
+      socket.to(room.roomId).volatile.emit("match:player-move", {
+        socketId: socket.id, x: player.x, y: player.y, z: player.z, yaw: player.yaw, pitch: player.pitch,
+        moving: player.moving, sprinting: player.sprinting, jumping: player.jumping, crouching: player.crouching, prone: player.prone,
+        aiming: player.aiming, slot: player.slot, classId: player.classId, secondaryId: player.secondaryId, inventory: publicInventory(player),
+        moveForward: player.moveForward, moveStrafe: player.moveStrafe
+      });
+    });
+
     socket.on("survival:zombie-hit", ({ zombieId, slot, pelletHits } = {}) => {
       const room = findRoomBySocket(socket.id);
       const player = room?.players.find((item) => item.socketId === socket.id);
@@ -1365,6 +1555,7 @@ function createRoomsModule(io) {
       zombie.health = Math.max(0, zombie.health - Math.round(weapon.damage * pellets));
       if (zombie.health <= 0) {
         zombie.alive = false;
+        zombie.deadAt = now;
         player.score += 1;
         io.to(room.roomId).emit("survival:zombie-killed", { zombieId: zombie.id, byId: socket.id, zombies: room.zombies.map(publicZombie) });
         checkScoreLimit(room);

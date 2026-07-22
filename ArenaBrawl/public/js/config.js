@@ -65,11 +65,12 @@ export const MAP_META = {
   sketchbook: { id: "sketchbook", name: "Sketchbook", sky: 0xb7d6e6, ground: 0xd9d2bf },
   praia: { id: "praia", name: "Praia", sky: 0x8fd6ff, ground: 0xe8d68a },
   cidade: { id: "cidade", name: "Cidade", sky: 0x9fb0c2, ground: 0x6b6f75 },
-  floresta: { id: "floresta", name: "Floresta", sky: 0x9fd1ff, ground: 0x3f5c34 }
+  floresta: { id: "floresta", name: "Floresta", sky: 0x9fd1ff, ground: 0x3f5c34 },
+  alagado: { id: "alagado", name: "Vilarejo Alagado", sky: 0x5f6f77, ground: 0x273121 }
 };
-export const MAP_ORDER = ["mundo"];
+export const MAP_ORDER = ["mundo", "alagado"];
 
-export const MAP_HALF_SIZES = { mundo: 260, sketchbook: 190, praia: 128, cidade: 124, floresta: 168 };
+export const MAP_HALF_SIZES = { mundo: 260, sketchbook: 190, praia: 128, cidade: 124, floresta: 168, alagado: 212 };
 export const SKETCHBOOK_GROUND_Y = 5.35;
 
 export const VEHICLE_SPAWNS = {
@@ -113,6 +114,13 @@ export const VEHICLE_SPAWNS = {
     { id: "beach-quad", type: "quad", x: -62, y: 0, z: -24, yaw: Math.PI / 2 },
     { id: "beach-plane", type: "plane", x: 72, y: 7, z: 28, yaw: -Math.PI / 2 },
     { id: "beach-car-dunes", type: "car", x: 54, y: 0, z: -64, yaw: -0.7 }
+  ],
+  alagado: [
+    { id: "flooded-pickup-gate", type: "car", x: -18, y: 0.18, z: -148, yaw: 0.05 },
+    { id: "flooded-car-village", type: "car", x: 72, y: 0.18, z: -104, yaw: -0.7 },
+    { id: "flooded-quad-greenhouse", type: "quad", x: 104, y: 0.18, z: -46, yaw: 0.35 },
+    { id: "flooded-bike-church", type: "motorcycle", x: -96, y: 0.18, z: 42, yaw: 1.15 },
+    { id: "flooded-jetski-marsh", type: "jetski", x: 118, y: 0.2, z: 72, yaw: 0.92 }
   ]
 };
 

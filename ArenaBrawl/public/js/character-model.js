@@ -12,6 +12,23 @@ const FPS_CHARACTER_PACK = "./assets/models/fps-characters/arena_brawl_fps_chara
 const TOON_SOLDIER_MODEL = "./assets/models/toon-soldier/toon-soldier.glb";
 const TOON_SOLDIER_ANIMATION_ROOT = "./assets/models/toon-soldier/animations";
 const TOON_SOLDIER_ASSET_VERSION = "20260715-3";
+const QUATERNIUS_CHARACTER_ROOT = "./assets/models/quaternius/zombie-apocalypse/Characters/glTF/";
+const QUATERNIUS_SURVIVORS = {
+  quaternius_sam: { file: "Characters_Sam.gltf", height: 1.78 },
+  quaternius_lis: { file: "Characters_Lis.gltf", height: 1.74 },
+  quaternius_matt: { file: "Characters_Matt.gltf", height: 1.8 },
+  quaternius_shaun: { file: "Characters_Shaun.gltf", height: 1.8 }
+};
+const QUATERNIUS_EMBEDDED_WEAPONS = new Set([
+  "Axe", "Guitar", "Knife", "Pistol", "Rifle", "Shotgun", "SMG", "Spear", "WoodenBat_Barbed", "WoodenBat_Saw"
+]);
+const QUATERNIUS_WEAPON_OFFSET = new THREE.Vector3(0.035748593509197235, 0.045489736837959927, -0.045046865940093994);
+const QUATERNIUS_WEAPON_QUATERNION = new THREE.Quaternion(
+  0.4333183169364929,
+  0.5568869709968567,
+  0.4398091435432434,
+  0.5555899143218994
+);
 const TOON_UPPER_BODY_BONES = new Set([
   "Bip001_Spine", "Bip001_Neck", "Bip001_Head",
   "Bip001_L_Clavicle", "Bip001_L_UpperArm", "Bip001_L_Forearm", "Bip001_L_Hand",
@@ -41,6 +58,7 @@ let sharedClipsPromise = null;
 let sketchbookCharacterPromise = null;
 let fpsCharacterPackPromise = null;
 const humanSoldierPackPromises = new Map();
+const quaterniusSurvivorPromises = new Map();
 let toonSoldierModelPromise = null;
 const oneShotTimers = new WeakMap();
 const aimStopTimers = new WeakMap();
@@ -754,6 +772,160 @@ async function attachHumanSoldierCharacter(avatar, characterId) {
   avatar.setAnimation(avatar.desiredAnimation || "idle", true);
 }
 
+function quaterniusSurvivorDefinition(characterId) {
+  return QUATERNIUS_SURVIVORS[characterId] || QUATERNIUS_SURVIVORS.quaternius_sam;
+}
+
+function loadQuaterniusSurvivor(characterId) {
+  const key = QUATERNIUS_SURVIVORS[characterId] ? characterId : "quaternius_sam";
+  if (!quaterniusSurvivorPromises.has(key)) {
+    const definition = quaterniusSurvivorDefinition(key);
+    const loader = new GLTFLoader();
+    quaterniusSurvivorPromises.set(key, loader.loadAsync(`${QUATERNIUS_CHARACTER_ROOT}${definition.file}`).then((gltf) => ({
+      definition,
+      model: gltf.scene,
+      animations: gltf.animations || []
+    })));
+  }
+  return quaterniusSurvivorPromises.get(key);
+}
+
+function prepareQuaterniusSurvivorScene(sourceModel, definition) {
+  const model = cloneSkeleton(sourceModel);
+  model.name = "quaternius-survivor-source";
+  model.traverse((child) => {
+    if (QUATERNIUS_EMBEDDED_WEAPONS.has(child.name)) child.visible = false;
+    if (!child.isMesh) return;
+    child.castShadow = true;
+    child.receiveShadow = true;
+    child.frustumCulled = false;
+    const materials = Array.isArray(child.material) ? child.material : [child.material];
+    const prepared = materials.map((source) => {
+      const material = source?.clone?.() || new THREE.MeshStandardMaterial({ color: 0xd0c5a6 });
+      material.roughness = Math.min(0.92, Math.max(0.58, material.roughness ?? 0.8));
+      material.metalness = Math.min(0.16, material.metalness ?? 0.02);
+      material.needsUpdate = true;
+      return material;
+    });
+    child.material = Array.isArray(child.material) ? prepared : prepared[0];
+  });
+
+  const scaledModel = new THREE.Group();
+  scaledModel.name = "quaternius-survivor-scaled";
+  scaledModel.add(model);
+  scaledModel.updateMatrixWorld(true);
+  const bounds = new THREE.Box3().setFromObject(scaledModel);
+  const size = bounds.getSize(new THREE.Vector3());
+  const scale = size.y > 0 ? definition.height / size.y : 1;
+  scaledModel.scale.setScalar(scale);
+  scaledModel.updateMatrixWorld(true);
+  const scaledBounds = new THREE.Box3().setFromObject(scaledModel);
+  scaledModel.position.x -= (scaledBounds.min.x + scaledBounds.max.x) / 2;
+  scaledModel.position.y -= scaledBounds.min.y;
+  scaledModel.position.z -= (scaledBounds.min.z + scaledBounds.max.z) / 2;
+
+  const facingGroup = new THREE.Group();
+  facingGroup.name = "quaternius-survivor-facing";
+  facingGroup.rotation.y = Math.PI;
+  facingGroup.add(scaledModel);
+  return facingGroup;
+}
+
+function attachWeaponToQuaterniusSurvivor(avatar, model) {
+  const socket = model.getObjectByName("Middle1.L")
+    || model.getObjectByName("LowerArm.L")
+    || model.getObjectByName("Middle1.R")
+    || model.getObjectByName("LowerArm.R");
+  if (!socket) {
+    avatar.root.attach(avatar.gun);
+    avatar.gun.position.set(0.28, 1.15, -0.38);
+    avatar.gun.rotation.set(-0.08, 0, 0);
+    avatar.gun.scale.setScalar(0.32);
+    avatar.gun.visible = Boolean(avatar.weaponId);
+    return;
+  }
+
+  model.updateMatrixWorld(true);
+  const socketScale = socket.getWorldScale(new THREE.Vector3());
+  const localScale = 0.3 / Math.max(0.0001, Math.abs(socketScale.x), Math.abs(socketScale.y), Math.abs(socketScale.z));
+  socket.add(avatar.gun);
+  avatar.gun.position.copy(QUATERNIUS_WEAPON_OFFSET);
+  avatar.gun.quaternion.copy(QUATERNIUS_WEAPON_QUATERNION);
+  avatar.gun.scale.setScalar(localScale);
+  avatar.weaponSocket = socket;
+  avatar.gun.visible = Boolean(avatar.weaponId);
+}
+
+async function attachQuaterniusSurvivorCharacter(avatar, characterId) {
+  const { definition, model: sourceModel, animations } = await loadQuaterniusSurvivor(characterId);
+  if (!avatar.root.parent) return;
+
+  const model = prepareQuaterniusSurvivorScene(sourceModel, definition);
+  avatar.root.add(model);
+
+  const mixer = new THREE.AnimationMixer(model);
+  const byName = animationClipMap(animations);
+  const aliases = {
+    idle: ["Idle", "Idle_Gun"],
+    walk: ["Walk", "Walk_Gun"],
+    run: ["Run", "Run_Gun"],
+    jump: ["Jump", "Jump_Idle"],
+    fall: ["Jump_Idle", "Jump"],
+    land: ["Jump_Land", "Idle"],
+    crouch: ["Duck", "Idle"],
+    crouchWalk: ["Walk", "Walk_Gun"],
+    prone: ["Duck", "Idle"],
+    proneCrawl: ["Walk", "Walk_Gun"],
+    drive: ["Idle"],
+    driveBike: ["Idle"],
+    drivePlane: ["Idle"],
+    driveJetski: ["Idle"],
+    death: ["Death", "Idle"],
+    dance: ["Wave", "Yes", "Idle"],
+    dance_fast: ["Yes", "Wave", "Idle"],
+    dance_slow: ["No", "Wave", "Idle"],
+    damage: ["HitReact", "Idle"],
+    grenade: ["Punch", "Idle_Gun", "Idle"]
+  };
+  ["walk", "run"].forEach((pace) => {
+    ["forward", "forward_left", "forward_right", "left", "right", "back", "back_left", "back_right"].forEach((direction) => {
+      aliases[`${pace}_${direction}`] = pace === "run" ? ["Run", "Run_Gun"] : ["Walk", "Walk_Gun"];
+    });
+  });
+  ["assault", "rifle", "gun", "bazooka"].forEach((family) => {
+    aliases[`aim_${family}`] = ["Idle_Gun", "Idle"];
+    aliases[`shoot_${family}`] = family === "gun" ? ["Stab", "Punch", "Idle_Gun"] : ["Slash", "Idle_Gun", "Punch"];
+    aliases[`reload_${family}`] = ["Idle_Gun", "Idle"];
+  });
+
+  const actions = {};
+  Object.entries(aliases).forEach(([name, clipNames]) => {
+    const sourceClip = firstClip(byName, clipNames) || byName.get("Idle");
+    if (!sourceClip) return;
+    const clip = sourceClip.clone();
+    clip.name = `${characterId}_${name}`;
+    const action = mixer.clipAction(clip, model);
+    action.enabled = true;
+    action.paused = false;
+    if (["death", "damage", "grenade"].includes(name) || name.startsWith("shoot_") || name.startsWith("reload_")) {
+      action.setLoop(THREE.LoopOnce, 1);
+      action.clampWhenFinished = name === "death";
+    } else {
+      action.setLoop(THREE.LoopRepeat, Infinity);
+    }
+    actions[name] = action;
+  });
+
+  avatar.model = model;
+  avatar.mixer = mixer;
+  avatar.actions = actions;
+  avatar.currentAnimationAction = null;
+  avatar.quaterniusSurvivorCharacter = true;
+  avatar.fallbackMeshes.forEach((mesh) => { mesh.visible = false; });
+  attachWeaponToQuaterniusSurvivor(avatar, model);
+  avatar.setAnimation(avatar.desiredAnimation || "idle", true);
+}
+
 async function attachFpsCharacter(avatar, characterId) {
   if (!fpsCharacterPackPromise) fpsCharacterPackPromise = loadFpsCharacterPack();
   const { model: sourceModel, animations } = await fpsCharacterPackPromise;
@@ -820,6 +992,16 @@ export async function attachAnimatedCharacter(avatar) {
       await attachHumanSoldierCharacter(avatar, characterId);
     } catch (error) {
       console.error("Toon Soldier nao carregou; o avatar anterior nao sera reativado.", error);
+      avatar.fallbackMeshes.forEach((mesh) => { mesh.visible = true; });
+    }
+    return;
+  }
+
+  if (QUATERNIUS_SURVIVORS[characterId]) {
+    try {
+      await attachQuaterniusSurvivorCharacter(avatar, characterId);
+    } catch (error) {
+      console.error("Sobrevivente Quaternius nao carregou; mantendo o fallback simples.", error);
       avatar.fallbackMeshes.forEach((mesh) => { mesh.visible = true; });
     }
     return;
@@ -935,6 +1117,10 @@ export function setCharacterAnimation(avatar, name, immediate = false, speed = n
   if (avatar.fpsCharacter && name.startsWith("run")) defaultSpeed = 1.08;
   if (avatar.toonSoldierCharacter && name.startsWith("walk")) defaultSpeed = 0.62;
   if (avatar.toonSoldierCharacter && name.startsWith("run")) defaultSpeed = 1;
+  if (avatar.quaterniusSurvivorCharacter && name.startsWith("walk")) defaultSpeed = 1.05;
+  if (avatar.quaterniusSurvivorCharacter && name.startsWith("run")) defaultSpeed = 1.16;
+  if (avatar.quaterniusSurvivorCharacter && name === "crouch") defaultSpeed = 0.75;
+  if (avatar.quaterniusSurvivorCharacter && name === "death") defaultSpeed = 1.2;
   if (avatar.fpsCharacter && name === "jump") defaultSpeed = 1.25;
   if (avatar.fpsCharacter && name === "fall") defaultSpeed = 1;
   if (avatar.fpsCharacter && name === "land") defaultSpeed = 1.2;

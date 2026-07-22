@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { MAP_HALF_SIZES, MAP_META, SKETCHBOOK_GROUND_Y } from "./config.js";
 import { attachMeshyModel } from "./meshy-assets.js";
+import { addFloodedCollision, attachFloodedModel } from "./flooded-grounds-assets.js";
 import { attachRpgPolyForest, attachRpgPolyForestTerrain, registerRpgPolyForestCollisions, updateRpgPolyForest } from "./rpg-poly-assets.js";
 import { attachSketchbookWorld } from "./sketchbook-assets.js";
 import { buildUnifiedMap } from "./unified-map.js";
@@ -400,7 +401,7 @@ function createWorld(mapId, scene) {
   scene.add(root);
   const world = {
     mapId, scene, root, half: MAP_HALF_SIZES[mapId], obstacles: [], ladders: [], destructibles: new Map(),
-    groundRaycastMeshes: [], safeSpawn: { x: 0, y: 0, z: 0, yaw: 0 },
+    groundRaycastMeshes: [], raycastMeshes: [], safeSpawn: { x: 0, y: 0, z: 0, yaw: 0 },
     animated: { trees: [], waves: [], sharks: [], debris: [], craters: [], elapsed: 0 },
     water: null, tsunami: null, tornado: null, event: null
   };
@@ -578,6 +579,513 @@ function buildFloresta(scene) {
     ring.rotation.x=Math.PI/2;ring.position.y=i*1.25;world.tornado.add(ring);
   }
   world.tornado.visible=false;world.root.add(world.tornado);
+  return world;
+}
+
+function seeded(index) {
+  const value = Math.sin(index * 12.9898) * 43758.5453;
+  return value - Math.floor(value);
+}
+
+function localPoint(x, z, yaw, ox, oz) {
+  const c = Math.cos(yaw);
+  const s = Math.sin(yaw);
+  return { x: x + c * ox - s * oz, z: z + s * ox + c * oz };
+}
+
+function addRotatedBox(world, x, z, w, h, d, color, yaw = 0, baseY = 0, options = {}) {
+  const mesh = addMesh(world, new THREE.BoxGeometry(w, h, d), color, x, baseY + h / 2, z, {
+    rotY: yaw,
+    material: options.material || {},
+    castShadow: options.castShadow !== false,
+    receiveShadow: options.receiveShadow !== false
+  });
+  if (options.collision !== false) addFloodedCollision(world, x, z, w, d, baseY + h, yaw, options.solid !== false);
+  return mesh;
+}
+
+function addPuddle(world, x, z, w, d, yaw = 0, color = 0x425f64) {
+  const puddle = addMesh(world, new THREE.PlaneGeometry(w, d, 4, 4), color, x, 0.018, z, {
+    rotX: -Math.PI / 2,
+    rotZ: yaw,
+    castShadow: false,
+    receiveShadow: false,
+    material: { transparent: true, opacity: 0.48, roughness: 0.22, metalness: 0.05 }
+  });
+  puddle.userData.ignoreRaycast = true;
+  world.animated.swampWater ||= [];
+  world.animated.swampWater.push({ mesh: puddle, phase: (x * 0.17 + z * 0.09) % Math.PI });
+  return puddle;
+}
+
+function attachFloodedLocal(world, asset, x, z, yaw, ox, oz, options = {}) {
+  const point = localPoint(x, z, yaw, ox, oz);
+  const localYaw = Number(options.localYaw) || 0;
+  return attachFloodedModel(world, asset, {
+    ...options,
+    x: point.x,
+    z: point.z,
+    y: Number(options.y) || 0,
+    yaw: yaw + localYaw
+  });
+}
+
+function addFloodedLocalBox(world, x, z, yaw, ox, oz, w, h, d, color, baseY = 0, options = {}) {
+  const point = localPoint(x, z, yaw, ox, oz);
+  return addRotatedBox(world, point.x, point.z, w, h, d, color, yaw + (Number(options.localYaw) || 0), baseY, options);
+}
+
+function addMuddyTrack(world, x, z, length, width, yaw, color = 0x5b5038) {
+  const track = addMesh(world, new THREE.PlaneGeometry(width, length), color, x, 0.022, z, {
+    rotX: -Math.PI / 2,
+    rotZ: yaw,
+    castShadow: false,
+    receiveShadow: true,
+    material: { roughness: 1, transparent: true, opacity: 0.92 }
+  });
+  track.userData.ignoreRaycast = true;
+  return track;
+}
+
+function addFloodedFenceLine(world, x1, z1, x2, z2, count, brokenEvery = 4) {
+  const angle = Math.atan2(z2 - z1, x2 - x1);
+  for (let i = 0; i <= count; i++) {
+    if (brokenEvery && i % brokenEvery === brokenEvery - 1) continue;
+    const t = count ? i / count : 0;
+    const x = x1 + (x2 - x1) * t;
+    const z = z1 + (z2 - z1) * t;
+    const asset = i % 3 === 0
+      ? "mBuildings/mStructures/Struct_Fence1_Mid_C.fbx"
+      : i % 2
+        ? "mBuildings/mStructures/Struct_Fence1_Mid_B.fbx"
+        : "mBuildings/mStructures/Struct_Fence1_Mid_A.fbx";
+    attachFloodedModel(world, asset, {
+      x, z,
+      yaw: angle + Math.PI / 2 + (i % 5 === 0 ? 0.08 : 0),
+      targetSize: 3.8,
+      raycast: false
+    });
+    addFloodedCollision(world, x, z, 3.4, 0.38, 1.25, angle, true);
+  }
+}
+
+function addFloodedUtilityPole(world, x, z, yaw = 0) {
+  attachFloodedModel(world, "mBuildings/mStructures/Struct_Pole_A.fbx", {
+    x, z, yaw, targetHeight: 7.2, collision: [0.55, 0.55, 7.2], tint: 0x5e5142
+  });
+  const arm = addMesh(world, new THREE.BoxGeometry(3.8, 0.12, 0.12), 0x2d2923, x, 5.8, z, { rotY: yaw, castShadow: true });
+  arm.userData.ignoreRaycast = true;
+}
+
+function addFloodedCabin(world, x, z, yaw = 0, variant = 0) {
+  const asset = variant % 3 === 1
+    ? "mBuildings/mCabins/Cabin1_DM.fbx"
+    : variant % 3 === 2
+      ? "mBuildings/mCabins/Outhouse_A.fbx"
+      : "mBuildings/mCabins/Cabin1.fbx";
+  const size = variant % 3 === 2 ? 4.8 : 10.4;
+  attachFloodedModel(world, asset, {
+    x, z, yaw, targetSize: size, collision: [size * 0.9, size * 0.75, variant % 3 === 2 ? 3.6 : 5.1],
+    tint: variant % 2 ? 0x5a594b : 0x554736
+  });
+  if (variant % 3 !== 2) {
+    attachFloodedLocal(world, "mBuildings/mCabins/Cabin1_Stairs.fbx", x, z, yaw, 0, 4.5, {
+      targetSize: 4.2,
+      raycast: false
+    });
+    const wetStep = localPoint(x, z, yaw, -3.8, 5.8);
+    addPuddle(world, wetStep.x, wetStep.z, 3.4, 1.5, yaw + 0.25);
+  }
+}
+
+function addFloodedInteriorCabin(world, x, z, yaw = 0) {
+  const width = 9.4;
+  const depth = 7.8;
+  const wallHeight = 3.05;
+  const wall = 0.32;
+  const wood = 0x4f4333;
+  const dampWood = 0x38372e;
+  addFloodedLocalBox(world, x, z, yaw, 0, 0, width, 0.16, depth, 0x332d23, 0, {
+    collision: false,
+    material: { roughness: 0.96 }
+  });
+  addFloodedLocalBox(world, x, z, yaw, 0, depth / 2, width, wallHeight, wall, wood, 0.12);
+  addFloodedLocalBox(world, x, z, yaw, -width / 2, 0, wall, wallHeight, depth, dampWood, 0.12);
+  addFloodedLocalBox(world, x, z, yaw, width / 2, 0, wall, wallHeight, depth, dampWood, 0.12);
+  addFloodedLocalBox(world, x, z, yaw, -3.1, -depth / 2, 3.0, wallHeight, wall, wood, 0.12);
+  addFloodedLocalBox(world, x, z, yaw, 3.25, -depth / 2, 2.9, wallHeight, wall, wood, 0.12);
+  addFloodedLocalBox(world, x, z, yaw, 0, 0, width + 0.85, 0.34, depth + 0.85, 0x25231f, wallHeight + 0.24, {
+    collision: false,
+    material: { roughness: 0.94 }
+  });
+  attachFloodedLocal(world, "mBuildings/mCabins/Cabin1_Door_A.fbx", x, z, yaw, 0, -depth / 2 - 0.18, {
+    targetHeight: 2.25,
+    y: 0.08,
+    raycast: false,
+    tint: 0x5c4a34
+  });
+  attachFloodedLocal(world, "mBuildings/mCabins/Cabin1_Deco_WindowGlass_A.fbx", x, z, yaw, -3.15, -depth / 2 - 0.2, {
+    targetHeight: 1.05,
+    y: 1.48,
+    raycast: false
+  });
+  attachFloodedLocal(world, "mProps/lo_Prop_Bed_A.fbx", x, z, yaw, -2.85, 1.8, {
+    targetSize: 2.5,
+    localYaw: Math.PI / 2,
+    raycast: false,
+    tint: 0x5a5148
+  });
+  attachFloodedLocal(world, "mProps/lo_Prop_Cabinet_A.fbx", x, z, yaw, 3.25, 1.7, {
+    targetHeight: 1.75,
+    localYaw: -Math.PI / 2,
+    raycast: false,
+    tint: 0x554734
+  });
+  attachFloodedLocal(world, "mProps/lo_Prop_SmallTable_A.fbx", x, z, yaw, 1.3, -0.8, {
+    targetSize: 1.4,
+    raycast: false,
+    tint: 0x4a3e30
+  });
+  const step = localPoint(x, z, yaw, 0, -depth / 2 - 1.25);
+  addPuddle(world, step.x, step.z, 2.9, 1.25, yaw - 0.08);
+}
+
+function addFloodedMansion(world, x, z, yaw = 0) {
+  addRotatedBox(world, x, z, 25, 8.5, 19, 0x4a4c44, yaw, 0, {
+    material: { roughness: 0.94 }
+  });
+  addRotatedBox(world, x, z, 27.5, 1.2, 21, 0x2c312b, yaw, 8.5, {
+    material: { roughness: 0.98 },
+    solid: false
+  });
+  addMesh(world, new THREE.ConeGeometry(17, 5.2, 4), 0x2d2823, x, 11.4, z, {
+    rotY: yaw + Math.PI / 4,
+    material: { roughness: 0.95 }
+  });
+  addFloodedCollision(world, x, z, 27, 21, 9.2, yaw, true);
+
+  const wallAssets = [
+    "mBuildings/mVilla1/Villa1_Wall_Mid_A.fbx",
+    "mBuildings/mVilla1/Villa1_Wall_Mid_B.fbx",
+    "mBuildings/mVilla1/Villa1_Wall_Mid_C.fbx"
+  ];
+  [-9, -3, 3, 9].forEach((offset, index) => {
+    attachFloodedLocal(world, wallAssets[index % wallAssets.length], x, z, yaw, offset, -10.1, {
+      targetHeight: 5.6,
+      tint: 0x6b6d63
+    });
+    attachFloodedLocal(world, "mBuildings/mVilla1/Villa1_Deco_WindowGlass_A.fbx", x, z, yaw, offset, -10.35, {
+      targetHeight: 2.2,
+      y: 2.5,
+      raycast: false
+    });
+  });
+  [-8, 0, 8].forEach((offset) => {
+    attachFloodedLocal(world, "mBuildings/mVilla1/Villa1_Roof_Mid_A.fbx", x, z, yaw, offset, 0, {
+      targetSize: 9.4,
+      y: 8.7,
+      tint: 0x34312b,
+      raycast: false
+    });
+  });
+  attachFloodedLocal(world, "mBuildings/mVilla1/Villa1_Base_Stairs_A.fbx", x, z, yaw, 0, -12.2, {
+    targetSize: 8.2,
+    raycast: false
+  });
+  attachFloodedLocal(world, "mBuildings/mVilla1/Villa1_Door_A.fbx", x, z, yaw, 0, -10.55, {
+    targetHeight: 3.2,
+    y: 0.1
+  });
+  attachFloodedLocal(world, "mBuildings/mStructures/Struct_RadioTower_A.fbx", x, z, yaw, 17, 8, {
+    targetHeight: 18,
+    collision: [2.2, 2.2, 18],
+    tint: 0x4b4d48
+  });
+}
+
+function addFloodedChurch(world, x, z, yaw = 0) {
+  addRotatedBox(world, x, z, 17, 7.2, 29, 0x585b54, yaw, 0, {
+    material: { roughness: 0.94 }
+  });
+  addMesh(world, new THREE.ConeGeometry(11.5, 4.5, 4), 0x2b2824, x, 9.5, z, {
+    rotY: yaw + Math.PI / 4,
+    material: { roughness: 0.95 }
+  });
+  const tower = localPoint(x, z, yaw, 0, -11);
+  addRotatedBox(world, tower.x, tower.z, 6.2, 12, 6.2, 0x4f524e, yaw, 0, {
+    material: { roughness: 0.95 }
+  });
+  addMesh(world, new THREE.ConeGeometry(4.6, 5.5, 4), 0x242420, tower.x, 14.8, tower.z, {
+    rotY: yaw + Math.PI / 4,
+    material: { roughness: 0.95 }
+  });
+  addFloodedCollision(world, x, z, 18, 30, 8.2, yaw, true);
+
+  attachFloodedLocal(world, "mBuildings/mChurches/Church1_End_A.fbx", x, z, yaw, 0, -13, {
+    targetSize: 11,
+    tint: 0x61645d
+  });
+  attachFloodedLocal(world, "mBuildings/mChurches/Church1_Mid_A.fbx", x, z, yaw, 0, 0, {
+    targetSize: 13,
+    tint: 0x61645d
+  });
+  attachFloodedLocal(world, "mBuildings/mChurches/Church1_End_B.fbx", x, z, yaw, 0, 13, {
+    targetSize: 11,
+    tint: 0x61645d
+  });
+  attachFloodedLocal(world, "mBuildings/mChurches/Church1_Base_Stairs_A.fbx", x, z, yaw, 0, -17.2, {
+    targetSize: 6.4,
+    raycast: false
+  });
+  for (let i = 0; i < 18; i++) {
+    const row = Math.floor(i / 6);
+    const col = i % 6;
+    const point = localPoint(x, z, yaw, -12 + col * 4.8, 22 + row * 5.2);
+    attachFloodedModel(world, `mProps/lo_Prop_Gravestone_${String.fromCharCode(65 + (i % 5))}.fbx`, {
+      x: point.x,
+      z: point.z,
+      yaw: yaw + (i % 2 ? 0.1 : -0.06),
+      targetHeight: 1.2,
+      raycast: false,
+      tint: 0x6d6f68
+    });
+  }
+}
+
+function addFloodedGreenhouse(world, x, z, yaw = 0) {
+  addRotatedBox(world, x, z, 13.5, 4.3, 22, 0x7f9a90, yaw, 0, {
+    material: { transparent: true, opacity: 0.22, roughness: 0.32 },
+    solid: false
+  });
+  addFloodedCollision(world, x, z, 13.5, 22, 4.3, yaw, true);
+  [-6.2, 0, 6.2].forEach((offset) => {
+    attachFloodedLocal(world, "mBuildings/mGreenHouse/GreenHouse1_Mid_A.fbx", x, z, yaw, 0, offset, {
+      targetSize: 9.2,
+      raycast: false
+    });
+  });
+  attachFloodedLocal(world, "mBuildings/mGreenHouse/GreenHouse1_End_A.fbx", x, z, yaw, 0, -11, {
+    targetSize: 9.4,
+    raycast: false
+  });
+  attachFloodedLocal(world, "mBuildings/mGreenHouse/GreenHouse1_Door_A.fbx", x, z, yaw, 0, -13, {
+    targetHeight: 2.4
+  });
+  for (let i = 0; i < 18; i++) {
+    const px = x - 8 + (i % 6) * 3.1;
+    const pz = z - 9 + Math.floor(i / 6) * 6.1;
+    attachFloodedModel(world, i % 2 ? "mNature/mGrass/Grass_Tall_B.fbx" : "mNature/mBushes/DecoBush_C.fbx", {
+      x: px,
+      z: pz,
+      yaw: i * 0.7,
+      targetHeight: i % 2 ? 1.3 : 1.0,
+      raycast: false,
+      tint: 0x38523d
+    });
+  }
+}
+
+function addSwampTree(world, x, z, scale = 1) {
+  const trunkHeight = 6.4 * scale;
+  const trunk = addMesh(world, new THREE.CylinderGeometry(0.36 * scale, 0.58 * scale, trunkHeight, 7), 0x47382a, x, trunkHeight / 2, z, {
+    rotZ: 0.08 * Math.sin(x * 0.07 + z * 0.11)
+  });
+  world.obstacles.push(collisionBox(x, z, 1.1 * scale, 1.1 * scale, trunkHeight, true));
+  const crownColors = [0x223f2e, 0x2f5339, 0x1e3528];
+  for (let i = 0; i < 3; i++) {
+    addMesh(world, new THREE.IcosahedronGeometry((2.4 - i * 0.18) * scale, 1), crownColors[i % crownColors.length],
+      x + Math.sin(i * 2.1) * 0.45 * scale,
+      trunkHeight + 0.8 * scale + i * 0.8 * scale,
+      z + Math.cos(i * 1.8) * 0.45 * scale,
+      { castShadow: true });
+  }
+  world.animated.trees.push({ trunk, crown: trunk, phase: (x * 0.21 + z * 0.13) % Math.PI });
+}
+
+function scatterFloodedVegetation(world) {
+  for (let i = 0; i < 110; i++) {
+    const sideForest = i < 58;
+    const x = sideForest
+      ? -190 + seeded(i) * 96
+      : -194 + seeded(i + 41) * 382;
+    const z = sideForest
+      ? -12 + seeded(i + 8) * 185
+      : -190 + seeded(i + 19) * 370;
+    if (!sideForest && Math.abs(x) < 54 && z < 74 && z > -132) continue;
+    const scale = 0.72 + seeded(i + 2) * 0.85;
+    if (i % 3 === 0) addSwampTree(world, x, z, scale);
+    else if (i % 3 === 1) addPineTree(world, x, z, 0.68 + scale * 0.34);
+    else addTree(world, x, z, 0.56 + scale * 0.24, scale > 1.2);
+  }
+
+  for (let i = 0; i < 160; i++) {
+    const nearPath = i < 72;
+    const x = nearPath ? -76 + seeded(i + 10) * 180 : -205 + seeded(i + 70) * 410;
+    const z = nearPath ? -150 + seeded(i + 21) * 225 : -205 + seeded(i + 88) * 410;
+    if (Math.abs(x) < 20 && z < -92) continue;
+    const asset = i % 5 === 0
+      ? "mNature/mBushes/DecoBush_A.fbx"
+      : i % 5 === 1
+        ? "mNature/mBushes/DecoBush_D.fbx"
+        : i % 2
+          ? "mNature/mGrass/Grass_Tall_A.fbx"
+          : "mNature/mGrass/Grass_Med_B.fbx";
+    attachFloodedModel(world, asset, {
+      x, z,
+      yaw: seeded(i + 99) * Math.PI * 2,
+      targetHeight: 0.7 + seeded(i + 14) * 1.05,
+      raycast: false,
+      tint: i % 2 ? 0x304b35 : 0x425536
+    });
+  }
+}
+
+function addFloodedMotes(world) {
+  const positions = [];
+  for (let i = 0; i < 180; i++) {
+    positions.push(
+      -190 + seeded(i) * 380,
+      0.8 + seeded(i + 44) * 7.5,
+      -190 + seeded(i + 88) * 380
+    );
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+  const points = new THREE.Points(geometry, new THREE.PointsMaterial({
+    color: 0xb7c4ad,
+    size: 0.13,
+    transparent: true,
+    opacity: 0.22,
+    depthWrite: false
+  }));
+  points.userData.ignoreRaycast = true;
+  world.root.add(points);
+  world.animated.floodedMotes = points;
+}
+
+function addSwampProps(world) {
+  [
+    [-122, -118, 0.18], [-84, -96, -0.4], [-12, -42, 0.2],
+    [46, -8, -0.3], [108, -96, 0.9], [146, 18, -0.55],
+    [-160, 42, 0.5], [136, 104, -0.2]
+  ].forEach(([x, z, yaw], index) => {
+    attachFloodedModel(world, index % 2 ? "mProps/lo_Prop_Car1_DM.fbx" : "mProps/lo_Prop_Car_A.fbx", {
+      x, z, yaw, targetSize: 5.4, collision: [4.7, 2.4, 1.8], tint: 0x575144
+    });
+  });
+  [
+    [100, 54, -0.2], [132, 70, 0.6], [158, 37, 1.1], [72, 94, -0.9]
+  ].forEach(([x, z, yaw]) => {
+    attachFloodedModel(world, "mProps/lo_Prop_Boat_A.fbx", {
+      x, z, yaw, targetSize: 6.8, raycast: false, tint: 0x4c4534
+    });
+  });
+  [
+    [-34, -94], [-18, -64], [34, -58], [68, 30], [-132, 92], [110, -38]
+  ].forEach(([x, z], index) => {
+    attachFloodedModel(world, index % 2 ? "mProps/lo_Prop_ParkBench_A.fbx" : "mProps/lo_Prop_Lamp_A.fbx", {
+      x, z, yaw: index * 0.45, targetHeight: index % 2 ? 1.1 : 3.4, raycast: false
+    });
+  });
+}
+
+function updateFlooded(world, elapsed, event) {
+  world.animated.swampWater?.forEach(({ mesh, phase }, index) => {
+    mesh.position.y = 0.015 + Math.sin(elapsed * 1.25 + phase) * 0.016;
+    mesh.material.opacity = 0.34 + Math.sin(elapsed * 0.8 + phase + index) * 0.08;
+  });
+  world.animated.trees.forEach(({ trunk, crown, phase }) => {
+    const nightWind = event?.type === "storm" ? 0.055 : 0.018;
+    trunk.rotation.z = Math.sin(elapsed * 1.2 + phase) * nightWind;
+    if (crown && crown !== trunk) crown.rotation.z = trunk.rotation.z * 1.2;
+  });
+  if (world.animated.floodedMotes) {
+    world.animated.floodedMotes.rotation.y = elapsed * 0.015;
+    world.animated.floodedMotes.material.opacity = 0.18 + Math.sin(elapsed * 0.55) * 0.06;
+  }
+}
+
+function buildAlagado(scene) {
+  const world = createWorld("alagado", scene);
+  const meta = MAP_META.alagado;
+  world.safeSpawn = { x: 0, y: 0, z: -162, yaw: Math.PI };
+  scene.background = new THREE.Color(meta.sky);
+  scene.fog = new THREE.Fog(0x52636a, 28, 245);
+
+  addGround(world, 0x273121, null, 30);
+  addBoundary(world, 0x172018);
+
+  addMuddyTrack(world, 0, -142, 94, 10, 0, 0x5c4f38);
+  addMuddyTrack(world, -42, -72, 92, 7.5, -0.42, 0x554b35);
+  addMuddyTrack(world, 46, -18, 118, 7, 0.34, 0x514934);
+  addMuddyTrack(world, -104, 40, 105, 6.2, -0.62, 0x4f4631);
+  addMuddyTrack(world, 95, 54, 116, 7.2, 0.88, 0x514936);
+  addMuddyTrack(world, -36, 110, 120, 5.6, Math.PI / 2.7, 0x4b432f);
+
+  [
+    [112, 62, 82, 44, -0.12], [155, 28, 38, 64, 0.5], [85, 112, 60, 34, 0.25],
+    [-166, -26, 32, 26, 0.7], [-74, 132, 46, 22, -0.2], [10, -118, 28, 14, 0.1],
+    [44, -84, 20, 12, -0.35], [-44, -118, 26, 12, 0.3], [142, -80, 58, 26, -0.15]
+  ].forEach(([x, z, w, d, yaw]) => addPuddle(world, x, z, w, d, yaw));
+  attachFloodedModel(world, "mBackgrounds/WaterPlane.fbx", {
+    x: 126, z: 52, yaw: 0.2, targetSize: 88, y: 0.004, raycast: false
+  });
+
+  for (let z = -178; z <= -98; z += 18) {
+    addFloodedUtilityPole(world, -13, z, 0.12);
+    if ((z + 178) % 36 === 0) addFloodedUtilityPole(world, 16, z + 8, -0.08);
+  }
+  addFloodedFenceLine(world, -34, -184, -34, -92, 16, 5);
+  addFloodedFenceLine(world, 34, -180, 34, -94, 15, 4);
+
+  [
+    [-58, -96, 0.22, 0], [-18, -70, -0.35, 1], [34, -62, 0.42, 0],
+    [-84, -42, 0.78, 1], [8, -24, -0.1, 2], [-52, 4, -0.55, 0],
+    [62, -108, -0.68, 1], [88, -44, 0.9, 0]
+  ].forEach(([x, z, yaw, variant], index) => {
+    addFloodedCabin(world, x, z, yaw, variant + index);
+    addFloodedFenceLine(world, x - 10, z + 8, x + 10, z + 8, 5, 3);
+  });
+  addFloodedInteriorCabin(world, -106, -84, 0.34);
+  addFloodedInteriorCabin(world, 74, -20, -0.62);
+
+  addFloodedMansion(world, 54, 38, -0.22);
+  addFloodedChurch(world, -124, 82, 0.42);
+  addFloodedGreenhouse(world, 126, -72, -0.28);
+
+  attachFloodedModel(world, "mBuildings/mBridge/BLD_Bridge_A.fbx", {
+    x: 78, z: 92, yaw: 0.95, targetSize: 21, collision: [22, 5, 1.1], tint: 0x4d4332
+  });
+  attachFloodedModel(world, "mBuildings/mStructures/Struct_Docking_A.fbx", {
+    x: 116, z: 86, yaw: -0.4, targetSize: 14, collision: [13, 4, 0.7], tint: 0x4b4334
+  });
+  attachFloodedModel(world, "mBuildings/mStructures/Struct_FloodWall_A.fbx", {
+    x: 152, z: 5, yaw: Math.PI / 2, targetSize: 22, collision: [23, 3, 2.2], tint: 0x5a5d55
+  });
+  attachFloodedModel(world, "mBuildings/mStructures/Struct_WoodPath_A.fbx", {
+    x: 115, z: -21, yaw: -0.25, targetSize: 18, raycast: false, tint: 0x4b4231
+  });
+  attachFloodedModel(world, "mBuildings/mStructures/Struct_Fence1_Gate_A.fbx", {
+    x: -8, z: -110, yaw: 0.02, targetSize: 7, collision: [7, 1.1, 2.7], tint: 0x574631
+  });
+
+  addFloodedFenceLine(world, -150, 54, -100, 126, 15, 4);
+  addFloodedFenceLine(world, 98, -92, 154, -48, 13, 5);
+  addFloodedFenceLine(world, 36, 18, 82, 18, 10, 3);
+  addFloodedFenceLine(world, 40, 66, 84, 66, 10, 4);
+
+  scatterFloodedVegetation(world);
+  addSwampProps(world);
+  addFloodedMotes(world);
+
+  for (let i = 0; i < 28; i++) {
+    const x = -180 + seeded(i + 230) * 360;
+    const z = -184 + seeded(i + 250) * 360;
+    if (Math.abs(x) < 38 && z < -112) continue;
+    addForestRockCluster(world, x, z, 0.55 + seeded(i + 270) * 0.65);
+  }
+
+  world.updateFlooded = (elapsed, _delta, event) => updateFlooded(world, elapsed, event);
   return world;
 }
 
@@ -837,10 +1345,11 @@ function updateWorld(world, delta, event = null) {
   updateDestructibles(world,delta);
   if(world.mapId==="praia")updateWater(world,world.animated.elapsed,event);
   if(world.mapId==="floresta")updateForest(world,world.animated.elapsed,event);
+  if(world.mapId==="alagado")world.updateFlooded?.(world.animated.elapsed,delta,event);
   if(world.mapId==="mundo")world.updateUnified?.(world.animated.elapsed,delta,event);
 }
 
-const BUILDERS={mundo:buildUnifiedMap,sketchbook:buildSketchbook,praia:buildPraia,cidade:buildCidade,floresta:buildFloresta};
+const BUILDERS={mundo:buildUnifiedMap,sketchbook:buildSketchbook,praia:buildPraia,cidade:buildCidade,floresta:buildFloresta,alagado:buildAlagado};
 
 export function buildMap(mapId, scene) {
   const world=(BUILDERS[mapId]||BUILDERS.mundo)(scene);

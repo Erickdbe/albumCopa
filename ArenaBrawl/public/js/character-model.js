@@ -269,7 +269,7 @@ function attachWeaponToFpsSocket(avatar, model, characterId) {
     avatar.gun.rotation.set(-0.12, 0, 0);
     avatar.gun.scale.setScalar(0.34);
   }
-  avatar.gun.visible = true;
+  avatar.gun.visible = Boolean(avatar.weaponId);
 }
 
 function humanSoldierDescriptor(characterId) {
@@ -603,7 +603,7 @@ function attachWeaponToHumanSoldier(avatar, model) {
     avatar.gun.position.set(0.28, 1.18, -0.38);
     avatar.gun.rotation.set(-0.04, 0, 0);
     avatar.gun.scale.setScalar(0.34);
-    avatar.gun.visible = true;
+    avatar.gun.visible = Boolean(avatar.weaponId);
     return;
   }
 
@@ -617,7 +617,7 @@ function attachWeaponToHumanSoldier(avatar, model) {
     avatar.gun.scale.setScalar(localScale);
     avatar.gun.position.set(0, 0, 0);
     avatar.weaponSocket = socket;
-    avatar.gun.visible = true;
+    avatar.gun.visible = Boolean(avatar.weaponId);
     return;
   }
 
@@ -635,7 +635,7 @@ function attachWeaponToHumanSoldier(avatar, model) {
     .multiplyScalar(localScale);
   avatar.gun.position.copy(gripOffset).multiplyScalar(-1);
   avatar.weaponSocket = socket;
-  avatar.gun.visible = true;
+  avatar.gun.visible = Boolean(avatar.weaponId);
 }
 
 async function attachHumanSoldierCharacter(avatar, characterId) {
@@ -876,7 +876,7 @@ export async function attachAnimatedCharacter(avatar) {
     avatar.gun.position.set(0.34, 1.18, -0.46);
     avatar.gun.rotation.set(-0.06, 0, 0);
     avatar.gun.scale.setScalar(0.32);
-    avatar.gun.visible = true;
+    avatar.gun.visible = Boolean(avatar.weaponId);
     avatar.setAnimation(avatar.desiredAnimation || "idle", true);
     return;
   }
@@ -920,7 +920,7 @@ export async function attachAnimatedCharacter(avatar) {
   avatar.gun.position.set(0.3, 1.15, -0.38);
   avatar.gun.rotation.set(-0.12, 0, 0);
   avatar.gun.scale.setScalar(0.34);
-  avatar.gun.visible = true;
+  avatar.gun.visible = Boolean(avatar.weaponId);
   avatar.setAnimation(avatar.desiredAnimation || "idle", true);
 }
 

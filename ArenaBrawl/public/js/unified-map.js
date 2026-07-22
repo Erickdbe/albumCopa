@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { attachCityModel } from "./unity-pack-assets.js";
+import { attachCityModel, attachFantasyMountainModel } from "./unity-pack-assets.js";
 import { addUnifiedWater, UNIFIED_RIVER_POINTS } from "./water-world.js";
 
 export const UNIFIED_HALF = 260;
@@ -515,6 +515,54 @@ function addForest(world) {
       onReady(model) { model.traverse((child) => { if (child.isMesh) world.raycastMeshes.push(child); }); }
     }).catch((error) => console.warn("Arvore do pack nao carregou", error));
   }
+
+  const assetFoliage = [
+    { file: "Tree01.fbx", count: 24, height: [7.8, 12.5], raycast: true, obstacle: true },
+    { file: "Bush01.fbx", count: 44, size: [1.2, 2.2], raycast: false },
+    { file: "Grass01.fbx", count: 70, size: [1.1, 2.3], raycast: false },
+    { file: "Flowers01.fbx", count: 46, size: [0.8, 1.35], raycast: false },
+    { file: "Flower01.fbx", count: 54, size: [0.55, 1.05], raycast: false }
+  ];
+  assetFoliage.forEach((spec) => {
+    for (let i = 0; i < spec.count; i++) {
+      let x;
+      let z;
+      let attempts = 0;
+      do {
+        x = 12 + random() * 232;
+        z = -244 + random() * 348;
+      } while (!isForestPlacementClear(x, z) && attempts++ < 25);
+      const y = unifiedTerrainHeight(x, z);
+      const anchor = new THREE.Group();
+      anchor.name = `fantasy-pack-${spec.file.replace(/\.[^.]+$/, "").toLowerCase()}`;
+      anchor.position.set(x, y, z);
+      anchor.rotation.y = random() * Math.PI * 2;
+      anchor.userData.ignoreRaycast = !spec.raycast;
+      world.root.add(anchor);
+      const options = {
+        targetHeight: spec.height ? spec.height[0] + random() * (spec.height[1] - spec.height[0]) : undefined,
+        targetSize: spec.size ? spec.size[0] + random() * (spec.size[1] - spec.size[0]) : undefined,
+        roughness: 0.92,
+        metalness: 0.02,
+        onReady(model) {
+          model.traverse((child) => {
+            if (!child.isMesh) return;
+            child.userData.ignoreRaycast = !spec.raycast;
+            child.castShadow = spec.file.includes("Tree") || spec.file.includes("Bush");
+            child.receiveShadow = true;
+            if (spec.raycast) world.raycastMeshes.push(child);
+          });
+        }
+      };
+      attachFantasyMountainModel(anchor, spec.file, options)
+        .catch((error) => console.warn(`Asset de floresta ${spec.file} nao carregou`, error));
+      if (spec.obstacle) {
+        const radius = 0.65 + random() * 0.38;
+        world.obstacles.push(obstacle(x, z, radius, radius, y + 5.8, true, -0.2));
+        world.animated.trees.push({ trunk: anchor, crown: anchor, phase: random() * Math.PI * 2 });
+      }
+    }
+  });
 
   const grassCount = 2200;
   const grass = new THREE.InstancedMesh(

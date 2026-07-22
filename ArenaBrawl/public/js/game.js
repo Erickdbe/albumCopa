@@ -7,6 +7,15 @@ import { buildVehicleModel, createAirBomb, createCannonProjectile, createExplosi
 import { emitExplosionFx, emitImpactFx, emitMuzzleFx, emitNapalmExplosionFx, preloadWarFx } from "./war-fx.js";
 import { UNIFIED_RIVER_POINTS } from "./water-world.js";
 import {
+  clearSurvivalWorld,
+  gatherSurvivalZombieHittable,
+  nearestSurvivalLoot,
+  removeSurvivalLoot,
+  syncSurvivalLoot,
+  syncSurvivalZombies,
+  updateSurvivalWorld
+} from "./survival-world.js";
+import {
   attachAnimatedCharacter,
   playCharacterAction,
   playCharacterWeaponAction,
@@ -20,7 +29,7 @@ import {
   playFootstep, updateAudioListener, updateVehicleEngine
 } from "./game-audio.js";
 import {
-  CLASSES, CLASS_ORDER, SECONDARY_WEAPONS, SECONDARY_ORDER, GRENADES, GRENADE_ORDER, GRENADE_CHARGES_PER_LIFE,
+  CLASSES, CLASS_ORDER, SECONDARY_WEAPONS, SECONDARY_ORDER, GRENADES, GRENADE_ORDER,
   ARENA_HALF, MAP_HALF_SIZES, MAP_META, VEHICLE_STATS, EYE_HEIGHT, GRAVITY, WALK_SPEED, SPRINT_MUL, CROUCH_MUL, MOVE_SEND_MS,
   HEADSHOT_MULTIPLIER
 } from "./config.js";
@@ -33,6 +42,7 @@ const DEFAULT_FOV = 78;
 const LADDER_SPEED = 4.8;
 const PRONE_SPEED_MUL = 0.3;
 const PRONE_EYE_OFFSET = 1.08;
+const EMPTY_SLOT = "hands";
 const DANCE_OPTIONS = {
   dance: { label: "Passinho", speed: 1, animation: "dance" },
   dance_fast: { label: "Energia", speed: 1.35, animation: "dance_fast" },
@@ -105,7 +115,8 @@ const local = {
   x: 0, y: 0, z: 0, jumpOffset: 0, verticalVelocity: 0, onGround: true,
   health: 100, alive: true, classId: "rifle", secondaryId: "pistol_common",
   kills: 0, deaths: 0, score: 0, team: null,
-  slot: "primary",
+  slot: EMPTY_SLOT,
+  inventory: { primary: false, secondary: false, grenades: {}, fuel: 0 },
   ammo: { primary: 0, secondary: 0 },
   reloadUntil: { primary: 0, secondary: 0 },
   lastShotAt: { primary: 0, secondary: 0 },
@@ -290,6 +301,7 @@ function applyWorldLighting(delta) {
 }
 
 function clearSceneObjects() {
+  clearSurvivalWorld();
   [...scene.children].forEach((child) => {
     if (child === camera) return;
     scene.remove(child);
@@ -338,7 +350,7 @@ function toggleCameraMode() {
   localStorage.setItem("arenaBrawlCameraMode", cameraMode);
   thirdPersonCameraReady = false;
   updateCameraToggle();
-  if (cameraMode === "first" && !local.vehicleId) weaponRig.visible = true;
+  if (cameraMode === "first" && !local.vehicleId) weaponRig.visible = Boolean(currentWeaponMesh);
 }
 
 /* ── Terreno (piso + colisao generalizada) ─────────────────────────── */
@@ -460,6 +472,11 @@ function findLadderAt(x, z, feetY) {
 /* ── Armas em 1a pessoa (view model) ───────────────────────────────── */
 function setViewWeapon(color, kind) {
   if (currentWeaponMesh) weaponRig.remove(currentWeaponMesh);
+  currentWeaponMesh = null;
+  if (!kind) {
+    muzzleFlash.intensity = 0;
+    return;
+  }
   currentWeaponMesh = buildWeaponModel(kind, color);
   currentWeaponMesh.traverse((object) => { object.userData.viewModel = true; });
   weaponRig.add(currentWeaponMesh);
@@ -486,12 +503,12 @@ function recoilKick() {
 }
 
 function setAiming(enabled) {
-  local.aiming = Boolean(enabled && local.alive && room?.status === "playing");
+  local.aiming = Boolean(enabled && local.alive && room?.status === "playing" && currentWeapon());
 }
 
 function currentChargeAmount() {
   const weapon = currentWeapon();
-  if (!local.charging || !weapon.chargeable) return 0;
+  if (!local.charging || !weapon?.chargeable) return 0;
   return THREE.MathUtils.clamp((performance.now() - local.chargeStartedAt) / weapon.chargeMs, 0, 1);
 }
 
@@ -505,8 +522,14 @@ function cancelCharge() {
 }
 
 function updateWeaponPresentation(delta) {
-  if (!camera || !currentWeaponMesh) return;
+  if (!camera) return;
+  if (!currentWeaponMesh) {
+    camera.fov = THREE.MathUtils.lerp(camera.fov, DEFAULT_FOV, Math.min(1, delta * 10));
+    camera.updateProjectionMatrix();
+    return;
+  }
   const weapon = currentWeapon();
+  if (!weapon) return;
   const scoped = local.aiming && weapon.id === "sniper_rifle";
   const abilityZoom = local.abilityActive && CLASSES[local.classId]?.ability?.id === "foco_letal";
   const targetFov = scoped ? 28 : local.aiming ? 58 : abilityZoom ? 62 : DEFAULT_FOV;
@@ -576,6 +599,46 @@ function vehicleAnimationForType(type) {
   if (type === "plane" || type === "helicopter") return "drivePlane";
   if (type === "jetski") return "driveJetski";
   return "drive";
+}
+
+function normalizeSlot(slot) {
+  return slot === "primary" || slot === "secondary" ? slot : EMPTY_SLOT;
+}
+
+function slotUnlockedForState(state, slot) {
+  const normalized = normalizeSlot(slot);
+  if (normalized === EMPTY_SLOT) return false;
+  if (state?.inventory) return Boolean(state.inventory[normalized]);
+  return normalizeSlot(state?.slot) !== EMPTY_SLOT;
+}
+
+function weaponIdForPlayerState(state, slot = state?.slot) {
+  const normalized = normalizeSlot(slot);
+  if (!slotUnlockedForState(state, normalized)) return null;
+  if (normalized === "secondary") return SECONDARY_WEAPONS[state?.secondaryId || "pistol_common"]?.id || "pistol_common";
+  return CLASSES[state?.classId || "rifle"]?.primary?.id || "assault_rifle";
+}
+
+function updateAvatarGun(avatar, weaponId) {
+  if (!avatar?.gun) return;
+  const normalizedWeaponId = weaponId || null;
+  if (avatar.gun.userData.weaponId === normalizedWeaponId) {
+    avatar.gun.visible = Boolean(normalizedWeaponId);
+    return;
+  }
+  const parent = avatar.gun.parent || avatar.rightArm;
+  const position = avatar.gun.position.clone();
+  const rotation = avatar.gun.rotation.clone();
+  const scale = avatar.gun.scale.clone();
+  parent.remove(avatar.gun);
+  const gun = buildWeaponModel(normalizedWeaponId || "knife", avatar.teamColor || "#4c5a3a");
+  gun.userData.weaponId = normalizedWeaponId;
+  gun.visible = Boolean(normalizedWeaponId);
+  gun.position.copy(position);
+  gun.rotation.copy(rotation);
+  gun.scale.copy(scale);
+  parent.add(gun);
+  avatar.gun = gun;
 }
 
 function buildAvatar(p) {
@@ -667,10 +730,10 @@ function buildAvatar(p) {
   rightLeg.geometry.translate(0, -0.37, 0);
   root.add(rightLeg);
 
-  const remoteWeaponId = p.slot === "secondary"
-    ? (SECONDARY_WEAPONS[p.secondaryId]?.id || "pistol_common")
-    : (CLASSES[p.classId]?.primary?.id || "assault_rifle");
-  const gun = buildWeaponModel(remoteWeaponId, teamColor);
+  const remoteWeaponId = weaponIdForPlayerState(p);
+  const gun = buildWeaponModel(remoteWeaponId || "knife", teamColor);
+  gun.userData.weaponId = remoteWeaponId;
+  gun.visible = Boolean(remoteWeaponId);
   rightArm.add(gun);
   gun.scale.setScalar(0.24);
   gun.position.set(0.03, -0.18, -0.12);
@@ -696,10 +759,11 @@ function buildAvatar(p) {
     headMesh: headHitbox,
     walkPhase: Math.random() * 10,
     username: p.username, classId: p.classId, secondaryId: p.secondaryId || "pistol_common",
+    inventory: p.inventory || { primary: Boolean(remoteWeaponId && p.slot !== "secondary"), secondary: Boolean(remoteWeaponId && p.slot === "secondary") },
     kills: p.kills || 0, deaths: p.deaths || 0, team: p.team,
     alive: p.alive !== false,
     moving: Boolean(p.moving), sprinting: Boolean(p.sprinting), jumping: Boolean(p.jumping), crouching: Boolean(p.crouching), prone: Boolean(p.prone),
-    aiming: Boolean(p.aiming), slot: p.slot === "secondary" ? "secondary" : "primary", weaponId: remoteWeaponId,
+    aiming: Boolean(p.aiming), slot: normalizeSlot(p.slot), weaponId: remoteWeaponId,
     moveForward: Number(p.moveForward) || 0, moveStrafe: Number(p.moveStrafe) || 0,
     model: null, mixer: null, actions: null, animationName: null, desiredAnimation: "idle",
     characterId: characterIdForPlayer(p), emoteUntil: 0, emoteSpeed: 1, emoteAnimation: "dance",
@@ -761,7 +825,8 @@ function updateLocalViewAvatar(delta) {
   localViewAvatar.crouching = local.crouching;
   localViewAvatar.prone = local.prone;
   localViewAvatar.aiming = local.aiming;
-  localViewAvatar.weaponId = currentWeapon().id;
+  localViewAvatar.weaponId = currentWeapon()?.id || null;
+  updateAvatarGun(localViewAvatar, localViewAvatar.weaponId);
   localViewAvatar.moveForward = local.moveForward;
   localViewAvatar.moveStrafe = local.moveStrafe;
   localViewAvatar.inVehicle = false;
@@ -771,7 +836,7 @@ function updateLocalViewAvatar(delta) {
   if (localViewAvatar.mixer) {
     const animation = animationForAvatar(localViewAvatar);
     localViewAvatar.setAnimation(animation, false, animation.startsWith("dance") ? localViewAvatar.emoteSpeed : null);
-    setCharacterAiming(localViewAvatar, localViewAvatar.weaponId, localViewAvatar.aiming);
+    setCharacterAiming(localViewAvatar, localViewAvatar.weaponId, localViewAvatar.aiming && Boolean(localViewAvatar.weaponId));
     localViewAvatar.mixer.update(delta);
     updateCharacterPose(localViewAvatar, delta);
   }
@@ -799,12 +864,13 @@ function spawnOrUpdateRemote(p) {
   avatar.jumping = Boolean(p.jumping);
   avatar.crouching = Boolean(p.crouching);
   avatar.prone = Boolean(p.prone);
+  avatar.classId = p.classId || avatar.classId;
   avatar.secondaryId = p.secondaryId || avatar.secondaryId;
+  avatar.inventory = p.inventory || avatar.inventory || {};
   avatar.aiming = Boolean(p.aiming);
-  avatar.slot = p.slot === "secondary" ? "secondary" : "primary";
-  avatar.weaponId = avatar.slot === "secondary"
-    ? (SECONDARY_WEAPONS[p.secondaryId || avatar.secondaryId]?.id || "pistol_common")
-    : (CLASSES[p.classId || avatar.classId]?.primary?.id || "assault_rifle");
+  avatar.slot = normalizeSlot(p.slot);
+  avatar.weaponId = weaponIdForPlayerState(avatar, avatar.slot);
+  updateAvatarGun(avatar, avatar.weaponId);
   avatar.moveForward = Number(p.moveForward) || 0;
   avatar.moveStrafe = Number(p.moveStrafe) || 0;
   avatar.kills = p.kills || 0;
@@ -961,7 +1027,7 @@ function updateVehiclePresentation(delta) {
 
   const driven = vehicles.get(local.vehicleId);
   if (!driven) {
-    weaponRig.visible = true;
+    weaponRig.visible = Boolean(currentWeaponMesh);
     return;
   }
   dom.pauseHint.hidden = true;
@@ -1004,7 +1070,70 @@ function updateVehiclePresentation(delta) {
 
 /* ── HUD ────────────────────────────────────────────────────────────── */
 function currentWeapon(slot = local.slot) {
-  return slot === "secondary" ? SECONDARY_WEAPONS[local.secondaryId] : CLASSES[local.classId].primary;
+  const normalized = normalizeSlot(slot);
+  if (normalized === "secondary") return local.inventory.secondary ? SECONDARY_WEAPONS[local.secondaryId] || null : null;
+  if (normalized === "primary") return local.inventory.primary ? CLASSES[local.classId]?.primary || null : null;
+  return null;
+}
+
+function slotHasWeapon(slot) {
+  return Boolean(currentWeapon(slot));
+}
+
+function chooseEquippedSlot(preferred = local.slot) {
+  const normalized = normalizeSlot(preferred);
+  if (slotHasWeapon(normalized)) return normalized;
+  if (slotHasWeapon("primary")) return "primary";
+  if (room?.settings?.secondaryEnabled !== false && slotHasWeapon("secondary")) return "secondary";
+  return EMPTY_SLOT;
+}
+
+function refreshEquippedWeapon(preferred = local.slot) {
+  local.slot = chooseEquippedSlot(preferred);
+  const weapon = currentWeapon();
+  if (!weapon) {
+    setAiming(false);
+    cancelCharge();
+    setViewWeapon(null, null);
+  } else {
+    setViewWeapon(local.slot === "primary" ? "#4c5a3a" : "#555a63", weapon.id);
+  }
+  updateAmmoHud();
+  updateGrenadeHud();
+}
+
+function syncLocalAvatarLoadout() {
+  if (!localViewAvatar) return;
+  localViewAvatar.classId = local.classId;
+  localViewAvatar.secondaryId = local.secondaryId;
+  localViewAvatar.inventory = { ...local.inventory };
+  localViewAvatar.slot = local.slot;
+  localViewAvatar.weaponId = weaponIdForPlayerState(localViewAvatar, local.slot);
+  updateAvatarGun(localViewAvatar, localViewAvatar.weaponId);
+}
+
+function emptyGrenadeCharges() {
+  return Object.fromEntries(GRENADE_ORDER.map((id) => [id, 0]));
+}
+
+function applyInventorySnapshot(snapshot = {}) {
+  local.inventory = {
+    primary: Boolean(snapshot.inventory?.primary),
+    secondary: Boolean(snapshot.inventory?.secondary),
+    grenades: { ...(snapshot.inventory?.grenades || {}) },
+    fuel: Number(snapshot.inventory?.fuel) || 0
+  };
+  local.ammo.primary = Math.max(0, Number(snapshot.ammo?.primary) || 0);
+  local.ammo.secondary = Math.max(0, Number(snapshot.ammo?.secondary) || 0);
+  local.grenadeCharges = {
+    ...emptyGrenadeCharges(),
+    ...(snapshot.grenadeCharges || snapshot.inventory?.grenades || {})
+  };
+  if (snapshot.classId) local.classId = snapshot.classId;
+  if (snapshot.secondaryId) local.secondaryId = snapshot.secondaryId;
+  local.slot = normalizeSlot(snapshot.slot);
+  refreshEquippedWeapon(local.slot);
+  syncLocalAvatarLoadout();
 }
 function updateHealthHud() {
   dom.healthFill.style.width = `${Math.max(0, local.health)}%`;
@@ -1012,6 +1141,11 @@ function updateHealthHud() {
 }
 function updateAmmoHud() {
   const w = currentWeapon();
+  if (!w) {
+    dom.ammoCount.textContent = "0 / 0";
+    dom.weaponName.textContent = "Maos vazias";
+    return;
+  }
   dom.ammoCount.textContent = w.kind === "melee" ? "-" : `${local.ammo[local.slot]} / ${w.magSize}`;
   dom.weaponName.textContent = `${local.slot === "primary" ? "Primaria" : "Secundaria"} - ${w.name}`;
 }
@@ -1308,8 +1442,10 @@ function fireHitscan(weapon, slot) {
   scene.updateMatrixWorld(true);
   const hittable = gatherHittable();
   const vehicleHittable = gatherVehicleHittable();
+  const zombieHittable = gatherSurvivalZombieHittable();
   const pelletHits = new Map();
   const vehicleHits = new Map();
+  const zombieHits = new Map();
   const worldHits = new Map();
   let headshotFor = null;
   const pelletCount = weapon.pellets || 1;
@@ -1323,7 +1459,7 @@ function fireHitscan(weapon, slot) {
     dir.y += (Math.random() - 0.5) * spread;
     dir.normalize();
     if (!broadcastDirection) broadcastDirection = dir.clone();
-    const targets = [...hittable, ...vehicleHittable, ...solidMeshesForRaycast];
+    const targets = [...hittable, ...vehicleHittable, ...zombieHittable, ...solidMeshesForRaycast];
     const trace = traceBallistic(origin, dir, ballistic.speed, ballistic.gravity, weapon.range, targets);
     if (weapon.kind !== "melee" && i < Math.min(3, pelletCount)) {
       spawnBallisticVisual(trace, ballistic.speed, ballistic.kind, i === 0);
@@ -1332,12 +1468,15 @@ function fireHitscan(weapon, slot) {
     const hit = trace.hit;
     const socketId = hit.object.userData.socketId;
     const vehicleId = hit.object.userData.vehicleId;
+    const zombieId = hit.object.userData.zombieId;
     const destructibleId = hit.object.userData.destructibleId;
     if (socketId) {
       pelletHits.set(socketId, (pelletHits.get(socketId) || 0) + 1);
       if (hit.object.userData.isHead) headshotFor = socketId;
     } else if (vehicleId) {
       vehicleHits.set(vehicleId, (vehicleHits.get(vehicleId) || 0) + 1);
+    } else if (zombieId) {
+      zombieHits.set(zombieId, (zombieHits.get(zombieId) || 0) + 1);
     } else if (destructibleId) {
       worldHits.set(destructibleId, { count: (worldHits.get(destructibleId)?.count || 0) + 1, point: hit.point });
     }
@@ -1354,6 +1493,9 @@ function fireHitscan(weapon, slot) {
   vehicleHits.forEach((count, vehicleId) => {
     socket.emit("vehicle:hit", { vehicleId, slot, pelletHits: count });
   });
+  zombieHits.forEach((count, zombieId) => {
+    socket.emit("survival:zombie-hit", { zombieId, slot, pelletHits: count });
+  });
   worldHits.forEach(({ count, point }, id) => {
     socket.emit("world:hit", { id, damage: weapon.damage * count, x: point.x, z: point.z });
   });
@@ -1363,6 +1505,7 @@ function fireProjectile(weapon, slot, charge = 1) {
   scene.updateMatrixWorld(true);
   const hittable = gatherHittable();
   const vehicleHittable = gatherVehicleHittable();
+  const zombieHittable = gatherSurvivalZombieHittable();
   const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
   const spread = weapon.spread * (local.aiming ? 0.35 : 1);
   dir.x += (Math.random() - 0.5) * spread;
@@ -1371,12 +1514,13 @@ function fireProjectile(weapon, slot, charge = 1) {
   const origin = muzzleWorldPosition();
   const ballistic = ballisticForWeapon(weapon, charge);
   const trace = traceBallistic(origin, dir, ballistic.speed, ballistic.gravity, weapon.range, [
-    ...hittable, ...vehicleHittable, ...solidMeshesForRaycast
+    ...hittable, ...vehicleHittable, ...zombieHittable, ...solidMeshesForRaycast
   ]);
   const hit = trace.hit;
   const socketId = hit?.object.userData.socketId || null;
   const isHead = Boolean(hit?.object.userData.isHead);
   const vehicleId = hit?.object.userData.vehicleId || null;
+  const zombieId = hit?.object.userData.zombieId || null;
   const destructibleId = hit?.object.userData.destructibleId || null;
   spawnBallisticVisual(trace, ballistic.speed, ballistic.kind, true);
 
@@ -1389,6 +1533,7 @@ function fireProjectile(weapon, slot, charge = 1) {
     ballistics: { speed: ballistic.speed, gravity: ballistic.gravity, range: weapon.range }
   });
   if (vehicleId) socket.emit("vehicle:hit", { vehicleId, slot, pelletHits: 1 });
+  if (zombieId) socket.emit("survival:zombie-hit", { zombieId, slot, pelletHits: 1 });
   if (destructibleId && hit) {
     socket.emit("world:hit", { id: destructibleId, damage: weapon.damage, x: hit.point.x, z: hit.point.z });
   }
@@ -1486,6 +1631,7 @@ function shoot(charge = 1) {
   if (!local.alive || !room) return;
   const slot = local.slot;
   const weapon = currentWeapon(slot);
+  if (!weapon) return;
   const now = performance.now();
   if (now < local.reloadUntil[slot]) return;
   if (weapon.kind !== "melee" && now - local.lastShotAt[slot] < weapon.fireRateMs) return;
@@ -1508,7 +1654,7 @@ function shoot(charge = 1) {
 
 function beginCharge() {
   const weapon = currentWeapon();
-  if (!weapon.chargeable || local.charging) return;
+  if (!weapon?.chargeable || local.charging) return;
   if (local.ammo[local.slot] <= 0) {
     reload();
     return;
@@ -1531,7 +1677,7 @@ function releaseCharge() {
 function reload() {
   if (!local.alive) return;
   const weapon = currentWeapon(local.slot);
-  if (weapon.kind === "melee") return;
+  if (!weapon || weapon.kind === "melee") return;
   playReloadSound();
   local.reloadUntil[local.slot] = performance.now() + weapon.reloadMs;
   socket.emit("match:reload", { slot: local.slot });
@@ -1544,6 +1690,11 @@ function switchSlot(slot) {
   if (slot === "secondary" && !room.settings.secondaryEnabled) return;
   cancelCharge();
   setAiming(false);
+  if (!slotHasWeapon(slot)) {
+    if (!currentWeapon()) refreshEquippedWeapon(EMPTY_SLOT);
+    else updateAmmoHud();
+    return;
+  }
   local.slot = slot;
   const weapon = currentWeapon(slot);
   setViewWeapon(slot === "primary" ? "#4c5a3a" : "#555a63", weapon.id);
@@ -1846,6 +1997,7 @@ function onMouseDown(e) {
       return;
     }
     const weapon = currentWeapon();
+    if (!weapon) return;
     if (weapon.chargeable) beginCharge();
     else {
       local.mouseDown = true;
@@ -1890,6 +2042,11 @@ function onKeyDown(e) {
   if (e.code === "KeyE") {
     if (local.vehicleId) socket.emit("vehicle:exit");
     else {
+      const loot = nearestSurvivalLoot(camera.position);
+      if (loot) {
+        socket.emit("survival:pickup", { lootId: loot.id });
+        return;
+      }
       const vehicle = nearestVehicle();
       if (vehicle) socket.emit("vehicle:enter", { vehicleId: vehicle.id });
     }
@@ -2004,7 +2161,7 @@ function updateMovement(delta) {
   const crouching = !prone && Boolean(keys.ControlLeft || keys.ControlRight);
   const sketchbookFeel = room.settings.mapId === "sketchbook";
   const harpoonSlowMul = performance.now() < local.harpoonSlowUntil ? local.harpoonSlowStrength : 1;
-  const speed = WALK_SPEED * (sketchbookFeel ? 0.74 : 1) * (weapon.speedMul || 1) * room.settings.moveSpeedMul *
+  const speed = WALK_SPEED * (sketchbookFeel ? 0.74 : 1) * (weapon?.speedMul || 1) * room.settings.moveSpeedMul *
     (sprinting ? SPRINT_MUL : 1) * (crouching ? CROUCH_MUL : 1) * (prone ? PRONE_SPEED_MUL : 1) *
     (local.abilityActive && CLASSES[local.classId].ability.id === "sprint_tatico" ? 1.8 : 1) *
     (local.abilityActive && CLASSES[local.classId].ability.id === "supressao" ? 0.5 : 1) *
@@ -2147,7 +2304,7 @@ function updateMovement(delta) {
     playFootstep(null, sprinting);
   }
 
-  if (local.mouseDown && weapon.auto) shoot();
+  if (local.mouseDown && weapon?.auto) shoot();
 
   if (now - lastMoveSent > MOVE_SEND_MS) {
     lastMoveSent = now;
@@ -2185,7 +2342,8 @@ function animateAvatars(delta) {
     if (avatar.mixer) {
       const animation = animationForAvatar(avatar);
       avatar.setAnimation(animation, false, animation.startsWith("dance") ? avatar.emoteSpeed : null);
-      setCharacterAiming(avatar, avatar.weaponId, avatar.aiming && avatar.alive);
+      updateAvatarGun(avatar, avatar.weaponId);
+      setCharacterAiming(avatar, avatar.weaponId, avatar.aiming && avatar.alive && Boolean(avatar.weaponId));
       avatar.mixer.update(delta);
       updateCharacterPose(avatar, delta);
       return;
@@ -2403,6 +2561,7 @@ function render() {
     }
     updateGrenadesPhysics(delta);
     updateBallistics(delta);
+    updateSurvivalWorld(delta, performance.now());
     animateAvatars(delta);
     mapWorld?.update(delta, activeWorldEvent);
     updateAbilityHud();
@@ -2468,22 +2627,24 @@ export function attachSocket(activeSocket) {
     syncVehicles(room.vehicles || []);
     activeWorldEvent = room.worldEvent || null;
     activeWorldTime = room.worldTime || null;
+    syncSurvivalLoot(scene, room.survivalLoot || [], terrainSurfaceHeightAt);
+    syncSurvivalZombies(scene, room.zombies || [], terrainSurfaceHeightAt);
 
     const me = room.players.find((p) => p.socketId === selfId);
     local.classId = me?.classId || "rifle";
     local.secondaryId = me?.secondaryId || "pistol_common";
     local.team = me?.team || null;
-    local.slot = "primary";
+    local.slot = normalizeSlot(me?.slot);
     local.health = 100;
     local.alive = true;
     local.kills = 0;
     local.deaths = 0;
     local.score = 0;
     local.jumpOffset = me?.y || 0;
-    local.grenadeCharges = Object.fromEntries(GRENADE_ORDER.map((id) => [id, GRENADE_CHARGES_PER_LIFE]));
+    local.grenadeCharges = emptyGrenadeCharges();
     local.grenadeThrowPending = false;
-    local.ammo.primary = CLASSES[local.classId].primary.magSize;
-    local.ammo.secondary = SECONDARY_WEAPONS[local.secondaryId].magSize;
+    local.ammo.primary = 0;
+    local.ammo.secondary = 0;
     local.abilityCooldownUntil = 0;
     local.aiming = false;
     local.charging = false;
@@ -2512,7 +2673,7 @@ export function attachSocket(activeSocket) {
     camera.quaternion.setFromEuler(new THREE.Euler(0, me?.yaw || 0, 0, "YXZ"));
     ensureLocalPlayablePosition();
 
-    setViewWeapon("#4c5a3a", CLASSES[local.classId].primary.id);
+    applyInventorySnapshot(me || {});
     if (me) createLocalViewAvatar(me);
     room.players.forEach((p) => { if (p.socketId !== selfId) spawnOrUpdateRemote(p); });
 
@@ -2587,7 +2748,7 @@ export function attachSocket(activeSocket) {
     camera.position.set(Number(x) || camera.position.x, EYE_HEIGHT + (Number(y) || 0), Number(z) || camera.position.z);
     local.jumpOffset = Number(y) || 0;
     ensureLocalPlayablePosition();
-    switchSlot("primary");
+    refreshEquippedWeapon("primary");
     updateCameraToggle();
     updateVehicleHud();
   });
@@ -2624,6 +2785,44 @@ export function attachSocket(activeSocket) {
 
   socket.on("world:object-state", (state) => mapWorld?.applyObjectState(state));
 
+  socket.on("survival:loot-picked", ({ lootId }) => {
+    removeSurvivalLoot(lootId);
+    const picked = room?.survivalLoot?.find((loot) => loot.id === lootId);
+    if (picked) picked.active = false;
+  });
+
+  socket.on("survival:inventory", (snapshot) => {
+    applyInventorySnapshot(snapshot || {});
+    updateAmmoHud();
+    updateGrenadeHud();
+  });
+
+  socket.on("survival:zombies", (zombies) => {
+    if (!scene) return;
+    if (room) room.zombies = zombies || [];
+    syncSurvivalZombies(scene, zombies || [], terrainSurfaceHeightAt);
+  });
+
+  socket.on("survival:zombie-damaged", ({ byId }) => {
+    if (byId === selfId) showHitMarker({});
+  });
+
+  socket.on("survival:zombie-killed", ({ byId, zombies }) => {
+    if (byId === selfId) {
+      local.score += 1;
+      showHitMarker({ kill: true });
+      updateScoreboard();
+      pushKillFeed("Zumbi eliminado");
+    }
+    const nextZombies = Array.isArray(zombies) ? zombies : room?.zombies || [];
+    if (room) room.zombies = nextZombies;
+    syncSurvivalZombies(scene, nextZombies, terrainSurfaceHeightAt);
+  });
+
+  socket.on("survival:zombie-attack", ({ targetSocketId }) => {
+    if (targetSocketId === selfId) playCharacterAction(localViewAvatar, "damage", 1.15);
+  });
+
   socket.on("world:force", ({ x, y, z, fallDamage }) => {
     local.externalVelocity.set(Number(x) || 0, Number(y) || 0, Number(z) || 0);
     local.verticalVelocity = Math.max(local.verticalVelocity, Number(y) || 0);
@@ -2645,11 +2844,13 @@ export function attachSocket(activeSocket) {
     avatar.jumping = Boolean(p.jumping);
     avatar.crouching = Boolean(p.crouching);
     avatar.prone = Boolean(p.prone);
+    avatar.classId = p.classId || avatar.classId;
+    avatar.secondaryId = p.secondaryId || avatar.secondaryId;
+    avatar.inventory = p.inventory || avatar.inventory || {};
     avatar.aiming = Boolean(p.aiming);
-    avatar.slot = p.slot === "secondary" ? "secondary" : "primary";
-    avatar.weaponId = avatar.slot === "secondary"
-      ? (SECONDARY_WEAPONS[avatar.secondaryId]?.id || "pistol_common")
-      : (CLASSES[avatar.classId]?.primary?.id || "assault_rifle");
+    avatar.slot = normalizeSlot(p.slot);
+    avatar.weaponId = weaponIdForPlayerState(avatar, avatar.slot);
+    updateAvatarGun(avatar, avatar.weaponId);
     avatar.moveForward = Number(p.moveForward) || 0;
     avatar.moveStrafe = Number(p.moveStrafe) || 0;
     if (avatar.moving || avatar.jumping) {
@@ -2726,7 +2927,7 @@ export function attachSocket(activeSocket) {
       local.pendingFallDamage = 0;
       local.harpoonSlowUntil = 0;
       local.harpoonSlowStrength = 1;
-      weaponRig.visible = true;
+      weaponRig.visible = Boolean(currentWeaponMesh);
       dom.vehicleStatus.classList.remove("active");
       setAiming(false);
       cancelCharge();
@@ -2758,7 +2959,7 @@ export function attachSocket(activeSocket) {
     dom.respawnLoadoutStatus.textContent = "Equipamento confirmado";
   });
 
-  socket.on("match:respawn", ({ socketId, x, y, z, yaw, health, classId, secondaryId, team }) => {
+  socket.on("match:respawn", ({ socketId, x, y, z, yaw, health, classId, secondaryId, team, slot, inventory, ammo, grenadeCharges }) => {
     if (socketId === selfId) {
       local.alive = true; local.health = health;
       local.vehicleId = null;
@@ -2781,7 +2982,7 @@ export function attachSocket(activeSocket) {
       local.classId = classId || local.classId;
       local.secondaryId = secondaryId || local.secondaryId;
       local.team = team || local.team;
-      local.slot = "primary";
+      local.slot = normalizeSlot(slot);
       local.jumpOffset = y; local.verticalVelocity = 0;
       localMoveVelocity.set(0, 0, 0);
       localMoveTarget.set(0, 0, 0);
@@ -2790,12 +2991,12 @@ export function attachSocket(activeSocket) {
       camera.position.set(x, EYE_HEIGHT + y, z);
       camera.quaternion.setFromEuler(new THREE.Euler(0, yaw, 0, "YXZ"));
       ensureLocalPlayablePosition();
-      local.ammo.primary = CLASSES[local.classId].primary.magSize;
-      local.ammo.secondary = SECONDARY_WEAPONS[local.secondaryId].magSize;
-      local.grenadeCharges = Object.fromEntries(GRENADE_ORDER.map((id) => [id, GRENADE_CHARGES_PER_LIFE]));
+      local.ammo.primary = 0;
+      local.ammo.secondary = 0;
+      local.grenadeCharges = emptyGrenadeCharges();
       local.grenadeThrowPending = false;
-      weaponRig.visible = true;
-      setViewWeapon("#4c5a3a", CLASSES[local.classId].primary.id);
+      weaponRig.visible = Boolean(currentWeaponMesh);
+      applyInventorySnapshot({ slot, inventory, ammo, grenadeCharges, classId: local.classId, secondaryId: local.secondaryId });
       dom.vehicleStatus.classList.remove("active");
       updateHealthHud(); updateAmmoHud(); updateGrenadeHud();
       dom.deathScreen.hidden = true;
@@ -2806,12 +3007,18 @@ export function attachSocket(activeSocket) {
       if (a && classId && a.classId !== classId) {
         const username = a.username;
         removeAvatar(socketId);
-        spawnOrUpdateRemote({ socketId, username, classId, secondaryId, team, x, y, z, yaw, alive: true });
+        spawnOrUpdateRemote({ socketId, username, classId, secondaryId, team, slot, inventory, x, y, z, yaw, alive: true });
       } else if (a) {
         a.root.visible = true;
         a.root.position.set(x, y, z);
         a.root.rotation.y = yaw;
         a.alive = true;
+        a.classId = classId || a.classId;
+        a.secondaryId = secondaryId || a.secondaryId;
+        a.inventory = inventory || a.inventory || {};
+        a.slot = normalizeSlot(slot);
+        a.weaponId = weaponIdForPlayerState(a, a.slot);
+        updateAvatarGun(a, a.weaponId);
         a.moving = false;
         a.sprinting = false;
         a.jumping = false;

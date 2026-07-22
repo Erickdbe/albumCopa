@@ -49,6 +49,8 @@ assert.ok(shooter && target, "both test players should be in the match");
 
 function shoot(classId, hitZone) {
   shooter.classId = classId;
+  shooter.inventory = { ...(shooter.inventory || {}), primary: true };
+  shooter.slot = "primary";
   shooter.alive = true;
   shooter.x = 0; shooter.y = 0; shooter.z = 0;
   shooter.lastShotAt.primary = 0;

@@ -3,7 +3,7 @@
 const {
   CLASSES, CLASS_IDS,
   SECONDARY_WEAPONS,
-  GRENADES, GRENADE_CHARGES_PER_LIFE,
+  GRENADES,
   MAP_IDS,
   ARENA_HALF,
   MAP_HALF_SIZES,
@@ -25,6 +25,39 @@ const EMOTES = {
   dance: { animation: "dance", speed: 1, durationMs: 6200 },
   dance_fast: { animation: "dance_fast", speed: 1.35, durationMs: 4800 },
   dance_slow: { animation: "dance_slow", speed: 0.72, durationMs: 7600 }
+};
+const EMPTY_SLOT = "hands";
+const SURVIVAL_PICKUP_RADIUS = 3.2;
+const ZOMBIE_ATTACK_RADIUS = 1.42;
+const ZOMBIE_ATTACK_MS = 1250;
+const PRIMARY_CLASS_BY_WEAPON_ID = Object.fromEntries(Object.values(CLASSES).map((classInfo) => [classInfo.primary.id, classInfo.id]));
+const SURVIVAL_LOOT_SPAWNS = {
+  mundo: [
+    { id: "loot-rifle-city-edge", kind: "weapon", slot: "primary", weaponId: "assault_rifle", ammo: 28, x: -73, y: 0.2, z: 41 },
+    { id: "loot-smg-forest-camp", kind: "weapon", slot: "primary", weaponId: "smg", ammo: 32, x: 52, y: 1.6, z: -24 },
+    { id: "loot-sniper-ridge", kind: "weapon", slot: "primary", weaponId: "sniper_rifle", ammo: 5, x: 178, y: 4.2, z: -137 },
+    { id: "loot-pistol-lake", kind: "weapon", slot: "secondary", weaponId: "pistol_common", ammo: 10, x: 104, y: 0.7, z: -38 },
+    { id: "loot-revolver-road", kind: "weapon", slot: "secondary", weaponId: "revolver", ammo: 6, x: -189, y: 0.2, z: -69 },
+    { id: "loot-primary-ammo-town", kind: "ammo", slot: "primary", ammo: 28, x: -218, y: 0.2, z: -176 },
+    { id: "loot-primary-ammo-forest", kind: "ammo", slot: "primary", ammo: 32, x: 138, y: 2.1, z: 28 },
+    { id: "loot-secondary-ammo-bridge", kind: "ammo", slot: "secondary", ammo: 12, x: 71, y: 0.6, z: 87 },
+    { id: "loot-flash-shed", kind: "grenade", grenadeId: "flash", charges: 1, x: -47, y: 0.2, z: -226 },
+    { id: "loot-molotov-woods", kind: "grenade", grenadeId: "molotov", charges: 1, x: 214, y: 3.4, z: -61 },
+    { id: "loot-gas-city", kind: "fuel", amount: 35, x: -238, y: 0.2, z: 71 },
+    { id: "loot-gas-forest", kind: "fuel", amount: 35, x: 91, y: 0.8, z: 69 }
+  ]
+};
+const SURVIVAL_ZOMBIE_SPAWNS = {
+  mundo: [
+    { id: "zombie-forest-01", kind: "basic", x: 88, y: 1.1, z: -78, yaw: 0.2 },
+    { id: "zombie-forest-02", kind: "ribcage", x: 128, y: 1.7, z: -18, yaw: -0.8 },
+    { id: "zombie-forest-03", kind: "chubby", x: 214, y: 3.8, z: -112, yaw: 1.4 },
+    { id: "zombie-lake-01", kind: "basic", x: 154, y: 0.8, z: -42, yaw: -2.1 },
+    { id: "zombie-city-01", kind: "ribcage", x: -143, y: 0.2, z: -198, yaw: 0.4 },
+    { id: "zombie-city-02", kind: "basic", x: -231, y: 0.2, z: -105, yaw: -1.2 },
+    { id: "zombie-road-01", kind: "chubby", x: -54, y: 0.2, z: -112, yaw: 2.4 },
+    { id: "zombie-beach-01", kind: "basic", x: 43, y: 0.4, z: 154, yaw: Math.PI }
+  ]
 };
 
 function normalizeClassId(value) {
@@ -92,6 +125,80 @@ function publicVehicle(vehicle) {
   };
 }
 
+function normalizeWeaponSlot(slot) {
+  if (slot === "primary" || slot === "secondary") return slot;
+  return EMPTY_SLOT;
+}
+
+function makeEmptyGrenades() {
+  return Object.fromEntries(Object.keys(GRENADES).map((id) => [id, 0]));
+}
+
+function publicInventory(player) {
+  return {
+    primary: Boolean(player.inventory?.primary),
+    secondary: Boolean(player.inventory?.secondary),
+    grenades: { ...(player.grenadeCharges || {}) },
+    fuel: Math.max(0, Math.round(Number(player.inventory?.fuel) || 0))
+  };
+}
+
+function publicAmmo(player) {
+  return {
+    primary: Math.max(0, Math.round(Number(player.ammo?.primary) || 0)),
+    secondary: Math.max(0, Math.round(Number(player.ammo?.secondary) || 0))
+  };
+}
+
+function publicLoot(loot) {
+  return {
+    id: loot.id,
+    kind: loot.kind,
+    slot: loot.slot || null,
+    weaponId: loot.weaponId || null,
+    grenadeId: loot.grenadeId || null,
+    ammo: loot.ammo || 0,
+    charges: loot.charges || 0,
+    amount: loot.amount || 0,
+    x: loot.x, y: loot.y, z: loot.z,
+    active: loot.active !== false
+  };
+}
+
+function publicZombie(zombie) {
+  return {
+    id: zombie.id,
+    kind: zombie.kind || "basic",
+    x: zombie.x, y: zombie.y, z: zombie.z,
+    yaw: zombie.yaw || 0,
+    health: zombie.health,
+    maxHealth: zombie.maxHealth,
+    alive: zombie.alive !== false,
+    speedMul: zombie.speedMul || 1
+  };
+}
+
+function makeSurvivalLoot(mapId) {
+  return (SURVIVAL_LOOT_SPAWNS[mapId] || []).map((loot, index) => ({
+    ...loot,
+    id: loot.id || `${mapId}-loot-${index}`,
+    active: true
+  }));
+}
+
+function makeZombies(mapId) {
+  return (SURVIVAL_ZOMBIE_SPAWNS[mapId] || []).map((zombie, index) => ({
+    ...zombie,
+    id: zombie.id || `${mapId}-zombie-${index}`,
+    health: zombie.kind === "chubby" ? 155 : zombie.kind === "ribcage" ? 95 : 115,
+    maxHealth: zombie.kind === "chubby" ? 155 : zombie.kind === "ribcage" ? 95 : 115,
+    alive: true,
+    targetId: null,
+    lastAttackAt: 0,
+    speedMul: 1
+  }));
+}
+
 function createRoomsModule(io) {
   const rooms = new Map();
 
@@ -127,14 +234,16 @@ function createRoomsModule(io) {
       classId: normalizeClassId(className),
       team: null,
       x: 0, y: 0, z: 0, yaw: 0, pitch: 0,
-      moving: false, sprinting: false, jumping: false, crouching: false, prone: false, aiming: false, slot: "primary",
+      moving: false, sprinting: false, jumping: false, crouching: false, prone: false, aiming: false, slot: EMPTY_SLOT,
       moveForward: 0, moveStrafe: 0,
       health: 100,
       alive: true,
       kills: 0,
       deaths: 0,
       score: 0,
-      grenadeCharges: {},
+      grenadeCharges: makeEmptyGrenades(),
+      inventory: { primary: false, secondary: false, fuel: 0 },
+      ammo: { primary: 0, secondary: 0 },
       lastShotAt: { primary: 0, secondary: 0 },
       reloadUntil: { primary: 0, secondary: 0 },
       abilityActive: false,
@@ -159,9 +268,12 @@ function createRoomsModule(io) {
       socketId: p.socketId, username: p.username, classId: p.classId, secondaryId: p.secondaryId, team: p.team,
       x: p.x, y: p.y, z: p.z, yaw: p.yaw, pitch: p.pitch,
       moving: p.moving, sprinting: p.sprinting, jumping: p.jumping, crouching: p.crouching, prone: p.prone,
-      aiming: p.aiming, slot: p.slot,
+      aiming: p.aiming, slot: normalizeWeaponSlot(p.slot),
       health: p.health, alive: p.alive, kills: p.kills, deaths: p.deaths, score: p.score,
-      vehicleId: p.vehicleId || null
+      vehicleId: p.vehicleId || null,
+      inventory: publicInventory(p),
+      ammo: publicAmmo(p),
+      grenadeCharges: { ...(p.grenadeCharges || {}) }
     };
   }
 
@@ -181,6 +293,8 @@ function createRoomsModule(io) {
       mapVotes,
       playerVotes,
       vehicles: (room.vehicles || []).map(publicVehicle),
+      survivalLoot: (room.survivalLoot || []).filter((loot) => loot.active !== false).map(publicLoot),
+      zombies: (room.zombies || []).map(publicZombie),
       worldEvent: room.worldEvent || null,
       worldTime: room.worldTime || null,
       endsAt: room.endsAt || null
@@ -208,6 +322,17 @@ function createRoomsModule(io) {
     return tied.includes(hostVote) ? hostVote : tied[0];
   }
 
+  function resetSurvivalLoadout(player) {
+    player.slot = EMPTY_SLOT;
+    player.aiming = false;
+    player.inventory = { primary: false, secondary: false, fuel: Number(player.inventory?.fuel) || 0 };
+    player.ammo = { primary: 0, secondary: 0 };
+    player.grenadeCharges = makeEmptyGrenades();
+    player.reloadUntil = { primary: 0, secondary: 0 };
+    player.lastShotAt = { primary: 0, secondary: 0 };
+    player.chargeStartedAt = 0;
+  }
+
   function respawnPlayer(room, player, emit = true) {
     if (player.vehicleId) {
       releaseVehicle(room, player, "respawn");
@@ -226,12 +351,12 @@ function createRoomsModule(io) {
     player.crouching = false;
     player.prone = false;
     player.aiming = false;
-    player.slot = "primary";
-    player.grenadeCharges = Object.fromEntries(Object.keys(GRENADES).map((id) => [id, GRENADE_CHARGES_PER_LIFE]));
+    resetSurvivalLoadout(player);
     if (emit) {
       io.to(room.roomId).emit("match:respawn", {
         socketId: player.socketId, x: player.x, y: player.y, z: player.z, yaw: player.yaw, health: player.health,
-        classId: player.classId, secondaryId: player.secondaryId, team: player.team
+        classId: player.classId, secondaryId: player.secondaryId, team: player.team,
+        slot: player.slot, inventory: publicInventory(player), ammo: publicAmmo(player), grenadeCharges: { ...player.grenadeCharges }
       });
       emitRoomUpdate(room);
     }
@@ -308,6 +433,101 @@ function createRoomsModule(io) {
     }
   }
 
+  function grantSurvivalLoot(room, player, loot) {
+    if (!loot || loot.active === false) return null;
+    let consumed = false;
+
+    if (loot.kind === "weapon") {
+      if (loot.slot === "secondary" && SECONDARY_WEAPONS[loot.weaponId]) {
+        player.secondaryId = loot.weaponId;
+        player.inventory.secondary = true;
+        player.ammo.secondary = Math.max(player.ammo.secondary || 0, loot.ammo || SECONDARY_WEAPONS[player.secondaryId].magSize);
+        player.slot = "secondary";
+        consumed = true;
+      } else {
+        const classId = PRIMARY_CLASS_BY_WEAPON_ID[loot.weaponId];
+        if (!classId || !CLASSES[classId]) return null;
+        player.classId = classId;
+        player.inventory.primary = true;
+        player.ammo.primary = Math.max(player.ammo.primary || 0, loot.ammo || CLASSES[player.classId].primary.magSize);
+        player.slot = "primary";
+        consumed = true;
+      }
+    } else if (loot.kind === "ammo") {
+      const slot = loot.slot === "secondary" ? "secondary" : "primary";
+      if (slot === "secondary" && player.inventory.secondary) {
+        player.ammo.secondary = Math.max(player.ammo.secondary || 0, loot.ammo || SECONDARY_WEAPONS[player.secondaryId]?.magSize || 10);
+        consumed = true;
+      } else if (slot === "primary" && player.inventory.primary) {
+        player.ammo.primary = Math.max(player.ammo.primary || 0, loot.ammo || CLASSES[player.classId]?.primary?.magSize || 28);
+        consumed = true;
+      }
+    } else if (loot.kind === "grenade" && GRENADES[loot.grenadeId]) {
+      player.grenadeCharges[loot.grenadeId] = Math.min(3, (player.grenadeCharges[loot.grenadeId] || 0) + Math.max(1, loot.charges || 1));
+      consumed = true;
+    } else if (loot.kind === "fuel") {
+      player.inventory.fuel = Math.min(100, (Number(player.inventory.fuel) || 0) + Math.max(1, loot.amount || 25));
+      consumed = true;
+    }
+
+    if (!consumed) return null;
+    loot.active = false;
+    return {
+      picked: publicLoot(loot),
+      slot: player.slot,
+      inventory: publicInventory(player),
+      ammo: publicAmmo(player),
+      grenadeCharges: { ...(player.grenadeCharges || {}) },
+      classId: player.classId,
+      secondaryId: player.secondaryId
+    };
+  }
+
+  function nearestAlivePlayer(room, zombie) {
+    let target = null;
+    let best = Infinity;
+    room.players.forEach((player) => {
+      if (!player.alive || player.vehicleId) return;
+      const distance = Math.hypot(player.x - zombie.x, player.z - zombie.z);
+      if (distance < best) {
+        best = distance;
+        target = player;
+      }
+    });
+    return { target, distance: best };
+  }
+
+  function updateZombies(room, delta, now) {
+    const zombies = room.zombies || [];
+    if (!zombies.length) return;
+    const night = room.worldTime?.phase === "night";
+    const speedMul = night ? 1.55 : 1;
+    zombies.forEach((zombie) => {
+      if (zombie.alive === false) return;
+      const { target, distance } = nearestAlivePlayer(room, zombie);
+      zombie.speedMul = speedMul;
+      if (!target || distance > 86) {
+        zombie.yaw += Math.sin(now * 0.0004 + zombie.id.length) * delta * 0.4;
+        return;
+      }
+      zombie.targetId = target.socketId;
+      const dx = target.x - zombie.x;
+      const dz = target.z - zombie.z;
+      const length = Math.hypot(dx, dz) || 1;
+      zombie.yaw = Math.atan2(-dx, -dz);
+      if (distance > ZOMBIE_ATTACK_RADIUS) {
+        const baseSpeed = zombie.kind === "chubby" ? 1.35 : zombie.kind === "ribcage" ? 2.15 : 1.85;
+        zombie.x += (dx / length) * baseSpeed * speedMul * delta;
+        zombie.z += (dz / length) * baseSpeed * speedMul * delta;
+      }
+      if (distance <= ZOMBIE_ATTACK_RADIUS + 0.15 && now - (zombie.lastAttackAt || 0) > ZOMBIE_ATTACK_MS / speedMul) {
+        zombie.lastAttackAt = now;
+        applyDamage(room, null, target, night ? 16 : 10, false);
+        io.to(room.roomId).emit("survival:zombie-attack", { zombieId: zombie.id, targetSocketId: target.socketId });
+      }
+    });
+  }
+
   function releaseVehicle(room, player, reason = "exit") {
     if (!player?.vehicleId) return null;
     const vehicle = room.vehicles?.find((item) => item.id === player.vehicleId);
@@ -326,7 +546,8 @@ function createRoomsModule(io) {
       io.to(room.roomId).volatile.emit("match:player-move", {
         socketId: player.socketId, x: player.x, y: player.y, z: player.z,
         yaw: player.yaw, pitch: player.pitch,
-        moving: false, sprinting: false, jumping: false, crouching: false, prone: false, aiming: false, slot: player.slot
+        moving: false, sprinting: false, jumping: false, crouching: false, prone: false, aiming: false, slot: normalizeWeaponSlot(player.slot),
+        classId: player.classId, secondaryId: player.secondaryId, inventory: publicInventory(player)
       });
     }
     io.to(player.socketId).emit("vehicle:exited", { reason, x: player.x, y: player.y, z: player.z });
@@ -675,6 +896,8 @@ function createRoomsModule(io) {
     room.startedAt = Date.now();
     room.vehicles = makeVehicles(room.settings.mapId);
     room.worldObjects = new Map();
+    room.survivalLoot = makeSurvivalLoot(room.settings.mapId);
+    room.zombies = makeZombies(room.settings.mapId);
     room.worldEvent = null;
     room.worldTime = worldTimeForRoom(room, room.startedAt);
     room.worldTick = 0;
@@ -685,6 +908,7 @@ function createRoomsModule(io) {
       room.worldEvent = event;
       room.worldTime = worldTimeForRoom(room, now);
       updateVehicles(room, WORLD_TICK_MS / 1000, now);
+      updateZombies(room, WORLD_TICK_MS / 1000, now);
       applyWorldEventForces(room, event, now);
       room.worldTick += 1;
       if (room.worldTick % 2 === 0) {
@@ -695,6 +919,9 @@ function createRoomsModule(io) {
       }
       if (room.worldTick % 10 === 0) {
         io.to(room.roomId).volatile.emit("arena-world:time", room.worldTime);
+      }
+      if (room.worldTick % 4 === 0) {
+        io.to(room.roomId).volatile.emit("survival:zombies", room.zombies.map(publicZombie));
       }
     }, WORLD_TICK_MS);
   }
@@ -734,8 +961,16 @@ function createRoomsModule(io) {
   }
 
   function weaponFor(player, slot) {
-    if (slot === "secondary") return SECONDARY_WEAPONS[player.secondaryId] || null;
-    return CLASSES[player.classId].primary;
+    const normalizedSlot = normalizeWeaponSlot(slot);
+    if (normalizedSlot === "secondary") {
+      if (player.inventory && !player.inventory.secondary) return null;
+      return SECONDARY_WEAPONS[player.secondaryId] || null;
+    }
+    if (normalizedSlot === "primary") {
+      if (player.inventory && !player.inventory.primary) return null;
+      return CLASSES[player.classId]?.primary || null;
+    }
+    return null;
   }
 
   function removePlayer(socketId, reason = "") {
@@ -784,6 +1019,8 @@ function createRoomsModule(io) {
         mapVotes: new Map(),
         vehicles: [],
         worldObjects: new Map(),
+        survivalLoot: [],
+        zombies: [],
         worldEvent: null,
         worldTimer: null,
         timer: null,
@@ -948,7 +1185,9 @@ function createRoomsModule(io) {
       const attacker = room.players.find((item) => item.socketId === socket.id);
       const vehicle = room.vehicles.find((item) => item.id === String(vehicleId || ""));
       if (!attacker || !attacker.alive || !vehicle || vehicle.destroyed || vehicle.driverId === socket.id) return;
-      const weapon = weaponFor(attacker, slot === "secondary" ? "secondary" : "primary");
+      const hitSlot = normalizeWeaponSlot(slot);
+      if (hitSlot === EMPTY_SLOT) return;
+      const weapon = weaponFor(attacker, hitSlot);
       if (!weapon || distance3(attacker, vehicle) > weapon.range * RANGE_TOLERANCE + 5) return;
       const now = Date.now();
       if (now - attacker.lastEnvironmentHitAt < Math.max(55, weapon.fireRateMs * 0.7)) return;
@@ -1089,6 +1328,51 @@ function createRoomsModule(io) {
       applyDamage(room, null, player, Math.max(0, Math.min(10, Number(damage) || 0)), false);
     });
 
+    socket.on("survival:pickup", ({ lootId } = {}) => {
+      const room = findRoomBySocket(socket.id);
+      const player = room?.players.find((item) => item.socketId === socket.id);
+      if (!room || room.status !== "playing" || !player?.alive || player.vehicleId) return;
+      const loot = (room.survivalLoot || []).find((item) => item.id === String(lootId || "") && item.active !== false);
+      if (!loot) return;
+      const distance = Math.hypot(player.x - loot.x, player.z - loot.z);
+      if (distance > SURVIVAL_PICKUP_RADIUS || Math.abs((player.y || 0) - (loot.y || 0)) > 5) return;
+      const result = grantSurvivalLoot(room, player, loot);
+      if (!result) return;
+      io.to(room.roomId).emit("survival:loot-picked", { lootId: loot.id, socketId: socket.id });
+      socket.emit("survival:inventory", result);
+      socket.to(room.roomId).volatile.emit("match:player-move", {
+        socketId: socket.id, x: player.x, y: player.y, z: player.z, yaw: player.yaw, pitch: player.pitch,
+        moving: player.moving, sprinting: player.sprinting, jumping: player.jumping, crouching: player.crouching, prone: player.prone,
+        aiming: player.aiming, slot: player.slot, classId: player.classId, secondaryId: player.secondaryId, inventory: publicInventory(player),
+        moveForward: player.moveForward, moveStrafe: player.moveStrafe
+      });
+    });
+
+    socket.on("survival:zombie-hit", ({ zombieId, slot, pelletHits } = {}) => {
+      const room = findRoomBySocket(socket.id);
+      const player = room?.players.find((item) => item.socketId === socket.id);
+      if (!room || room.status !== "playing" || !player?.alive) return;
+      const hitSlot = normalizeWeaponSlot(slot);
+      if (hitSlot === EMPTY_SLOT) return;
+      const weapon = weaponFor(player, hitSlot);
+      const zombie = (room.zombies || []).find((item) => item.id === String(zombieId || "") && item.alive !== false);
+      if (!weapon || !zombie) return;
+      if (Math.hypot(player.x - zombie.x, player.z - zombie.z) > weapon.range * RANGE_TOLERANCE + 8) return;
+      const now = Date.now();
+      if (now - (player.lastEnvironmentHitAt || 0) < Math.max(55, weapon.fireRateMs * 0.55)) return;
+      player.lastEnvironmentHitAt = now;
+      const pellets = Math.max(1, Math.min(weapon.pellets || 1, Number(pelletHits) || 1));
+      zombie.health = Math.max(0, zombie.health - Math.round(weapon.damage * pellets));
+      if (zombie.health <= 0) {
+        zombie.alive = false;
+        player.score += 1;
+        io.to(room.roomId).emit("survival:zombie-killed", { zombieId: zombie.id, byId: socket.id, zombies: room.zombies.map(publicZombie) });
+        checkScoreLimit(room);
+      } else {
+        io.to(room.roomId).emit("survival:zombie-damaged", { zombieId: zombie.id, health: zombie.health, byId: socket.id });
+      }
+    });
+
     socket.on("match:move", (state = {}) => {
       const room = findRoomBySocket(socket.id);
       if (!room || room.status !== "playing") return;
@@ -1114,8 +1398,9 @@ function createRoomsModule(io) {
         player.crouching = false;
         player.sprinting = false;
       }
-      player.aiming = Boolean(state.aiming);
-      player.slot = state.slot === "secondary" ? "secondary" : "primary";
+      const requestedSlot = normalizeWeaponSlot(state.slot);
+      player.slot = weaponFor(player, requestedSlot) ? requestedSlot : EMPTY_SLOT;
+      player.aiming = Boolean(state.aiming) && Boolean(weaponFor(player, player.slot));
       player.moveForward = Math.max(-1, Math.min(1, num(state.moveForward, 0)));
       player.moveStrafe = Math.max(-1, Math.min(1, num(state.moveStrafe, 0)));
       if ((player.moving || player.jumping) && player.emoteId) {
@@ -1125,7 +1410,7 @@ function createRoomsModule(io) {
       socket.to(room.roomId).volatile.emit("match:player-move", {
         socketId: socket.id, x: player.x, y: player.y, z: player.z, yaw: player.yaw, pitch: player.pitch,
         moving: player.moving, sprinting: player.sprinting, jumping: player.jumping, crouching: player.crouching, prone: player.prone,
-        aiming: player.aiming, slot: player.slot,
+        aiming: player.aiming, slot: player.slot, classId: player.classId, secondaryId: player.secondaryId, inventory: publicInventory(player),
         moveForward: player.moveForward, moveStrafe: player.moveStrafe
       });
     });
@@ -1135,7 +1420,9 @@ function createRoomsModule(io) {
       if (!room || room.status !== "playing") return;
       const player = room.players.find((p) => p.socketId === socket.id);
       if (!player || !player.alive) return;
-      const weapon = weaponFor(player, slot === "secondary" ? "secondary" : "primary");
+      const chargeSlot = normalizeWeaponSlot(slot);
+      if (chargeSlot === EMPTY_SLOT) return;
+      const weapon = weaponFor(player, chargeSlot);
       if (weapon?.chargeable) player.chargeStartedAt = Date.now();
     });
 
@@ -1150,17 +1437,19 @@ function createRoomsModule(io) {
       if (!room || room.status !== "playing") return;
       const shooter = room.players.find((p) => p.socketId === socket.id);
       if (!shooter || !shooter.alive) return;
-      if (slot === "secondary" && !room.settings.secondaryEnabled) return;
+      const shotSlot = normalizeWeaponSlot(slot);
+      if (shotSlot === EMPTY_SLOT) return;
+      if (shotSlot === "secondary" && !room.settings.secondaryEnabled) return;
 
-      const weapon = weaponFor(shooter, slot === "secondary" ? "secondary" : "primary");
+      const weapon = weaponFor(shooter, shotSlot);
       if (!weapon) return;
       const now = Date.now();
       const isAbilityFireRate = shooter.abilityActive && now < shooter.abilityExpiresAt && CLASSES[shooter.classId].ability.id === abilityFireRateBoost(shooter.classId);
       const fireRate = isAbilityFireRate ? weapon.fireRateMs * 0.5 : weapon.fireRateMs;
-      if (now < (shooter.reloadUntil[slot] || 0)) return;
-      if (now - (shooter.lastShotAt[slot] || 0) < fireRate * 0.88) return;
+      if (now < (shooter.reloadUntil[shotSlot] || 0)) return;
+      if (now - (shooter.lastShotAt[shotSlot] || 0) < fireRate * 0.88) return;
 
-      shooter.lastShotAt[slot] = now;
+      shooter.lastShotAt[shotSlot] = now;
       const fallbackOrigin = { x: shooter.x, y: shooter.y + 1.45, z: shooter.z };
       const finite = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
       let safeOrigin = {
@@ -1182,7 +1471,7 @@ function createRoomsModule(io) {
         range: Math.max(2, Math.min(weapon.range, finite(ballistics?.range, weapon.range)))
       };
       socket.to(room.roomId).volatile.emit("match:shot-fired", {
-        socketId: socket.id, slot, weaponId: weapon.id,
+        socketId: socket.id, slot: shotSlot, weaponId: weapon.id,
         origin: safeOrigin, direction: safeDirection, ballistics: safeBallistics
       });
 
@@ -1223,13 +1512,15 @@ function createRoomsModule(io) {
       if (!room || room.status !== "playing") return;
       const player = room.players.find((p) => p.socketId === socket.id);
       if (!player || !player.alive) return;
-      const weapon = weaponFor(player, slot === "secondary" ? "secondary" : "primary");
+      const reloadSlot = normalizeWeaponSlot(slot);
+      if (reloadSlot === EMPTY_SLOT) return;
+      const weapon = weaponFor(player, reloadSlot);
       if (!weapon || weapon.kind === "melee") return;
-      player.reloadUntil[slot === "secondary" ? "secondary" : "primary"] = Date.now() + weapon.reloadMs;
+      player.reloadUntil[reloadSlot] = Date.now() + weapon.reloadMs;
       socket.to(room.roomId).emit("match:reload-started", {
         socketId: socket.id,
         weaponId: weapon.id,
-        slot: slot === "secondary" ? "secondary" : "primary",
+        slot: reloadSlot,
         durationMs: weapon.reloadMs
       });
     });

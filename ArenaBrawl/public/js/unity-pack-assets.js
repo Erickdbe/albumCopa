@@ -4,7 +4,8 @@ import { FBXLoader } from "three/addons/loaders/FBXLoader.js";
 const PACK_ROOTS = {
   city: "./assets/unity-packs/simplepoly-city/",
   guns: "./assets/unity-packs/free-guns/",
-  vehicles: "./assets/unity-packs/vehicles/"
+  vehicles: "./assets/unity-packs/vehicles/",
+  fantasy: "./assets/models/fantasy-mountain/"
 };
 
 const CITY_TEXTURES = {
@@ -53,6 +54,19 @@ const VEHICLE_MODELS = {
   car_blue: { file: "car_blue.fbx", size: 3.25, rotationY: Math.PI },
   motorcycle: { file: "scooter_green.fbx", size: 2.55, rotationY: Math.PI },
   plane: { file: "light_plane_yellow.fbx", size: 7.4, rotationY: Math.PI }
+};
+
+const FANTASY_TEXTURES = {
+  "Bridge01.fbx": "textures/Bridge01_ALB.png",
+  "Bush01.fbx": "textures/Bush01_ALB.png",
+  "Flower01.fbx": "textures/Flower01_ALB.png",
+  "Flowers01.fbx": "textures/Flower01_ALB.png",
+  "Grass01.fbx": "textures/Grass01_ALB.png",
+  "Mountain01.fbx": "textures/Rock01_ALB.png",
+  "Pebbles01.fbx": "textures/Rock01_ALB.png",
+  "Rock01.fbx": "textures/Rock01_ALB.png",
+  "Rock02.fbx": "textures/Rock01_ALB.png",
+  "Tree01.fbx": "textures/Leaf01_ALB.png"
 };
 
 const sourcePromises = new Map();
@@ -118,6 +132,10 @@ async function loadSource(pack, file) {
 async function textureFor(pack, file) {
   if (pack === "guns") return packTexture(pack, "T_PropsFreeGun_BaseColor.png");
   if (pack === "vehicles") return packTexture(pack, "texture_main.png");
+  if (pack === "fantasy") {
+    const basename = file.split("/").pop();
+    return FANTASY_TEXTURES[basename] ? packTexture(pack, FANTASY_TEXTURES[basename]) : null;
+  }
   const textureName = CITY_TEXTURES[file];
   return textureName ? packTexture(pack, textureName) : null;
 }
@@ -176,6 +194,11 @@ export async function attachUnityPackModel(parent, pack, file, options = {}) {
 
 export function attachCityModel(parent, file, options = {}) {
   return attachUnityPackModel(parent, "city", file, options);
+}
+
+export function attachFantasyMountainModel(parent, file, options = {}) {
+  const resolvedFile = file.includes("/") ? file : `models/${file}`;
+  return attachUnityPackModel(parent, "fantasy", resolvedFile, options);
 }
 
 export function attachFreeGunModel(parent, weaponId, options = {}) {

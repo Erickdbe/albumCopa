@@ -6093,6 +6093,16 @@
             </div>
           </article>
 
+          <article class="game-card featured">
+            <img src="/assets/game-covers/brasfoot-online.svg" alt="" loading="eager">
+            <div class="game-card-body">
+              <span>Manager online</span>
+              <h3>Brasfoot Online</h3>
+              <p>Monte seu clube, entre em ligas e chame quem estiver logado.</p>
+              <button type="button" onclick="createBrasfootRoom()">Modo online</button>
+            </div>
+          </article>
+
           <article class="game-card">
             <img src="/assets/game-covers/retro-arena.jpg" alt="" loading="lazy">
             <div class="game-card-body">
@@ -6333,6 +6343,7 @@
         <button class="mp-btn adventure3d-open-btn" type="button" onclick="window.location.href='/aventura3d/'">Aventura 3D</button>
         <button class="mp-btn cs16-open-btn" type="button" onclick="openCs16Picker()">CS 1.6</button>
         <button class="mp-btn cardwars-open-btn" type="button" onclick="createCardWarsRoom()">Card Wars Online</button>
+        <button class="mp-btn cardwars-open-btn" type="button" onclick="createBrasfootRoom()">Brasfoot Online</button>
         <button class="mp-btn loan-open-btn" type="button" onclick="openLoanPanel()">Empréstimo</button>
         <button class="mp-btn blackjack-open-btn" type="button" onclick="createBlackjackRoom()">Mesa 21</button>
         <button class="mp-btn horse-open-btn" type="button" onclick="createHorseRoom()">🏇 Corrida</button>
@@ -6509,6 +6520,15 @@
     <div class="challenge-toast-btns">
       <button class="btn-accept" onclick="acceptCardWarsInvite()">Entrar</button>
       <button class="btn-reject" onclick="rejectCardWarsInvite()">Agora nao</button>
+    </div>
+  </div>
+
+  <div class="challenge-toast hidden" id="brasfootInviteToast">
+    <h4>Brasfoot Online</h4>
+    <p id="brasfootInviteMsg"></p>
+    <div class="challenge-toast-btns">
+      <button class="btn-accept" onclick="acceptBrasfootInvite()">Entrar</button>
+      <button class="btn-reject" onclick="rejectBrasfootInvite()">Agora nao</button>
     </div>
   </div>
 
@@ -9620,6 +9640,7 @@
       cs16InviteChallengeId: null,
       cs16PendingChallengeId: null,
       cardWarsInviteRoomId: null,
+      brasfootInviteRoomId: null,
       cardWarsRoomId: null,
       cardWarsRoom: null,
       headInviteRoomId: null,
@@ -10325,6 +10346,41 @@
         document.getElementById("retroArenaInviteToast").classList.remove("hidden");
       });
 
+      mp.socket.on("brasfoot:invite", ({ roomId, fromUsername }) => {
+        if (!roomId) return;
+        mp.brasfootInviteRoomId = roomId;
+        document.getElementById("brasfootInviteMsg").textContent =
+          `${fromUsername} abriu uma sala de Brasfoot Online. Entre para assumir um clube.`;
+        document.getElementById("brasfootInviteToast").classList.remove("hidden");
+      });
+
+      mp.socket.on("brasfoot:created", ({ url, invitedCount }) => {
+        document.getElementById("waitingOverlay").classList.add("hidden");
+        document.getElementById("lobbyOverlay").classList.add("hidden");
+        showToast(`Convites de Brasfoot enviados para ${Number(invitedCount) || 0} jogador(es) online.`);
+        if (url) window.location.href = url;
+      });
+
+      mp.socket.on("brasfoot:launch", ({ url }) => {
+        mp.brasfootInviteRoomId = null;
+        document.getElementById("brasfootInviteToast").classList.add("hidden");
+        document.getElementById("lobbyOverlay").classList.add("hidden");
+        if (url) window.location.href = url;
+      });
+
+      mp.socket.on("brasfoot:player-joined", ({ username }) => {
+        if (username) showToast(`${username} entrou na sala de Brasfoot.`);
+      });
+
+      mp.socket.on("brasfoot:rejected", ({ username }) => {
+        if (username) showToast(`${username} recusou o Brasfoot Online.`);
+      });
+
+      mp.socket.on("brasfoot:error", (msg) => {
+        document.getElementById("waitingOverlay").classList.add("hidden");
+        showToast(msg || "Nao foi possivel abrir Brasfoot Online.");
+      });
+
       mp.socket.on("cs16:sent", ({ challengeId, toUsername }) => {
         mp.cs16PendingChallengeId = challengeId;
         document.getElementById("waitingMsg").textContent =
@@ -10512,7 +10568,8 @@
         pirate: "Pirate Bomb",
         adventure: "Aventura PVP",
         cs16: "Counter-Strike 1.6",
-        cardwars: "Card Wars"
+        cardwars: "Card Wars",
+        brasfoot: "Brasfoot Online"
       };
       return labels[game] || "Em jogo";
     }
@@ -11089,6 +11146,17 @@
       }
       openLobby();
       showToast("Escolha um jogador disponivel e clique em CS 1.6.");
+    }
+
+    function createBrasfootRoom() {
+      if (!mp.isOnline || !mp.socket?.connected) {
+        showToast("Faca login para abrir Brasfoot Online.");
+        document.getElementById("authOverlay").classList.remove("hidden");
+        return;
+      }
+      document.getElementById("waitingMsg").textContent = "Abrindo Brasfoot Online e enviando convites...";
+      document.getElementById("waitingOverlay").classList.remove("hidden");
+      mp.socket.emit("brasfoot:create");
     }
 
     function sendChallenge(toSocketId, toUsername) {
@@ -14116,6 +14184,22 @@
     function rejectRetroArenaInvite() {
       mp.retroArenaInviteRoomId = null;
       document.getElementById("retroArenaInviteToast").classList.add("hidden");
+    }
+
+    function acceptBrasfootInvite() {
+      if (!mp.brasfootInviteRoomId) return;
+      const roomId = mp.brasfootInviteRoomId;
+      mp.brasfootInviteRoomId = null;
+      document.getElementById("brasfootInviteToast").classList.add("hidden");
+      mp.socket.emit("brasfoot:join", { roomId });
+    }
+
+    function rejectBrasfootInvite() {
+      if (mp.brasfootInviteRoomId) {
+        mp.socket?.emit("brasfoot:reject", { roomId: mp.brasfootInviteRoomId });
+      }
+      mp.brasfootInviteRoomId = null;
+      document.getElementById("brasfootInviteToast").classList.add("hidden");
     }
 
     function clearCardWarsLobbyState() {

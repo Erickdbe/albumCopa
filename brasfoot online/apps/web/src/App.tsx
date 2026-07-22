@@ -84,7 +84,7 @@ export function App() {
   return (
     <MantineProvider defaultColorScheme="light" theme={{ primaryColor: "green" }}>
       <Notifications />
-      <BrowserRouter>
+      <BrowserRouter basename="/brasfoot-online">
         <AuthProvider>
           <Shell>
             <Routes>

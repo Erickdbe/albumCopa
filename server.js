@@ -893,11 +893,21 @@ app.use((req, res, next) => {
   if (req.originalUrl === "/ArenaBrawl") {
     return res.redirect(301, "/ArenaBrawl/");
   }
+  if (req.originalUrl === "/brasfoot-online") {
+    return res.redirect(301, "/brasfoot-online/");
+  }
   return next();
 });
 app.use("/ArenaBrawl", express.static(path.join(__dirname, "ArenaBrawl", "public")));
 app.use("/DeckHeroes", express.static(path.join(__dirname, "DeckHeroes", "public")));
 app.use("/RetroArena", express.static(path.join(__dirname, "RetroArena", "public")));
+const BRASFOOT_WEB_DIST = path.join(__dirname, "brasfoot online", "apps", "web", "dist");
+app.use("/brasfoot-online", express.static(BRASFOOT_WEB_DIST));
+app.get("/brasfoot-online/*", (req, res, next) => {
+  const indexFile = path.join(BRASFOOT_WEB_DIST, "index.html");
+  if (fs.existsSync(indexFile)) return res.sendFile(indexFile);
+  return next();
+});
 app.use(express.static(path.join(__dirname)));
 
 // Rota raiz → abre o álbum
@@ -1452,6 +1462,7 @@ const relicRooms         = new Map();   // roomId -> caca as reliquias em arena
 const pirateRooms        = new Map();   // roomId -> Pirate Bomb em plataforma
 const adventureRooms     = new Map();   // roomId -> Aventura PVP top-down
 const cardWarsRooms      = new Map();   // roomId -> Card Wars Unity online shell
+const brasfootRooms      = new Map();   // roomId -> sala/temporada BrFut externa
 const horrorRooms        = new Map();   // roomId -> Casa Sombria cooperativo
 const pendingCs16Challenges = new Map(); // challengeId -> convite individual de CS 1.6
 const cs16Rooms           = new Map();   // roomId -> sessao no servidor dedicado
@@ -1459,6 +1470,7 @@ const fpsRooms            = new Map();   // roomId -> Arena FPS estilo Krunker
 const HORROR_MAX_PLAYERS = 4;
 const CARD_WARS_RECONNECT_GRACE_MS = 30000;
 const CS16_RECONNECT_GRACE_MS = 45000;
+const BRASFOOT_ROOM_TTL_MS = 30 * 60 * 1000;
 let adventurePvp         = null;
 let fpsShooter            = null;
 let arenaBrawl            = null;
@@ -6297,6 +6309,59 @@ function resumeCs16Player(room, socket) {
   return player;
 }
 
+function cleanupBrasfootRooms() {
+  const now = Date.now();
+  for (const [roomId, room] of brasfootRooms) {
+    if (now > Number(room.expiresAt || 0)) {
+      brasfootRooms.delete(roomId);
+    }
+  }
+}
+
+function brasfootUrl(roomId, role = "manager") {
+  const params = new URLSearchParams({
+    online: "1",
+    room: roomId,
+    role
+  });
+  return `/brasfoot-online/?${params.toString()}`;
+}
+
+function makeBrasfootPlayer(socket, role = "manager") {
+  return {
+    socketId: socket.id,
+    userId: socket.userId,
+    username: socket.username,
+    avatar: socket.avatar || "",
+    role,
+    joinedAt: Date.now()
+  };
+}
+
+function setOnlineBrasfoot(socketId, roomId) {
+  const online = onlinePlayers.get(socketId);
+  if (!online) return;
+  online.inGame = true;
+  online.roomId = roomId;
+  online.game = "brasfoot";
+}
+
+function clearOnlineBrasfoot(socketId, roomId = null) {
+  const online = onlinePlayers.get(socketId);
+  if (!online || online.game !== "brasfoot") return;
+  if (roomId && online.roomId !== roomId) return;
+  online.inGame = false;
+  online.roomId = null;
+  online.game = null;
+}
+
+function findBrasfootRoomBySocket(socketId) {
+  for (const room of brasfootRooms.values()) {
+    if (room.players.some(player => player.socketId === socketId)) return room;
+  }
+  return null;
+}
+
 io.on("connection", (socket) => {
   console.log(`[+] ${socket.username} conectado`);
   const connectedUser = normalizeUserProgress(db.findUser("id", socket.userId));
@@ -6334,6 +6399,101 @@ io.on("connection", (socket) => {
   arenaBrawl?.bindSocket(socket);
   retroArena?.bindSocket(socket);
   deckHeroes?.bindSocket(socket);
+
+  socket.on("brasfoot:create", () => {
+    cleanupBrasfootRooms();
+    const player = onlinePlayers.get(socket.id);
+    if (!player)
+      return socket.emit("brasfoot:error", "Faca login para abrir Brasfoot Online.");
+    if (player.inGame)
+      return socket.emit("brasfoot:error", "Voce ja esta em uma partida.");
+
+    const roomId = `brasfoot-${Date.now()}-${socket.userId}`;
+    const room = {
+      roomId,
+      hostSocketId: socket.id,
+      hostUserId: socket.userId,
+      hostUsername: socket.username,
+      createdAt: Date.now(),
+      expiresAt: Date.now() + BRASFOOT_ROOM_TTL_MS,
+      players: [makeBrasfootPlayer(socket, "host")]
+    };
+    brasfootRooms.set(roomId, room);
+    socket.join(roomId);
+    setOnlineBrasfoot(socket.id, roomId);
+
+    let invitedCount = 0;
+    for (const [, target] of onlinePlayers) {
+      if (target.socketId === socket.id || target.inGame) continue;
+      invitedCount += 1;
+      io.to(target.socketId).emit("brasfoot:invite", {
+        roomId,
+        fromUsername: socket.username,
+        url: brasfootUrl(roomId, "guest")
+      });
+    }
+
+    socket.emit("brasfoot:created", {
+      roomId,
+      invitedCount,
+      url: brasfootUrl(roomId, "host")
+    });
+    emitSystemChat(`${socket.username} abriu uma sala de Brasfoot Online.`, "brasfoot", { roomId, game: "brasfoot" });
+    broadcastOnlineList();
+  });
+
+  socket.on("brasfoot:join", ({ roomId } = {}) => {
+    cleanupBrasfootRooms();
+    const room = brasfootRooms.get(String(roomId || ""));
+    if (!room)
+      return socket.emit("brasfoot:error", "Sala de Brasfoot indisponivel ou expirada.");
+    const player = onlinePlayers.get(socket.id);
+    if (!player)
+      return socket.emit("brasfoot:error", "Faca login para entrar no Brasfoot Online.");
+    if (player.inGame && !(player.game === "brasfoot" && player.roomId === room.roomId))
+      return socket.emit("brasfoot:error", "Voce ja esta em uma partida.");
+
+    const existing = room.players.find(item => Number(item.userId) === Number(socket.userId));
+    if (existing) {
+      existing.socketId = socket.id;
+      existing.username = socket.username;
+      existing.avatar = socket.avatar || existing.avatar || "";
+    } else {
+      room.players.push(makeBrasfootPlayer(socket, "guest"));
+    }
+    socket.join(room.roomId);
+    setOnlineBrasfoot(socket.id, room.roomId);
+    io.to(room.hostSocketId).emit("brasfoot:player-joined", {
+      roomId: room.roomId,
+      username: socket.username
+    });
+    socket.emit("brasfoot:launch", {
+      roomId: room.roomId,
+      url: brasfootUrl(room.roomId, "guest")
+    });
+    broadcastOnlineList();
+  });
+
+  socket.on("brasfoot:reject", ({ roomId } = {}) => {
+    const room = brasfootRooms.get(String(roomId || ""));
+    if (room?.hostSocketId) {
+      io.to(room.hostSocketId).emit("brasfoot:rejected", {
+        roomId: room.roomId,
+        username: socket.username
+      });
+    }
+  });
+
+  socket.on("brasfoot:leave", ({ roomId } = {}) => {
+    const room = brasfootRooms.get(String(roomId || "")) || findBrasfootRoomBySocket(socket.id);
+    if (room) {
+      room.players = room.players.filter(player => player.socketId !== socket.id);
+      socket.leave(room.roomId);
+      if (!room.players.length) brasfootRooms.delete(room.roomId);
+    }
+    clearOnlineBrasfoot(socket.id, room?.roomId || null);
+    broadcastOnlineList();
+  });
 
   socket.on("cs16:challenge", ({ toSocketId }) => {
     const challenger = onlinePlayers.get(socket.id);

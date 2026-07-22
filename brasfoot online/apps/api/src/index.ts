@@ -15,6 +15,7 @@ import { apiRateLimit } from "./middleware/apiRateLimit.js";
 assertProductionConfig();
 
 const app = express();
+app.set("trust proxy", 1);
 
 const allowedOrigins = (process.env.CORS_ORIGIN ?? "http://localhost:5173")
   .split(",")

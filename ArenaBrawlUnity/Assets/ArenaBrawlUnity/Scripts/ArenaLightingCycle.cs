@@ -13,6 +13,9 @@ namespace ArenaBrawl.UnityGame
 
         private float timeOfDay = 0.28f;
 
+        public float NormalizedTime => timeOfDay;
+        public bool IsNight => Mathf.Abs(timeOfDay - 0.5f) < 0.24f;
+
         private void Reset()
         {
             sun = GetComponent<Light>();

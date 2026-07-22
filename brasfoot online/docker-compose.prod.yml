@@ -1,0 +1,92 @@
+# Production-shaped compose file — wires the whole stack (infra + all 4
+# app images) together as a reference for wherever this actually gets
+# deployed (a single VPS, a platform that speaks docker-compose, etc).
+# Not meant to replace a real decision about hosting/secrets — every env
+# var below with a placeholder MUST be overridden before this goes near
+# the internet.
+#
+# One-time setup after first `up`:
+#   docker compose -f docker-compose.prod.yml exec api npx prisma migrate deploy --schema packages/db/prisma/schema.prisma
+#   docker compose -f docker-compose.prod.yml exec api npm run seed -w @brfut/db   # optional, seeds a demo league
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: brfut
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set a real password}
+      POSTGRES_DB: brfut
+    volumes:
+      - brfut_postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - brfut_redis_data:/data
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - postgres
+      - redis
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://brfut:${POSTGRES_PASSWORD:?set a real password}@postgres:5432/brfut?schema=public
+      REDIS_URL: redis://redis:6379
+      PORT: 4000
+      JWT_SECRET: ${JWT_SECRET:?set a real random secret, at least 32 chars}
+      JWT_EXPIRES_IN: 7d
+      CORS_ORIGIN: ${CORS_ORIGIN:?set the real web origin, e.g. https://app.example.com}
+      FOOTBALL_DATA_API_KEY: ${FOOTBALL_DATA_API_KEY:-}
+    ports:
+      - "4000:4000"
+
+  worker:
+    build:
+      context: .
+      dockerfile: apps/worker/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - postgres
+      - redis
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://brfut:${POSTGRES_PASSWORD:?set a real password}@postgres:5432/brfut?schema=public
+      REDIS_URL: redis://redis:6379
+
+  realtime:
+    build:
+      context: .
+      dockerfile: apps/realtime/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - postgres
+      - redis
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://brfut:${POSTGRES_PASSWORD:?set a real password}@postgres:5432/brfut?schema=public
+      REDIS_URL: redis://redis:6379
+      PORT: 4001
+      CORS_ORIGIN: ${CORS_ORIGIN:?set the real web origin, e.g. https://app.example.com}
+    ports:
+      - "4001:4001"
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL:?set the public API URL baked into the frontend build}
+        VITE_REALTIME_URL: ${VITE_REALTIME_URL:?set the public realtime URL baked into the frontend build}
+    restart: unless-stopped
+    ports:
+      - "80:80"
+
+volumes:
+  brfut_postgres_data:
+  brfut_redis_data:

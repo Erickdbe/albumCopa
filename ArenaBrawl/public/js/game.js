@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { PointerLockControls } from "three/addons/controls/PointerLockControls.js";
 import { BloomEffect, EffectComposer, EffectPass, RenderPass, VignetteEffect } from "postprocessing";
-import { buildMap } from "./maps.js";
+import { buildMap } from "./maps.js?v=20260722-2";
 import { buildWeaponModel, setBowChargeVisual } from "./weapon-models.js";
 import { buildVehicleModel, createAirBomb, createCannonProjectile, createExplosion } from "./vehicle-models.js";
 import { emitExplosionFx, emitImpactFx, emitMuzzleFx, emitNapalmExplosionFx, preloadWarFx } from "./war-fx.js";
@@ -14,7 +14,7 @@ import {
   syncSurvivalLoot,
   syncSurvivalZombies,
   updateSurvivalWorld
-} from "./survival-world.js";
+} from "./survival-world.js?v=20260722-2";
 import {
   attachAnimatedCharacter,
   playCharacterAction,
@@ -22,7 +22,7 @@ import {
   setCharacterAiming,
   setCharacterAnimation,
   updateCharacterPose
-} from "./character-model.js?v=20260715-3";
+} from "./character-model.js?v=20260722-2";
 import { attachMeshyModel } from "./meshy-assets.js";
 import {
   unlockAudio, playWeaponSound, playImpactSound, playExplosionSound, playReloadSound,

@@ -46,8 +46,15 @@ function prepareMaterials(model, relativePath, tint = null) {
     const prepared = materials.map((source) => {
       const profile = profileFor(relativePath, source?.name, child.name);
       const material = new THREE.MeshStandardMaterial(profile);
-      if (source?.color) material.color.copy(source.color).lerp(new THREE.Color(profile.color), 0.55);
+      const profileColor = new THREE.Color(profile.color);
+      const sourceColor = source?.color?.clone?.();
+      if (sourceColor && sourceColor.r + sourceColor.g + sourceColor.b > 0.18) {
+        material.color.copy(profileColor).lerp(sourceColor, 0.18);
+      } else {
+        material.color.copy(profileColor);
+      }
       if (tintColor) material.color.lerp(tintColor, 0.28);
+      material.side = THREE.DoubleSide;
       material.needsUpdate = true;
       return material;
     });

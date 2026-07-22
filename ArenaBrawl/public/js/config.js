@@ -116,7 +116,7 @@ export const VEHICLE_SPAWNS = {
     { id: "beach-car-dunes", type: "car", x: 54, y: 0, z: -64, yaw: -0.7 }
   ],
   alagado: [
-    { id: "flooded-pickup-gate", type: "car", x: -18, y: 0.18, z: -148, yaw: 0.05 },
+    { id: "flooded-pickup-gate", type: "car", x: -82, y: 0.18, z: -146, yaw: 0.9 },
     { id: "flooded-car-village", type: "car", x: 72, y: 0.18, z: -104, yaw: -0.7 },
     { id: "flooded-quad-greenhouse", type: "quad", x: 104, y: 0.18, z: -46, yaw: 0.35 },
     { id: "flooded-bike-church", type: "motorcycle", x: -96, y: 0.18, z: 42, yaw: 1.15 },

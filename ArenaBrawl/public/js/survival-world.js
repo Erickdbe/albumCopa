@@ -7,11 +7,21 @@ import { CLASSES, SECONDARY_WEAPONS, GRENADES } from "./config.js";
 
 const ZOMBIE_ASSET_ROOT = "./assets/models/quaternius/zombie-apocalypse/Characters/glTF/";
 const SURVIVAL_ASSET_ROOT = "./assets/models/quaternius/survival-pack/FBX/";
+const WEAPON_ASSET_ROOT = "./assets/models/quaternius/zombie-apocalypse/Weapons/glTF/";
 const ZOMBIE_ASSETS = {
   basic: "Zombie_Basic.gltf",
   chubby: "Zombie_Chubby.gltf",
   ribcage: "Zombie_Ribcage.gltf",
   arm: "Zombie_Basic.gltf"
+};
+const WEAPON_LOOT_ASSETS = {
+  assault_rifle: { file: "Rifle.gltf", targetHeight: 0.42 },
+  sniper_rifle: { file: "Rifle.gltf", targetHeight: 0.48 },
+  smg: { file: "SMG.gltf", targetHeight: 0.4 },
+  pistol_common: { file: "Pistol.gltf", targetHeight: 0.34 },
+  revolver: { file: "Pistol.gltf", targetHeight: 0.34 },
+  mini_shotgun: { file: "Shotgun.gltf", targetHeight: 0.42 },
+  knife: { file: "Knife.gltf", targetHeight: 0.32 }
 };
 
 const lootEntries = new Map();
@@ -22,6 +32,7 @@ const zombieLoader = new FBXLoader();
 const zombieGltfLoader = new GLTFLoader();
 const zombieSourcePromises = new Map();
 const survivalSourcePromises = new Map();
+const weaponSourcePromises = new Map();
 let zombieAtlasPromise = null;
 
 function terrainY(terrainHeightAt, x, z, fallback = 0) {
@@ -134,6 +145,13 @@ function survivalSource(file) {
   return survivalSourcePromises.get(file);
 }
 
+function weaponLootSource(file) {
+  if (!weaponSourcePromises.has(file)) {
+    weaponSourcePromises.set(file, zombieGltfLoader.loadAsync(`${WEAPON_ASSET_ROOT}${file}`));
+  }
+  return weaponSourcePromises.get(file);
+}
+
 function normalizeLootAsset(model, targetHeight = 0.62) {
   model.updateMatrixWorld(true);
   const bounds = new THREE.Box3().setFromObject(model);
@@ -161,6 +179,32 @@ function attachSurvivalLootAsset(group, fallback, file, options = {}) {
       const material = child.material?.clone?.() || new THREE.MeshStandardMaterial();
       material.roughness = 0.82;
       if (options.tint && material.color) material.color.lerp(new THREE.Color(options.tint), 0.34);
+      child.material = material;
+    });
+    fallback.visible = false;
+    group.add(model);
+  }).catch(() => {
+    fallback.visible = true;
+  });
+}
+
+function attachWeaponLootAsset(group, fallback, weaponId) {
+  const asset = WEAPON_LOOT_ASSETS[weaponId];
+  if (!asset) return;
+  weaponLootSource(asset.file).then((source) => {
+    if (!group.parent) return;
+    const model = source.scene.clone(true);
+    normalizeLootAsset(model, asset.targetHeight || 0.4);
+    model.rotation.set(-0.16, Math.PI / 2, -0.04);
+    model.position.y = 0.22;
+    model.traverse((child) => {
+      if (!child.isMesh) return;
+      child.castShadow = true;
+      child.receiveShadow = true;
+      child.userData.ignoreRaycast = true;
+      const material = child.material?.clone?.() || new THREE.MeshStandardMaterial({ color: 0x7a7668 });
+      material.roughness = Math.min(0.9, Math.max(0.62, material.roughness ?? 0.8));
+      material.metalness = Math.min(0.2, material.metalness ?? 0.04);
       child.material = material;
     });
     fallback.visible = false;
@@ -205,6 +249,7 @@ function makeLootModel(loot) {
     model.scale.setScalar(loot.slot === "secondary" ? 0.58 : 0.42);
     model.rotation.set(-0.08, Math.PI / 2, -0.08);
     model.position.y = 0.46;
+    attachWeaponLootAsset(group, model, loot.weaponId);
   } else if (loot.kind === "fuel") {
     model = makeFuelCan();
     attachSurvivalLootAsset(group, model, "GasCan.fbx", { targetHeight: 0.82, tint: 0xb6382c });

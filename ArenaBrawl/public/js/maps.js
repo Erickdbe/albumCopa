@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { MAP_HALF_SIZES, MAP_META, SKETCHBOOK_GROUND_Y } from "./config.js";
 import { attachMeshyModel } from "./meshy-assets.js";
-import { addFloodedCollision, attachFloodedModel } from "./flooded-grounds-assets.js";
+import { addFloodedCollision, attachFloodedModel } from "./flooded-grounds-assets.js?v=20260722-2";
 import { attachRpgPolyForest, attachRpgPolyForestTerrain, registerRpgPolyForestCollisions, updateRpgPolyForest } from "./rpg-poly-assets.js";
 import { attachSketchbookWorld } from "./sketchbook-assets.js";
 import { buildUnifiedMap } from "./unified-map.js";
@@ -143,6 +143,16 @@ function addBoundary(world, color) {
   addSolidBox(world, 0, half, half * 2, 8, 1, color);
   addSolidBox(world, -half, 0, 1, 8, half * 2, color);
   addSolidBox(world, half, 0, 1, 8, half * 2, color);
+}
+
+function addInvisibleBoundary(world) {
+  const half = world.half;
+  world.obstacles.push(
+    collisionBox(0, -half, half * 2, 1, 8, true),
+    collisionBox(0, half, half * 2, 1, 8, true),
+    collisionBox(-half, 0, 1, half * 2, 8, true),
+    collisionBox(half, 0, 1, half * 2, 8, true)
+  );
 }
 
 function addGround(world, color, textureUrl = null, tileSize = 28) {
@@ -751,18 +761,25 @@ function addFloodedInteriorCabin(world, x, z, yaw = 0) {
 }
 
 function addFloodedMansion(world, x, z, yaw = 0) {
-  addRotatedBox(world, x, z, 25, 8.5, 19, 0x4a4c44, yaw, 0, {
-    material: { roughness: 0.94 }
-  });
-  addRotatedBox(world, x, z, 27.5, 1.2, 21, 0x2c312b, yaw, 8.5, {
-    material: { roughness: 0.98 },
-    solid: false
-  });
-  addMesh(world, new THREE.ConeGeometry(17, 5.2, 4), 0x2d2823, x, 11.4, z, {
-    rotY: yaw + Math.PI / 4,
-    material: { roughness: 0.95 }
-  });
   addFloodedCollision(world, x, z, 27, 21, 9.2, yaw, true);
+
+  [-8, 0, 8].forEach((offset) => {
+    attachFloodedLocal(world, "mBuildings/mVilla1/Villa1_Base_Mid_A.fbx", x, z, yaw, offset, -2.5, {
+      targetSize: 8.4,
+      tint: 0x62645d
+    });
+    attachFloodedLocal(world, "mBuildings/mVilla1/Villa1_Floor_Mid_A.fbx", x, z, yaw, offset, 3.8, {
+      targetSize: 8.7,
+      y: 4.1,
+      tint: 0x5d6058
+    });
+  });
+  [-12, 12].forEach((offset) => {
+    attachFloodedLocal(world, "mBuildings/mVilla1/Villa1_Wall_Cor_A.fbx", x, z, yaw, offset, -4.5, {
+      targetHeight: 5.6,
+      tint: 0x686a62
+    });
+  });
 
   const wallAssets = [
     "mBuildings/mVilla1/Villa1_Wall_Mid_A.fbx",
@@ -804,21 +821,6 @@ function addFloodedMansion(world, x, z, yaw = 0) {
 }
 
 function addFloodedChurch(world, x, z, yaw = 0) {
-  addRotatedBox(world, x, z, 17, 7.2, 29, 0x585b54, yaw, 0, {
-    material: { roughness: 0.94 }
-  });
-  addMesh(world, new THREE.ConeGeometry(11.5, 4.5, 4), 0x2b2824, x, 9.5, z, {
-    rotY: yaw + Math.PI / 4,
-    material: { roughness: 0.95 }
-  });
-  const tower = localPoint(x, z, yaw, 0, -11);
-  addRotatedBox(world, tower.x, tower.z, 6.2, 12, 6.2, 0x4f524e, yaw, 0, {
-    material: { roughness: 0.95 }
-  });
-  addMesh(world, new THREE.ConeGeometry(4.6, 5.5, 4), 0x242420, tower.x, 14.8, tower.z, {
-    rotY: yaw + Math.PI / 4,
-    material: { roughness: 0.95 }
-  });
   addFloodedCollision(world, x, z, 18, 30, 8.2, yaw, true);
 
   attachFloodedLocal(world, "mBuildings/mChurches/Church1_End_A.fbx", x, z, yaw, 0, -13, {
@@ -989,6 +991,43 @@ function addSwampProps(world) {
   });
 }
 
+function addFloodedEntranceDressing(world) {
+  attachFloodedModel(world, "mBuildings/mStructures/Struct_Fence1_Gate_A.fbx", {
+    x: 0, z: -151, yaw: 0.02, targetSize: 10, collision: [10, 1.2, 2.8], tint: 0x66513a
+  });
+  attachFloodedModel(world, "mBuildings/mStructures/Struct_Billboard_A_DM.fbx", {
+    x: -27, z: -150, yaw: 0.18, targetSize: 6.8, raycast: false, tint: 0x4c473a
+  });
+  attachFloodedModel(world, "mBuildings/mCabins/Cabin1_DM.fbx", {
+    x: -44, z: -124, yaw: 0.28, targetSize: 13.2, collision: [11.4, 8.4, 5.3], tint: 0x68533a
+  });
+  attachFloodedModel(world, "mBuildings/mCabins/Cabin2_Mid1.fbx", {
+    x: 34, z: -126, yaw: -0.22, targetSize: 12.6, collision: [10.6, 7.8, 5.0], tint: 0x604d37
+  });
+  attachFloodedModel(world, "mBuildings/mBarns/Barn1_End_A.fbx", {
+    x: 70, z: -136, yaw: -0.48, targetSize: 13.4, collision: [12.2, 9.2, 6.2], tint: 0x5d4b36
+  });
+  attachFloodedModel(world, "mProps/lo_Prop_Car1_DM.fbx", {
+    x: -64, z: -144, yaw: 0.9, targetSize: 5.8, collision: [4.8, 2.5, 1.8], tint: 0x6a5b43
+  });
+  attachFloodedModel(world, "mBuildings/mStructures/Struct_WoodPath_A.fbx", {
+    x: 8, z: -132, yaw: 0.05, targetSize: 16, raycast: false, tint: 0x57472f
+  });
+
+  [
+    [-30, -160], [-18, -151], [-8, -139], [12, -141], [26, -154], [45, -142],
+    [-56, -134], [-72, -126], [58, -121], [76, -126]
+  ].forEach(([x, z], index) => {
+    attachFloodedModel(world, index % 3 === 0 ? "mNature/mBushes/DecoBush_B.fbx" : "mNature/mGrass/Grass_Tall_C.fbx", {
+      x, z,
+      yaw: index * 0.71,
+      targetHeight: index % 3 === 0 ? 1.15 : 1.65,
+      raycast: false,
+      tint: 0x3d5c3f
+    });
+  });
+}
+
 function updateFlooded(world, elapsed, event) {
   world.animated.swampWater?.forEach(({ mesh, phase }, index) => {
     mesh.position.y = 0.015 + Math.sin(elapsed * 1.25 + phase) * 0.016;
@@ -1013,7 +1052,7 @@ function buildAlagado(scene) {
   scene.fog = new THREE.Fog(0x52636a, 28, 245);
 
   addGround(world, 0x273121, null, 30);
-  addBoundary(world, 0x172018);
+  addInvisibleBoundary(world);
 
   addMuddyTrack(world, 0, -142, 94, 10, 0, 0x5c4f38);
   addMuddyTrack(world, -42, -72, 92, 7.5, -0.42, 0x554b35);
@@ -1030,6 +1069,7 @@ function buildAlagado(scene) {
   attachFloodedModel(world, "mBackgrounds/WaterPlane.fbx", {
     x: 126, z: 52, yaw: 0.2, targetSize: 88, y: 0.004, raycast: false
   });
+  addFloodedEntranceDressing(world);
 
   for (let z = -178; z <= -98; z += 18) {
     addFloodedUtilityPole(world, -13, z, 0.12);

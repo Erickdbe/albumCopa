@@ -85,10 +85,10 @@ const SURVIVAL_ZOMBIE_SPAWNS = {
     { id: "zombie-beach-01", kind: "basic", x: 43, y: 0.4, z: 154, yaw: Math.PI }
   ],
   alagado: [
-    { id: "flooded-zombie-road-01", kind: "basic", x: -34, y: 0.2, z: -76, yaw: 0.4 },
-    { id: "flooded-zombie-road-02", kind: "ribcage", x: 18, y: 0.2, z: -70, yaw: -0.6 },
-    { id: "flooded-zombie-village-01", kind: "basic", x: -58, y: 0.2, z: -66, yaw: 1.2 },
-    { id: "flooded-zombie-village-02", kind: "chubby", x: 28, y: 0.2, z: -38, yaw: -1.8 },
+    { id: "flooded-zombie-road-01", kind: "basic", x: -20, y: 0.2, z: -124, yaw: 0.4 },
+    { id: "flooded-zombie-road-02", kind: "ribcage", x: 22, y: 0.2, z: -116, yaw: -0.6 },
+    { id: "flooded-zombie-village-01", kind: "basic", x: -58, y: 0.2, z: -92, yaw: 1.2 },
+    { id: "flooded-zombie-village-02", kind: "chubby", x: 28, y: 0.2, z: -86, yaw: -1.8 },
     { id: "flooded-zombie-village-03", kind: "ribcage", x: 78, y: 0.2, z: -98, yaw: 0.8 },
     { id: "flooded-zombie-mansion-01", kind: "basic", x: 42, y: 0.2, z: 18, yaw: 2.4 },
     { id: "flooded-zombie-mansion-02", kind: "chubby", x: 82, y: 0.2, z: 64, yaw: -2.2 },

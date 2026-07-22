@@ -6,6 +6,10 @@ casaSombria/Build/Build/*.unityweb -filter -diff -merge -text
 *.gltf filter=lfs diff=lfs merge=lfs -text
 *.png filter=lfs diff=lfs merge=lfs -text
 *.data filter=lfs diff=lfs merge=lfs -text
+ArenaBrawl/public/assets/models/flooded-grounds/** -filter -diff -merge -text
+ArenaBrawl/public/assets/models/quaternius/survival-pack/** -filter -diff -merge -text
+ArenaBrawl/public/assets/models/quaternius/zombie-apocalypse/Characters/glTF/** -filter -diff -merge -text
+ArenaBrawl/public/assets/models/quaternius/zombie-apocalypse/Weapons/glTF/** -filter -diff -merge -text
 ArenaBrawl/public/assets/models/rpg-poly-lite/** -filter -diff -merge -text
 ArenaBrawl/public/assets/models/human-soldier/** -filter -diff -merge -text
 ArenaBrawl/public/assets/models/toon-soldier/** -filter -diff -merge -text

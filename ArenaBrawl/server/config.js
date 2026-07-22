@@ -128,7 +128,7 @@ const VEHICLE_SPAWNS = {
     { id: "beach-car-dunes", type: "car", x: 54, y: 0, z: -64, yaw: -0.7 }
   ],
   alagado: [
-    { id: "flooded-pickup-gate", type: "car", x: -18, y: 0.18, z: -148, yaw: 0.05 },
+    { id: "flooded-pickup-gate", type: "car", x: -82, y: 0.18, z: -146, yaw: 0.9 },
     { id: "flooded-car-village", type: "car", x: 72, y: 0.18, z: -104, yaw: -0.7 },
     { id: "flooded-quad-greenhouse", type: "quad", x: 104, y: 0.18, z: -46, yaw: 0.35 },
     { id: "flooded-bike-church", type: "motorcycle", x: -96, y: 0.18, z: 42, yaw: 1.15 },
@@ -240,27 +240,27 @@ const MAP_SPAWNS = {
   },
   alagado: {
     ffa: [
-      { x: 0, y: 0, z: -162, yaw: Math.PI },
-      { x: -54, y: 0, z: -104, yaw: 0.58 },
-      { x: 48, y: 0, z: -92, yaw: -0.35 },
-      { x: 92, y: 0, z: -42, yaw: -1.1 },
-      { x: 66, y: 0, z: 48, yaw: -2.35 },
-      { x: -112, y: 0, z: 48, yaw: 1.4 },
-      { x: -138, y: 0, z: 104, yaw: 2.1 },
-      { x: 124, y: 0, z: 92, yaw: -2.55 }
+      { x: -6, y: 0, z: -166, yaw: Math.PI },
+      { x: 8, y: 0, z: -165, yaw: Math.PI },
+      { x: -18, y: 0, z: -158, yaw: Math.PI },
+      { x: 18, y: 0, z: -158, yaw: Math.PI },
+      { x: -34, y: 0, z: -146, yaw: 2.85 },
+      { x: 34, y: 0, z: -146, yaw: -2.85 },
+      { x: -50, y: 0, z: -132, yaw: 2.65 },
+      { x: 50, y: 0, z: -132, yaw: -2.65 }
     ],
     teams: {
       red: [
-        { x: -18, y: 0, z: -162, yaw: Math.PI },
-        { x: -54, y: 0, z: -116, yaw: 0.6 },
-        { x: -86, y: 0, z: -48, yaw: 0.95 },
-        { x: -122, y: 0, z: 46, yaw: 1.4 }
+        { x: -26, y: 0, z: -166, yaw: Math.PI },
+        { x: -42, y: 0, z: -154, yaw: 2.8 },
+        { x: -58, y: 0, z: -136, yaw: 2.65 },
+        { x: -72, y: 0, z: -118, yaw: 2.45 }
       ],
       blue: [
-        { x: 126, y: 0, z: 92, yaw: -2.55 },
-        { x: 68, y: 0, z: 54, yaw: -2.4 },
-        { x: 116, y: 0, z: -48, yaw: -1.12 },
-        { x: 34, y: 0, z: -94, yaw: -0.34 }
+        { x: 26, y: 0, z: -166, yaw: Math.PI },
+        { x: 42, y: 0, z: -154, yaw: -2.8 },
+        { x: 58, y: 0, z: -136, yaw: -2.65 },
+        { x: 72, y: 0, z: -118, yaw: -2.45 }
       ]
     }
   }

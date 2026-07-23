@@ -40,6 +40,9 @@ ArenaBrawlUnity/
 AventuraMundo3D/
 CasaSombriaUnity/
 
+# Legacy Card Wars source dump is not served by the current /cardwars Unity build.
+CardWars-main/
+
 # Large local Unity/source caches if they appear inside tracked web asset folders.
 **/Library/
 **/Temp/

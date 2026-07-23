@@ -14,7 +14,7 @@ import {
   syncSurvivalLoot,
   syncSurvivalZombies,
   updateSurvivalWorld
-} from "./survival-world.js?v=20260723-1";
+} from "./survival-world.js?v=20260723-2";
 import {
   attachAnimatedCharacter,
   playCharacterAction,

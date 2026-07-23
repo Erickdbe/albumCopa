@@ -35,18 +35,4 @@ export class FootballDataClient {
     const body = (await res.json()) as RawCompetitionTeamsResponse;
     return body.teams;
   }
-
-  async fetchTeam(teamId: number): Promise<RawTeam> {
-    const res = await this.fetchImpl(`${BASE_URL}/teams/${teamId}`, {
-      headers: { "X-Auth-Token": this.apiKey },
-    });
-
-    if (!res.ok) {
-      throw new Error(
-        `football-data.org team request failed (${res.status}): ${await res.text().catch(() => res.statusText)}`
-      );
-    }
-
-    return (await res.json()) as RawTeam;
-  }
 }

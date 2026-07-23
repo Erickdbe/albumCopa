@@ -25,6 +25,31 @@ const MIN_CLUB_COUNT = 2;
 const MAX_CLUB_COUNT = 40;
 const KNOCKOUT_MAX_CLUB_COUNT = 32;
 
+const BRAZILIAN_SERIE_A_CODE = "BSA";
+
+const BRAZILIAN_SERIE_A_2026_CLUBS = [
+  { name: "Athletico Paranaense", shortName: "CAP", stadiumName: "Arena da Baixada", reputation: 78 },
+  { name: "Atlético Mineiro", shortName: "CAM", stadiumName: "Arena MRV", reputation: 84 },
+  { name: "Bahia", shortName: "BAH", stadiumName: "Arena Fonte Nova", reputation: 77 },
+  { name: "Botafogo", shortName: "BOT", stadiumName: "Nilton Santos", reputation: 82 },
+  { name: "Chapecoense", shortName: "CHA", stadiumName: "Arena Condá", reputation: 70 },
+  { name: "Corinthians", shortName: "COR", stadiumName: "Neo Química Arena", reputation: 82 },
+  { name: "Coritiba SAF", shortName: "CFC", stadiumName: "Couto Pereira", reputation: 72 },
+  { name: "Cruzeiro", shortName: "CRU", stadiumName: "Mineirão", reputation: 84 },
+  { name: "Flamengo", shortName: "FLA", stadiumName: "Maracanã", reputation: 90 },
+  { name: "Fluminense", shortName: "FLU", stadiumName: "Maracanã", reputation: 83 },
+  { name: "Grêmio", shortName: "GRE", stadiumName: "Arena do Grêmio", reputation: 82 },
+  { name: "Internacional", shortName: "INT", stadiumName: "Beira-Rio", reputation: 80 },
+  { name: "Mirassol", shortName: "MIR", stadiumName: "José Maria de Campos Maia", reputation: 73 },
+  { name: "Palmeiras", shortName: "PAL", stadiumName: "Allianz Parque", reputation: 89 },
+  { name: "Red Bull Bragantino", shortName: "RBB", stadiumName: "Nabi Abi Chedid", reputation: 78 },
+  { name: "Remo", shortName: "REM", stadiumName: "Baenão", reputation: 70 },
+  { name: "Santos FC", shortName: "SAN", stadiumName: "Vila Belmiro", reputation: 78 },
+  { name: "São Paulo", shortName: "SAO", stadiumName: "Morumbis", reputation: 83 },
+  { name: "Vasco da Gama SAF", shortName: "VAS", stadiumName: "São Januário", reputation: 78 },
+  { name: "Vitória", shortName: "VIT", stadiumName: "Barradão", reputation: 74 },
+] as const;
+
 const FALLBACK_CLUB_NAMES = [
   "Litoral FC",
   "Textil United",
@@ -69,9 +94,9 @@ const FALLBACK_CLUB_NAMES = [
 ];
 
 function fallbackClubs(roomName: string, clubCount: number) {
-  return Array.from({ length: clubCount }, (_, index) => {
-    const name = FALLBACK_CLUB_NAMES[index] ?? `${roomName} ${index + 1}`;
-    const shortName = name
+  return drawItems(FALLBACK_CLUB_NAMES, clubCount).map((name, index) => {
+    const fallbackName = name ?? `${roomName} ${index + 1}`;
+    const shortName = fallbackName
       .split(/\s+/)
       .map((part) => part[0])
       .join("")
@@ -80,14 +105,99 @@ function fallbackClubs(roomName: string, clubCount: number) {
       .padEnd(3, "F");
     const reputation = 50 + ((index * 7) % 35);
     return {
-      name,
+      name: fallbackName,
       shortName,
-      stadiumName: `Estadio ${name}`,
+      stadiumName: `Estadio ${fallbackName}`,
       country: "Brazil",
       reputation,
       players: generateFallbackSquad(`room:${roomName}:${index}`, reputation),
     };
   });
+}
+
+function shuffled<T>(items: readonly T[]): T[] {
+  const result = [...items];
+  for (let i = result.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [result[i], result[j]] = [result[j], result[i]];
+  }
+  return result;
+}
+
+function drawItems<T>(items: readonly T[], count: number): T[] {
+  return shuffled(items).slice(0, count);
+}
+
+function brazilianSerieAClubs(roomName: string, clubCount: number) {
+  return drawItems(BRAZILIAN_SERIE_A_2026_CLUBS, clubCount).map((club, index) => {
+    const externalRef = `brazil-serie-a-2026:${club.shortName}:${roomName}:${index}`;
+    return {
+      name: club.name,
+      shortName: club.shortName,
+      stadiumName: club.stadiumName,
+      country: "Brazil",
+      reputation: club.reputation,
+      players: generateFallbackSquad(externalRef, club.reputation),
+    };
+  });
+}
+
+function drawImportedClubs(clubs: ReturnType<typeof fillMissingSquads>, clubCount: number) {
+  return drawItems(clubs, clubCount);
+}
+
+function maxClubCountForCompetition(competitionCode: string, format: CompetitionFormat): number {
+  if (competitionCode === BRAZILIAN_SERIE_A_CODE) {
+    return BRAZILIAN_SERIE_A_2026_CLUBS.length;
+  }
+  return isEliminationFormat(format) ? KNOCKOUT_MAX_CLUB_COUNT : MAX_CLUB_COUNT;
+}
+
+function validEliminationCounts(maxClubCount: number): number[] {
+  return [2, 4, 8, 16, 32].filter((count) => count <= maxClubCount);
+}
+
+function isValidClubCountForCompetition(competitionCode: string, format: CompetitionFormat, clubCount: number): boolean {
+  const max = maxClubCountForCompetition(competitionCode, format);
+  return Number.isInteger(clubCount) && clubCount >= MIN_CLUB_COUNT && clubCount <= max;
+}
+
+function fallbackClubPoolSize(competitionCode: string): number {
+  if (competitionCode === BRAZILIAN_SERIE_A_CODE) return BRAZILIAN_SERIE_A_2026_CLUBS.length;
+  return FALLBACK_CLUB_NAMES.length;
+}
+
+function fallbackClubsForCompetition(roomName: string, competitionCode: string, clubCount: number) {
+  if (competitionCode === BRAZILIAN_SERIE_A_CODE) {
+    return brazilianSerieAClubs(roomName, clubCount);
+  }
+  if (clubCount > fallbackClubPoolSize(competitionCode)) {
+    return Array.from({ length: clubCount }, (_, index) => {
+      const name = FALLBACK_CLUB_NAMES[index] ?? `${roomName} ${index + 1}`;
+      const shortName = name
+        .split(/\s+/)
+        .map((part) => part[0])
+        .join("")
+        .slice(0, 3)
+        .toUpperCase()
+        .padEnd(3, "F");
+      const reputation = 50 + ((index * 7) % 35);
+      return {
+        name,
+        shortName,
+        stadiumName: `Estadio ${name}`,
+        country: "Brazil",
+        reputation,
+        players: generateFallbackSquad(`room:${roomName}:${index}`, reputation),
+      };
+    });
+  }
+  return fallbackClubs(roomName, clubCount);
+}
+
+function drawImportedOrReject(clubs: ReturnType<typeof fillMissingSquads>, clubCount: number) {
+  if (clubCount > clubs.length) return null;
+  return drawImportedClubs(clubs, clubCount);
 }
 
 async function userCanControlLeague(userId: string, leagueId: string) {
@@ -161,49 +271,53 @@ leaguesRouter.post(
       res.status(400).json({ error: "competitionCode is required" });
       return;
     }
+    const normalizedCompetitionCode = competitionCode.trim().toUpperCase();
     const isElimination = isEliminationFormat(format);
+    const maxClubCount = maxClubCountForCompetition(normalizedCompetitionCode, format);
 
     if (
       typeof clubCount !== "number" ||
-      !Number.isInteger(clubCount) ||
-      clubCount < MIN_CLUB_COUNT ||
-      clubCount > (isElimination ? KNOCKOUT_MAX_CLUB_COUNT : MAX_CLUB_COUNT)
+      !isValidClubCountForCompetition(normalizedCompetitionCode, format, clubCount)
     ) {
       res.status(400).json({
-        error: `clubCount must be an integer between ${MIN_CLUB_COUNT} and ${
-          isElimination ? KNOCKOUT_MAX_CLUB_COUNT : MAX_CLUB_COUNT
-        }`,
+        error: `clubCount must be an integer between ${MIN_CLUB_COUNT} and ${maxClubCount}`,
       });
       return;
     }
     if (isElimination && !isValidKnockoutClubCount(clubCount)) {
-      res.status(400).json({ error: `${competitionFormatLabel(format)} precisa de 2, 4, 8, 16 ou 32 clubes` });
+      res.status(400).json({
+        error: `${competitionFormatLabel(format)} precisa de ${validEliminationCounts(maxClubCount).join(", ")} clubes`,
+      });
       return;
     }
 
     const apiKey = process.env.FOOTBALL_DATA_API_KEY;
     let selected;
-    if (apiKey) {
+    if (normalizedCompetitionCode === BRAZILIAN_SERIE_A_CODE) {
+      selected = brazilianSerieAClubs(name.trim(), clubCount);
+    } else if (apiKey) {
       let importedClubs;
       try {
-        importedClubs = await importCompetition({ apiKey }, competitionCode.trim());
+        importedClubs = await importCompetition({ apiKey }, normalizedCompetitionCode);
       } catch (err) {
         res.status(502).json({
-          error: `Could not fetch competition "${competitionCode}" from football-data.org: ${
+          error: `Could not fetch competition "${normalizedCompetitionCode}" from football-data.org: ${
             err instanceof Error ? err.message : "unknown error"
           }`,
         });
         return;
       }
 
-      if (importedClubs.length === 0) {
-        res.status(502).json({ error: `Competition "${competitionCode}" returned no clubs` });
+      const importedWithSquads = fillMissingSquads(importedClubs);
+      selected = drawImportedOrReject(importedWithSquads, clubCount);
+      if (!selected) {
+        res.status(400).json({
+          error: `Competition "${normalizedCompetitionCode}" has only ${importedClubs.length} clubs available`,
+        });
         return;
       }
-
-      selected = fillMissingSquads(importedClubs.slice(0, clubCount));
     } else {
-      selected = fallbackClubs(name.trim(), clubCount);
+      selected = fallbackClubsForCompetition(name.trim(), normalizedCompetitionCode, clubCount);
     }
 
     const { league } = await createLeagueWithClubs({
@@ -222,6 +336,8 @@ leaguesRouter.post(
       format: league.format,
       formatLabel: competitionFormatLabel(league.format),
       clubCount: selected.length,
+      selectionMode: "draw",
+      clubs: selected.map((club) => ({ name: club.name, shortName: club.shortName })),
     });
   })
 );

@@ -1,15 +1,15 @@
 import { useState } from "react";
 import { useForm } from "@mantine/form";
-import { Card, Title, Text, TextInput, NumberInput, Select, Button, Stack, Alert, CopyButton, Group } from "@mantine/core";
+import { Alert, Button, Card, CopyButton, Group, NumberInput, Select, Stack, Text, TextInput, Title } from "@mantine/core";
 import { apiFetch, ApiError } from "../api/client.js";
 
 const COMPETITIONS = [
-  { value: "PD", label: "La Liga (PD) — confirmado funcionando" },
+  { value: "BSA", label: "Brasileirao Serie A 2026 (sorteio)" },
+  { value: "PD", label: "La Liga (PD)" },
   { value: "PL", label: "Premier League (PL)" },
   { value: "BL1", label: "Bundesliga (BL1)" },
   { value: "SA", label: "Serie A (SA)" },
   { value: "FL1", label: "Ligue 1 (FL1)" },
-  { value: "BSA", label: "Brasileirão (BSA)" },
   { value: "CL", label: "Champions League (CL)" },
 ];
 
@@ -24,6 +24,21 @@ function isEliminationFormat(format: CreateRoomForm["format"]): boolean {
   return format === "knockout" || format === "cup";
 }
 
+function isBrazilianSerieA(competitionCode: string): boolean {
+  return competitionCode === "BSA";
+}
+
+function clubCountOptions(values: CreateRoomForm) {
+  const max = isBrazilianSerieA(values.competitionCode) ? 16 : 32;
+  return [
+    { value: "2", label: "2 clubes (final direta)" },
+    { value: "4", label: "4 clubes" },
+    { value: "8", label: "8 clubes" },
+    { value: "16", label: "16 clubes" },
+    ...(max >= 32 ? [{ value: "32", label: "32 clubes" }] : []),
+  ];
+}
+
 export function CreateRoomPage() {
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
@@ -32,20 +47,24 @@ export function CreateRoomPage() {
     name: string;
     clubCount: number;
     formatLabel: string;
+    clubs: { name: string; shortName: string }[];
   } | null>(null);
 
   const form = useForm<CreateRoomForm>({
-    initialValues: { name: "", competitionCode: "PD", clubCount: 8, format: "round_robin" },
+    initialValues: { name: "", competitionCode: "BSA", clubCount: 8, format: "round_robin" },
   });
 
   async function handleSubmit(values: CreateRoomForm) {
     setError(null);
     setCreating(true);
     try {
-      const room = await apiFetch<{ id: string; name: string; clubCount: number; formatLabel: string }>("/leagues", {
-        method: "POST",
-        body: values,
-      });
+      const room = await apiFetch<{
+        id: string;
+        name: string;
+        clubCount: number;
+        formatLabel: string;
+        clubs: { name: string; shortName: string }[];
+      }>("/leagues", { method: "POST", body: values });
       setCreatedRoom(room);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Falha ao criar a sala");
@@ -64,8 +83,8 @@ export function CreateRoomPage() {
           Modalidade: {createdRoom.formatLabel}
         </Text>
         <Text mb="sm">
-          <strong>{createdRoom.name}</strong> com {createdRoom.clubCount} clubes. Essa sala é privada — não aparece na
-          lista pública de ligas. Compartilhe o ID abaixo com quem você quiser que entre.
+          <strong>{createdRoom.name}</strong> com {createdRoom.clubCount} clubes sorteados. Essa sala e privada e nao
+          aparece na lista publica de ligas. Compartilhe o ID abaixo com quem voce quiser que entre.
         </Text>
         <Group>
           <TextInput value={createdRoom.id} readOnly style={{ flex: 1 }} />
@@ -77,6 +96,18 @@ export function CreateRoomPage() {
             )}
           </CopyButton>
         </Group>
+        {createdRoom.clubs.length > 0 && (
+          <Stack gap={4} mt="md">
+            <Text fw={700} size="sm">
+              Clubes sorteados
+            </Text>
+            {createdRoom.clubs.map((club) => (
+              <Text key={club.shortName} size="sm">
+                {club.shortName} - {club.name}
+              </Text>
+            ))}
+          </Stack>
+        )}
       </Card>
     );
   }
@@ -90,10 +121,21 @@ export function CreateRoomPage() {
         <Stack>
           <TextInput label="Nome da sala" placeholder="Liga dos Amigos" required {...form.getInputProps("name")} />
           <Select
-            label="Competição"
+            label="Competicao"
             data={COMPETITIONS}
             required
-            {...form.getInputProps("competitionCode")}
+            value={form.values.competitionCode}
+            onChange={(value) => {
+              const nextCompetition = value ?? "BSA";
+              form.setFieldValue("competitionCode", nextCompetition);
+              if (isBrazilianSerieA(nextCompetition)) {
+                if (isEliminationFormat(form.values.format) && form.values.clubCount > 16) {
+                  form.setFieldValue("clubCount", 16);
+                } else if (!isEliminationFormat(form.values.format) && form.values.clubCount > 20) {
+                  form.setFieldValue("clubCount", 20);
+                }
+              }
+            }}
           />
           <Select
             label="Modalidade"
@@ -107,25 +149,20 @@ export function CreateRoomPage() {
             onChange={(value) => {
               const nextFormat = (value ?? "round_robin") as CreateRoomForm["format"];
               form.setFieldValue("format", nextFormat);
-              if (isEliminationFormat(nextFormat) && ![2, 4, 8, 16, 32].includes(form.values.clubCount)) {
+              const allowedCounts = clubCountOptions({ ...form.values, format: nextFormat }).map((option) => Number(option.value));
+              if (isEliminationFormat(nextFormat) && !allowedCounts.includes(form.values.clubCount)) {
                 form.setFieldValue("clubCount", 8);
               }
             }}
           />
           <Text size="xs" c="dimmed">
-            Disponibilidade de cada competição depende do plano grátis da sua chave football-data.org — só a La Liga
-            (PD) foi confirmada nesta sessão.
+            No Brasileirao, os clubes reais da Serie A 2026 sao sorteados ao criar a sala. Em outras competicoes, a API
+            usa os clubes disponiveis e tambem sorteia os participantes.
           </Text>
           {isEliminationFormat(form.values.format) ? (
             <Select
               label="Quantidade de clubes"
-              data={[
-                { value: "2", label: "2 clubes (final direta)" },
-                { value: "4", label: "4 clubes" },
-                { value: "8", label: "8 clubes" },
-                { value: "16", label: "16 clubes" },
-                { value: "32", label: "32 clubes" },
-              ]}
+              data={clubCountOptions(form.values)}
               value={String(form.values.clubCount)}
               onChange={(value) => form.setFieldValue("clubCount", Number(value ?? 8))}
               required
@@ -134,7 +171,7 @@ export function CreateRoomPage() {
             <NumberInput
               label="Quantidade de clubes"
               min={2}
-              max={40}
+              max={isBrazilianSerieA(form.values.competitionCode) ? 20 : 40}
               required
               {...form.getInputProps("clubCount")}
             />

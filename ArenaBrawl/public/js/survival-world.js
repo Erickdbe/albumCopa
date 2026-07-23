@@ -567,48 +567,65 @@ export function removeSurvivalLoot(lootId) {
   lootEntries.delete(lootId);
 }
 
+function syncZombieEntry(scene, zombie, terrainHeightAt = null, options = {}) {
+  if (!zombie?.id) return null;
+  let entry = zombieEntries.get(zombie.id);
+  if (!entry) {
+    entry = makeZombieEntry(zombie, terrainHeightAt);
+    zombieEntries.set(zombie.id, entry);
+    scene.add(entry.root);
+  }
+  const x = Number(zombie.x) || 0;
+  const z = Number(zombie.z) || 0;
+  const y = terrainY(terrainHeightAt, x, z, zombie.y);
+  const serverPosition = new THREE.Vector3(x, y, z);
+  if (zombie.alive === false) {
+    if (!entry.deadAt) {
+      entry.deadAt = performance.now();
+      entry.target = {
+        ...zombie,
+        x: entry.root.position.x,
+        y: entry.root.position.y,
+        z: entry.root.position.z,
+        yaw: entry.root.rotation.y,
+        moving: false
+      };
+    }
+    return entry;
+  }
+
+  const syncNow = performance.now();
+  const previousTarget = entry.target || {};
+  const syncDt = Math.max(0.001, (syncNow - (entry.lastSyncAt || syncNow)) / 1000);
+  const previousX = Number(previousTarget.x);
+  const previousY = Number(previousTarget.y);
+  const previousZ = Number(previousTarget.z);
+  if (Number.isFinite(previousX) && Number.isFinite(previousY) && Number.isFinite(previousZ)) {
+    entry.targetVelocity = new THREE.Vector3(
+      (x - previousX) / syncDt,
+      (y - previousY) / syncDt,
+      (z - previousZ) / syncDt
+    ).clampLength(0, 4.2 * Math.max(1, Number(zombie.speedMul) || 1));
+  }
+  entry.lastSyncAt = syncNow;
+  entry.deadAt = 0;
+  entry.target = { ...zombie, x, y, z };
+
+  const visualDistance = entry.root.position.distanceTo(serverPosition);
+  if (options.snap || visualDistance > 9) {
+    entry.root.position.copy(serverPosition);
+    if (entry.lastFramePosition) entry.lastFramePosition.copy(serverPosition);
+    if (entry.targetVelocity) entry.targetVelocity.set(0, 0, 0);
+  }
+  return entry;
+}
+
 export function syncSurvivalZombies(scene, zombies = [], terrainHeightAt = null) {
   const activeIds = new Set();
   zombies.forEach((zombie) => {
     if (!zombie?.id) return;
     activeIds.add(zombie.id);
-    let entry = zombieEntries.get(zombie.id);
-    if (!entry) {
-      entry = makeZombieEntry(zombie, terrainHeightAt);
-      zombieEntries.set(zombie.id, entry);
-      scene.add(entry.root);
-    }
-    const y = terrainY(terrainHeightAt, zombie.x, zombie.z, zombie.y);
-    if (zombie.alive === false) {
-      if (!entry.deadAt) {
-        entry.deadAt = performance.now();
-        entry.target = {
-          ...zombie,
-          x: entry.root.position.x,
-          y: entry.root.position.y,
-          z: entry.root.position.z,
-          yaw: entry.root.rotation.y,
-          moving: false
-        };
-      }
-    } else {
-      const syncNow = performance.now();
-      const previousTarget = entry.target || {};
-      const syncDt = Math.max(0.001, (syncNow - (entry.lastSyncAt || syncNow)) / 1000);
-      const previousX = Number(previousTarget.x);
-      const previousY = Number(previousTarget.y);
-      const previousZ = Number(previousTarget.z);
-      if (Number.isFinite(previousX) && Number.isFinite(previousY) && Number.isFinite(previousZ)) {
-        entry.targetVelocity = new THREE.Vector3(
-          (Number(zombie.x) - previousX) / syncDt,
-          (y - previousY) / syncDt,
-          (Number(zombie.z) - previousZ) / syncDt
-        ).clampLength(0, 4.2 * Math.max(1, Number(zombie.speedMul) || 1));
-      }
-      entry.lastSyncAt = syncNow;
-      entry.deadAt = 0;
-      entry.target = { ...zombie, y };
-    }
+    syncZombieEntry(scene, zombie, terrainHeightAt);
   });
   zombieEntries.forEach((entry, id) => {
     if (activeIds.has(id)) return;
@@ -619,6 +636,10 @@ export function syncSurvivalZombies(scene, zombies = [], terrainHeightAt = null)
     });
     zombieEntries.delete(id);
   });
+}
+
+export function syncSurvivalZombie(scene, zombie, terrainHeightAt = null, options = {}) {
+  syncZombieEntry(scene, zombie, terrainHeightAt, { snap: true, ...options });
 }
 
 export function updateSurvivalWorld(delta, now = performance.now()) {

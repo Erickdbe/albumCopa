@@ -12,9 +12,10 @@ import {
   nearestSurvivalLoot,
   removeSurvivalLoot,
   syncSurvivalLoot,
+  syncSurvivalZombie,
   syncSurvivalZombies,
   updateSurvivalWorld
-} from "./survival-world.js?v=20260723-4";
+} from "./survival-world.js?v=20260723-5";
 import {
   attachAnimatedCharacter,
   playCharacterAction,
@@ -2945,7 +2946,17 @@ export function attachSocket(activeSocket) {
     updateSurvivalHud();
   });
 
-  socket.on("survival:zombie-attack", ({ targetSocketId }) => {
+  socket.on("survival:zombie-attack", ({ targetSocketId, zombie }) => {
+    if (zombie && scene) {
+      if (room) {
+        const zombies = Array.isArray(room.zombies) ? room.zombies : [];
+        const index = zombies.findIndex((item) => item.id === zombie.id);
+        if (index >= 0) zombies[index] = zombie;
+        else zombies.push(zombie);
+        room.zombies = zombies;
+      }
+      syncSurvivalZombie(scene, zombie, terrainSurfaceHeightAt, { snap: true });
+    }
     if (targetSocketId === selfId) playCharacterAction(localViewAvatar, "damage", 1.15);
   });
 

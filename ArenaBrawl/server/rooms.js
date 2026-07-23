@@ -816,7 +816,11 @@ function createRoomsModule(io) {
       if (attackDistance <= ZOMBIE_ATTACK_RADIUS && now - (zombie.lastAttackAt || 0) > ZOMBIE_ATTACK_MS / speedMul) {
         zombie.lastAttackAt = now;
         applyDamage(room, null, target, night ? 16 : 10, false);
-        io.to(room.roomId).emit("survival:zombie-attack", { zombieId: zombie.id, targetSocketId: target.socketId });
+        io.to(room.roomId).emit("survival:zombie-attack", {
+          zombieId: zombie.id,
+          targetSocketId: target.socketId,
+          zombie: publicZombie(zombie)
+        });
       }
     });
   }
@@ -1254,7 +1258,7 @@ function createRoomsModule(io) {
           activeZombies: room.zombies.filter((zombie) => zombie.alive !== false).length
         });
       }
-      io.to(room.roomId).volatile.emit("survival:zombies", room.zombies.map(publicZombie));
+      io.to(room.roomId).emit("survival:zombies", room.zombies.map(publicZombie));
     }, WORLD_TICK_MS);
   }
 

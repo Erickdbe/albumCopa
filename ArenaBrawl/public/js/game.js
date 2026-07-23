@@ -16,7 +16,7 @@ import {
   syncSurvivalZombie,
   syncSurvivalZombies,
   updateSurvivalWorld
-} from "./survival-world.js?v=20260723-6";
+} from "./survival-world.js?v=20260723-7";
 import {
   attachAnimatedCharacter,
   playCharacterAction,
@@ -2653,7 +2653,7 @@ function render() {
     }
     updateGrenadesPhysics(delta);
     updateBallistics(delta);
-    updateSurvivalWorld(delta, performance.now());
+    updateSurvivalWorld(delta, performance.now(), camera.position);
     animateAvatars(delta);
     mapWorld?.update(delta, activeWorldEvent);
     updateAbilityHud();

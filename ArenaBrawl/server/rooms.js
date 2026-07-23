@@ -30,7 +30,11 @@ const EMPTY_SLOT = "hands";
 const SURVIVAL_PICKUP_RADIUS = 3.2;
 const ZOMBIE_ATTACK_RADIUS = 1.12;
 const ZOMBIE_ATTACK_MS = 1250;
-const ZOMBIE_CHASE_RADIUS = { mundo: 170, alagado: 190, default: 145 };
+const ZOMBIE_CHASE_RADIUS = { mundo: 44, alagado: 48, default: 40 };
+const ZOMBIE_WAKE_RADIUS = { mundo: 74, alagado: 84, default: 68 };
+const ZOMBIE_ALERT_RADIUS = { mundo: 112, alagado: 128, default: 104 };
+const ZOMBIE_ALERT_MS = 11500;
+const ZOMBIE_ALERT_REACH_RADIUS = 3.2;
 const ZOMBIE_ROAM_RADIUS = { mundo: 54, alagado: 42, default: 36 };
 const ZOMBIE_ROAM_SPEED = {
   basic: 1.05,
@@ -392,6 +396,8 @@ function makeZombies(mapId) {
     alive: true,
     targetId: null,
     lastAttackAt: 0,
+    alertTarget: null,
+    alertUntil: 0,
     roamTarget: null,
     nextRoamAt: 0,
     spawnSpeedMul: 1,
@@ -451,6 +457,8 @@ function spawnProgressiveZombie(room, now) {
     alive: true,
     targetId: null,
     lastAttackAt: 0,
+    alertTarget: null,
+    alertUntil: 0,
     roamTarget: null,
     nextRoamAt: 0,
     spawnSpeedMul: 1 + Math.min(0.48, (wave - 1) * 0.045),
@@ -828,12 +836,86 @@ function createRoomsModule(io) {
     zombie.moving = true;
   }
 
+  function updateZombieAlert(room, zombie, delta, now, speedMul) {
+    if (!zombie.alertTarget || now >= (zombie.alertUntil || 0)) {
+      zombie.alertTarget = null;
+      zombie.alertUntil = 0;
+      return false;
+    }
+    const dx = zombie.alertTarget.x - zombie.x;
+    const dz = zombie.alertTarget.z - zombie.z;
+    const distance = Math.hypot(dx, dz);
+    if (distance < ZOMBIE_ALERT_REACH_RADIUS) {
+      zombie.moving = false;
+      if (!zombie.alertArrivedAt) zombie.alertArrivedAt = now;
+      if (now - zombie.alertArrivedAt > 1800) {
+        zombie.alertTarget = null;
+        zombie.alertUntil = 0;
+        zombie.alertArrivedAt = 0;
+      }
+      return true;
+    }
+    zombie.alertArrivedAt = 0;
+    const length = distance || 1;
+    const baseSpeed = zombieKindStats(zombie.kind).chaseSpeed * 0.74;
+    zombie.yaw = Math.atan2(-dx, -dz);
+    zombie.x += (dx / length) * baseSpeed * speedMul * delta;
+    zombie.z += (dz / length) * baseSpeed * speedMul * delta;
+    zombie.moving = true;
+    return true;
+  }
+
+  function weaponNoiseRadius(weapon) {
+    if (!weapon || weapon.kind === "melee") return 0;
+    if (weapon.id === "bow") return 26;
+    if (weapon.id === "crossbow") return 42;
+    if (weapon.id === "sniper_rifle") return 142;
+    if (weapon.id === "heavy_mg") return 136;
+    if (weapon.id === "mini_shotgun") return 122;
+    if (weapon.id === "smg") return 118;
+    if (weapon.id === "assault_rifle") return 112;
+    if (weapon.id === "heavy_pistol") return 104;
+    if (weapon.id === "revolver") return 98;
+    return 86;
+  }
+
+  function alertZombiesBySound(room, origin, weapon, now) {
+    if (!room?.zombies?.length) return 0;
+    const baseRadius = weaponNoiseRadius(weapon);
+    if (baseRadius <= 0) return 0;
+    const fallback = room.players.find((player) => player.alive && !player.vehicleId) || room.players[0] || { x: 0, y: 0, z: 0 };
+    const x = Number.isFinite(Number(origin?.x)) ? Number(origin.x) : Number(fallback.x) || 0;
+    const z = Number.isFinite(Number(origin?.z)) ? Number(origin.z) : Number(fallback.z) || 0;
+    const point = constrainMapPosition(room.settings.mapId, { x, y: Number(origin?.y) || 0.2, z });
+    const mapRadius = ZOMBIE_ALERT_RADIUS[room.settings.mapId] || ZOMBIE_ALERT_RADIUS.default;
+    const nightMul = room.worldTime?.phase === "night" ? 1.22 : 1;
+    const radius = Math.min(mapRadius * 1.15, baseRadius * nightMul);
+    let alerted = 0;
+    (room.zombies || []).forEach((zombie) => {
+      if (zombie.alive === false) return;
+      const distance = Math.hypot((Number(zombie.x) || 0) - point.x, (Number(zombie.z) || 0) - point.z);
+      if (distance > radius) return;
+      const spread = Math.min(5.5, 1.5 + distance * 0.025);
+      const angle = Math.random() * Math.PI * 2;
+      zombie.alertTarget = {
+        x: point.x + Math.cos(angle) * Math.random() * spread,
+        z: point.z + Math.sin(angle) * Math.random() * spread
+      };
+      zombie.alertUntil = now + ZOMBIE_ALERT_MS + Math.round((1 - distance / radius) * 2500);
+      zombie.alertArrivedAt = 0;
+      zombie.roamTarget = null;
+      alerted += 1;
+    });
+    return alerted;
+  }
+
   function updateZombies(room, delta, now) {
     const zombies = room.zombies || [];
     if (!zombies.length) return;
     const night = room.worldTime?.phase === "night";
     const phaseSpeedMul = night ? 1.62 : 1;
-    const chaseRadius = ZOMBIE_CHASE_RADIUS[room.settings.mapId] || ZOMBIE_CHASE_RADIUS.default;
+    const chaseRadius = (ZOMBIE_CHASE_RADIUS[room.settings.mapId] || ZOMBIE_CHASE_RADIUS.default) * (night ? 1.32 : 1);
+    const wakeRadius = (ZOMBIE_WAKE_RADIUS[room.settings.mapId] || ZOMBIE_WAKE_RADIUS.default) * (night ? 1.18 : 1);
     zombies.forEach((zombie) => {
       if (zombie.alive === false) return;
       const { target, distance } = nearestAlivePlayer(room, zombie);
@@ -842,10 +924,18 @@ function createRoomsModule(io) {
       zombie.moving = false;
       if (!target || distance > chaseRadius) {
         zombie.targetId = null;
+        if (updateZombieAlert(room, zombie, delta, now, speedMul)) return;
+        if (!target || distance > wakeRadius) {
+          zombie.roamTarget = null;
+          zombie.moving = false;
+          return;
+        }
         updateZombieRoam(room, zombie, delta, now, speedMul);
         return;
       }
       zombie.targetId = target.socketId;
+      zombie.alertTarget = null;
+      zombie.alertUntil = 0;
       zombie.roamTarget = null;
       const dx = target.x - zombie.x;
       const dz = target.z - zombie.z;
@@ -1303,7 +1393,9 @@ function createRoomsModule(io) {
           activeZombies: room.zombies.filter((zombie) => zombie.alive !== false).length
         });
       }
-      io.to(room.roomId).emit("survival:zombies", room.zombies.map(publicZombie));
+      if (room.worldTick % 2 === 0) {
+        io.to(room.roomId).volatile.emit("survival:zombies", room.zombies.map(publicZombie));
+      }
     }, WORLD_TICK_MS);
   }
 
@@ -1596,6 +1688,13 @@ function createRoomsModule(io) {
       if (targetVehicle && targetVehicle.id !== vehicle.id && distance3(vehicle, targetVehicle) <= range) {
         damageVehicle(room, targetVehicle, damage * 1.15, shooter);
       }
+      if (now - (vehicle.lastZombieNoiseAt || 0) > 520) {
+        alertZombiesBySound(room, origin || { x: vehicle.x, y: vehicle.y + 1, z: vehicle.z }, {
+          id: vehicle.type === "cannon" ? "heavy_mg" : "assault_rifle",
+          kind: "hitscan"
+        }, now);
+        vehicle.lastZombieNoiseAt = now;
+      }
       io.to(room.roomId).emit("vehicle:fired", {
         vehicleId: vehicle.id,
         type: vehicle.type,
@@ -1880,6 +1979,10 @@ function createRoomsModule(io) {
         socketId: socket.id, slot: shotSlot, weaponId: weapon.id,
         origin: safeOrigin, direction: safeDirection, ballistics: safeBallistics
       });
+      if (weapon.kind !== "melee" && now - (shooter.lastZombieNoiseAt || 0) > 430) {
+        alertZombiesBySound(room, safeOrigin, weapon, now);
+        shooter.lastZombieNoiseAt = now;
+      }
 
       let chargeDamageMultiplier = 1;
       if (weapon.chargeable) {

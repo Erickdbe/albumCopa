@@ -2,7 +2,7 @@ import {
   CLASSES, CLASS_ORDER, SECONDARY_WEAPONS, SECONDARY_ORDER, MAP_META, MAP_ORDER,
   MATCH_DURATIONS_MIN, SCORE_LIMITS
 } from "./config.js";
-import { attachSocket, onMatchEnd, initGamePlayerJoinHandler } from "./game.js?v=20260723-6";
+import { attachSocket, onMatchEnd, initGamePlayerJoinHandler } from "./game.js?v=20260723-7";
 
 const token = localStorage.getItem("mp_token");
 const invitedRoomId = new URLSearchParams(window.location.search).get("room")?.trim().toUpperCase() || "";

@@ -37,4 +37,5 @@ export interface TacticStyle {
   pressing: number; // 0-100
   width: number; // 0-100
   tempo: number; // 0-100
+  starterIds?: string[]; // preferred starting XI for the managed club
 }

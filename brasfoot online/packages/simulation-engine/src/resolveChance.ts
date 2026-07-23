@@ -31,7 +31,7 @@ export function resolveChance(
       minute,
       second: Math.floor(rng() * 60),
       type: "OWN_GOAL",
-      teamSide,
+      teamSide: teamSide === "home" ? "away" : "home",
       playerId: defender.id,
       metadata: { unluckyDefender: true },
     };

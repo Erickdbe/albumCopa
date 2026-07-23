@@ -1,5 +1,6 @@
 import { prisma } from "./client.js";
 import type { GeneratedPlayer } from "@brfut/shared-types";
+import { createInitialSchedule, type CompetitionFormat } from "./schedule.js";
 
 export interface LeagueSetupClub {
   name: string;
@@ -16,6 +17,7 @@ export interface CreateLeagueParams {
   isPrivate?: boolean;
   ownerId?: string;
   playbackSecondsPerMinute?: number;
+  format?: CompetitionFormat;
   /** Only the CLI seed schedules a single sample match — real rooms don't
    * get one until a proper round-robin scheduler exists. */
   createDemoMatch?: boolean;
@@ -32,6 +34,7 @@ export async function createLeagueWithClubs(params: CreateLeagueParams) {
       name: params.name,
       country: params.country,
       tier: 1,
+      format: params.format ?? "round_robin",
       maxClubs: params.clubs.length,
       playbackSecondsPerMinute: params.playbackSecondsPerMinute ?? 2,
       isPrivate: params.isPrivate ?? false,
@@ -91,18 +94,11 @@ export async function createLeagueWithClubs(params: CreateLeagueParams) {
     });
   }
 
-  if (params.createDemoMatch && createdClubs.length >= 2) {
-    await prisma.match.create({
-      data: {
-        seasonId: season.id,
-        roundNumber: 1,
-        homeClubId: createdClubs[0].id,
-        awayClubId: createdClubs[1].id,
-        scheduledAt: new Date(),
-        status: "SCHEDULED",
-      },
-    });
-  }
+  await createInitialSchedule({
+    seasonId: season.id,
+    clubs: createdClubs.map((club) => ({ id: club.id, name: club.name, reputation: club.reputation })),
+    format: params.format ?? "round_robin",
+  });
 
   return { league, season, clubs: createdClubs };
 }

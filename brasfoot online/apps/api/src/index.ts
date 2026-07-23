@@ -11,6 +11,7 @@ import { marketRouter } from "./routes/market.js";
 import { authRouter } from "./routes/auth.js";
 import { errorHandler } from "./middleware/errorHandler.js";
 import { apiRateLimit } from "./middleware/apiRateLimit.js";
+import { closeQueues } from "./queues.js";
 
 assertProductionConfig();
 
@@ -79,6 +80,7 @@ const server = app.listen(PORT, () => {
 async function shutdown(signal: string) {
   console.log(`[shutdown] received ${signal}, closing gracefully...`);
   server.close(async () => {
+    await closeQueues();
     await prisma.$disconnect();
     console.log("[shutdown] closed");
     process.exit(0);

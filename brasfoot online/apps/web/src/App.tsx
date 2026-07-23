@@ -9,6 +9,7 @@ import { TacticsPage } from "./pages/TacticsPage.js";
 import { MatchPage } from "./pages/MatchPage.js";
 import { MarketPage } from "./pages/MarketPage.js";
 import { CreateRoomPage } from "./pages/CreateRoomPage.js";
+import { SeasonPage } from "./pages/SeasonPage.js";
 
 function RequireAuth({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth();
@@ -21,10 +22,6 @@ function RequireAuth({ children }: { children: ReactNode }) {
   }
   if (!user) return <Navigate to="/login" replace />;
   return <>{children}</>;
-}
-
-function DashboardRedirect() {
-  return <Navigate to={{ pathname: "/dashboard", search: window.location.search }} replace />;
 }
 
 function Shell({ children }: { children: ReactNode }) {
@@ -54,6 +51,9 @@ function Shell({ children }: { children: ReactNode }) {
             </Anchor>
             <Anchor component={Link} to="/match">
               Partida ao vivo
+            </Anchor>
+            <Anchor component={Link} to="/season">
+              Temporada
             </Anchor>
             <Anchor component={Link} to="/market">
               Mercado
@@ -88,7 +88,7 @@ export function App() {
   return (
     <MantineProvider defaultColorScheme="light" theme={{ primaryColor: "green" }}>
       <Notifications />
-      <BrowserRouter basename="/brasfoot-online">
+      <BrowserRouter>
         <AuthProvider>
           <Shell>
             <Routes>
@@ -118,6 +118,14 @@ export function App() {
                 }
               />
               <Route
+                path="/season"
+                element={
+                  <RequireAuth>
+                    <SeasonPage />
+                  </RequireAuth>
+                }
+              />
+              <Route
                 path="/market"
                 element={
                   <RequireAuth>
@@ -133,7 +141,7 @@ export function App() {
                   </RequireAuth>
                 }
               />
-              <Route path="*" element={<DashboardRedirect />} />
+              <Route path="*" element={<Navigate to="/dashboard" replace />} />
             </Routes>
           </Shell>
         </AuthProvider>

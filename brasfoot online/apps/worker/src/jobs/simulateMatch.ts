@@ -35,6 +35,32 @@ function toLineupPlayer(player: PrismaPlayer): LineupPlayer {
   };
 }
 
+function pickFallbackStarters(players: PrismaPlayer[]): PrismaPlayer[] {
+  const goalkeeper = players.find((p) => p.position === "GK");
+  const outfieldSlots = goalkeeper ? 10 : 11;
+  const outfield = players
+    .filter((p) => p.position !== "GK")
+    .sort((a, b) => b.overall - a.overall)
+    .slice(0, outfieldSlots);
+  return goalkeeper ? [goalkeeper, ...outfield] : outfield;
+}
+
+function pickStarters(players: PrismaPlayer[], tactic: TacticStyle): PrismaPlayer[] {
+  const starterIds = tactic.starterIds;
+  if (starterIds?.length === 11) {
+    const playersById = new Map(players.map((player) => [player.id, player]));
+    const selected = starterIds
+      .map((playerId) => playersById.get(playerId))
+      .filter((player): player is PrismaPlayer => Boolean(player));
+
+    if (selected.length === 11 && selected.some((player) => player.position === "GK")) {
+      return selected;
+    }
+  }
+
+  return pickFallbackStarters(players);
+}
+
 /**
  * Picks a starting XI from a club's roster. No proper squad-selection /
  * user-set lineup exists yet (out of scope for this pass) — this just takes
@@ -48,15 +74,8 @@ async function buildTeamInput(clubId: string): Promise<TeamInput> {
     include: { players: true },
   });
 
-  const goalkeeper = club.players.find((p) => p.position === "GK");
-  const outfieldSlots = goalkeeper ? 10 : 11;
-  const outfield = club.players
-    .filter((p) => p.position !== "GK")
-    .sort((a, b) => b.overall - a.overall)
-    .slice(0, outfieldSlots);
-  const starters = goalkeeper ? [goalkeeper, ...outfield] : outfield;
-
   const tactic = (club.tacticStyle as unknown as TacticStyle | null) ?? DEFAULT_TACTIC;
+  const starters = pickStarters(club.players, tactic);
 
   return {
     clubId: club.id,

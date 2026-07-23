@@ -3,12 +3,11 @@ import { useNavigate } from "react-router-dom";
 import { useForm } from "@mantine/form";
 import { Paper, Title, Tabs, TextInput, PasswordInput, Button, Alert, Stack } from "@mantine/core";
 import { useAuth } from "../auth/AuthContext.js";
-import { ApiError, isAlbumIntegratedMode } from "../api/client.js";
+import { ApiError } from "../api/client.js";
 
 export function LoginPage() {
   const { login, register } = useAuth();
   const navigate = useNavigate();
-  const integratedMode = isAlbumIntegratedMode();
   const [mode, setMode] = useState<"login" | "register">("login");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -16,9 +15,9 @@ export function LoginPage() {
   const form = useForm({
     initialValues: { email: "", password: "", username: "" },
     validate: {
-      email: (value) => (value.trim() ? null : integratedMode ? "Usuario obrigatorio" : "Email e obrigatorio"),
-      password: (value) => (value.length >= (integratedMode ? 6 : 8) ? null : `Minimo ${integratedMode ? 6 : 8} caracteres`),
-      username: (value) => (mode === "register" && !value.trim() ? "Nome de usuario obrigatorio" : null),
+      email: (value) => (value.trim() ? null : "Email é obrigatório"),
+      password: (value) => (value.length >= 8 ? null : "Mínimo 8 caracteres"),
+      username: (value) => (mode === "register" && !value.trim() ? "Nome de usuário é obrigatório" : null),
     },
   });
 
@@ -42,7 +41,7 @@ export function LoginPage() {
   return (
     <Paper withBorder shadow="md" p="xl" radius="md">
       <Title order={2} ta="center" mb="md">
-        BrFut
+        ⚽ BrFut
       </Title>
 
       <Tabs value={mode} onChange={(value) => setMode(value as "login" | "register")} mb="md">
@@ -54,20 +53,10 @@ export function LoginPage() {
 
       <form onSubmit={form.onSubmit(handleSubmit)}>
         <Stack>
-          <TextInput
-            label={integratedMode ? "Usuario" : "Email"}
-            placeholder={integratedMode ? "seu usuario do album" : "voce@email.com"}
-            required
-            {...form.getInputProps("email")}
-          />
-          <PasswordInput
-            label="Senha"
-            placeholder={integratedMode ? "min. 6 caracteres" : "min. 8 caracteres"}
-            required
-            {...form.getInputProps("password")}
-          />
+          <TextInput label="Email" placeholder="voce@email.com" required {...form.getInputProps("email")} />
+          <PasswordInput label="Senha" placeholder="mín. 8 caracteres" required {...form.getInputProps("password")} />
           {mode === "register" && (
-            <TextInput label="Nome de usuario" placeholder="seu_usuario" required {...form.getInputProps("username")} />
+            <TextInput label="Nome de usuário" placeholder="seu_usuario" required {...form.getInputProps("username")} />
           )}
           {error && (
             <Alert color="red" title="Erro">

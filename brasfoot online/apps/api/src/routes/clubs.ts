@@ -9,6 +9,7 @@ export const clubsRouter = Router();
 
 const ALLOWED_FORMATIONS = ["4-4-2", "4-3-3", "3-5-2", "4-2-3-1", "5-3-2", "4-4-1-1", "3-4-3"];
 const MENTALITIES: TacticStyle["mentality"][] = ["defensive", "balanced", "offensive"];
+const STARTING_XI_SIZE = 11;
 
 // Registered before "/:clubId" — otherwise Express would match "mine" as a clubId.
 clubsRouter.get(
@@ -84,6 +85,10 @@ function isValidPercentage(value: unknown): value is number {
   return typeof value === "number" && Number.isInteger(value) && value >= 0 && value <= 100;
 }
 
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === "string");
+}
+
 // balance/reputation are intentionally not editable here — those change
 // only through game mechanics (matches, transfers), never direct API edits.
 clubsRouter.patch(
@@ -103,6 +108,40 @@ clubsRouter.patch(
     }
 
     if (tacticStyle !== undefined) {
+      if (typeof tacticStyle !== "object" || tacticStyle === null || Array.isArray(tacticStyle)) {
+        res.status(400).json({ error: "tacticStyle must be an object" });
+        return;
+      }
+
+      const incoming = tacticStyle as Partial<TacticStyle>;
+      let starterIds: string[] | undefined;
+
+      if (incoming.starterIds !== undefined) {
+        if (!isStringArray(incoming.starterIds)) {
+          res.status(400).json({ error: "tacticStyle.starterIds must be an array of player ids" });
+          return;
+        }
+
+        starterIds = [...new Set(incoming.starterIds)];
+        if (starterIds.length !== incoming.starterIds.length || starterIds.length !== STARTING_XI_SIZE) {
+          res.status(400).json({ error: `Choose exactly ${STARTING_XI_SIZE} unique starters` });
+          return;
+        }
+
+        const starters = await prisma.player.findMany({
+          where: { clubId: req.club!.id, id: { in: starterIds } },
+          select: { id: true, position: true },
+        });
+
+        if (starters.length !== STARTING_XI_SIZE) {
+          res.status(400).json({ error: "All starters must belong to your club" });
+          return;
+        }
+        if (!starters.some((player) => player.position === "GK")) {
+          res.status(400).json({ error: "Your starting XI needs at least one goalkeeper" });
+          return;
+        }
+      }
       // Club.formation is the single source of truth for the formation —
       // tacticStyle.formation always mirrors it, using the value this same
       // request is setting (if any), so the two never drift out of sync.
@@ -114,7 +153,17 @@ clubsRouter.patch(
         width: 50,
         tempo: 50,
       };
-      const merged: TacticStyle = { ...current, ...tacticStyle, formation: nextFormation };
+      const merged: TacticStyle = {
+        formation: nextFormation,
+        mentality: incoming.mentality ?? current.mentality,
+        pressing: incoming.pressing ?? current.pressing,
+        width: incoming.width ?? current.width,
+        tempo: incoming.tempo ?? current.tempo,
+      };
+      const nextStarterIds = starterIds ?? current.starterIds;
+      if (nextStarterIds) {
+        merged.starterIds = nextStarterIds;
+      }
 
       if (!MENTALITIES.includes(merged.mentality)) {
         res.status(400).json({ error: `tacticStyle.mentality must be one of: ${MENTALITIES.join(", ")}` });

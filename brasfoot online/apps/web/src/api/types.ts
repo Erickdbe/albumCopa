@@ -17,17 +17,33 @@ export interface TacticStyle {
   pressing: number;
   width: number;
   tempo: number;
+  starterIds?: string[];
 }
 
 export interface Player {
   id: string;
   name: string;
   position: string;
+  birthDate?: string;
+  nationality?: string;
   overall: number;
   potential: number;
   morale: number;
   fitness: number;
+  form?: number;
+  injuryStatus?: string | null;
+  contractEndDate?: string | null;
+  wage?: string | null;
   marketValue: string;
+  pace?: number;
+  finishing?: number;
+  passing?: number;
+  dribbling?: number;
+  tackling?: number;
+  strength?: number;
+  stamina?: number;
+  gkReflexes?: number;
+  gkPositioning?: number;
 }
 
 export interface Club {
@@ -50,7 +66,11 @@ export interface League {
   name: string;
   country: string;
   tier: number;
+  format?: CompetitionFormat;
+  formatLabel?: string;
 }
+
+export type CompetitionFormat = "round_robin" | "knockout" | "cup";
 
 export interface ClubSummary {
   id: string;
@@ -86,4 +106,125 @@ export interface Listing {
   player: { id: string; name: string; position: string; overall: number; potential: number };
   sellerClub: { id: string; name: string; shortName: string };
   bids?: ListingBid[];
+}
+
+export interface SeasonMatchClub {
+  id: string;
+  name: string;
+  shortName: string;
+}
+
+export interface SeasonMatch {
+  id: string;
+  status: "SCHEDULED" | "LIVE" | "FINISHED";
+  scheduledAt: string;
+  homeScore: number | null;
+  awayScore: number | null;
+  winnerClubId: string | null;
+  homeClub: SeasonMatchClub;
+  awayClub: SeasonMatchClub;
+}
+
+export interface SeasonRound {
+  roundNumber: number;
+  label: string;
+  scheduledCount: number;
+  finishedCount: number;
+  totalMatches: number;
+  isComplete: boolean;
+  matches: SeasonMatch[];
+}
+
+export interface SeasonStanding {
+  clubId: string;
+  clubName: string;
+  shortName: string;
+  played: number;
+  wins: number;
+  draws: number;
+  losses: number;
+  goalsFor: number;
+  goalsAgainst: number;
+  goalDifference: number;
+  points: number;
+}
+
+export interface SeasonPayload {
+  league: {
+    id: string;
+    name: string;
+    country: string;
+    format: CompetitionFormat;
+    formatLabel: string;
+  };
+  season: {
+    id: string;
+    name: string;
+    status: "UPCOMING" | "ACTIVE" | "FINISHED";
+    startDate: string;
+    endDate: string;
+  } | null;
+  currentRoundNumber: number | null;
+  champion: SeasonMatchClub | null;
+  rounds: SeasonRound[];
+  standings: SeasonStanding[];
+}
+
+export interface MatchReportClub {
+  id: string;
+  name: string;
+  shortName: string;
+}
+
+export interface MatchReportPlayer {
+  id: string;
+  name: string;
+  position: string;
+  overall?: number;
+}
+
+export interface MatchReportStatLine {
+  goals: number;
+  chances: number;
+  shots: number;
+  yellowCards: number;
+  redCards: number;
+  injuries: number;
+}
+
+export interface MatchReportEvent {
+  id: string;
+  minute: number;
+  second: number;
+  type: string;
+  teamSide: "home" | "away";
+  player: MatchReportPlayer | null;
+  relatedPlayer: MatchReportPlayer | null;
+  metadata: Record<string, unknown> | null;
+}
+
+export interface MatchReportLineup {
+  id: string;
+  club: MatchReportClub;
+  player: MatchReportPlayer;
+  isStarting: boolean;
+  position: string;
+  shirtNumber: number;
+  rating: number | null;
+}
+
+export interface MatchReport {
+  id: string;
+  status: "SCHEDULED" | "LIVE" | "FINISHED";
+  roundNumber: number;
+  scheduledAt: string;
+  homeScore: number | null;
+  awayScore: number | null;
+  league: { id: string; name: string; country: string; format: CompetitionFormat };
+  season: { id: string; name: string };
+  homeClub: MatchReportClub;
+  awayClub: MatchReportClub;
+  stats: { home: MatchReportStatLine; away: MatchReportStatLine };
+  events: MatchReportEvent[];
+  lineups: MatchReportLineup[];
 }

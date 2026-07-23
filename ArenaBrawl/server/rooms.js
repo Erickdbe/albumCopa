@@ -30,6 +30,9 @@ const EMPTY_SLOT = "hands";
 const SURVIVAL_PICKUP_RADIUS = 3.2;
 const ZOMBIE_ATTACK_RADIUS = 1.08;
 const ZOMBIE_ATTACK_MS = 1250;
+const ZOMBIE_CHASE_RADIUS = { mundo: 170, alagado: 190, default: 145 };
+const ZOMBIE_ROAM_RADIUS = { mundo: 54, alagado: 42, default: 36 };
+const ZOMBIE_ROAM_SPEED = { basic: 0.82, ribcage: 0.98, chubby: 0.68 };
 const MEDKIT_HEAL = 38;
 const MEDKIT_MAX = 5;
 const SURVIVAL_LOOT_CLEANUP_MS = 45000;
@@ -346,11 +349,15 @@ function makeZombies(mapId) {
   return (SURVIVAL_ZOMBIE_SPAWNS[mapId] || []).slice(0, initialLimit).map((zombie, index) => ({
     ...zombie,
     id: zombie.id || `${mapId}-zombie-${index}`,
+    homeX: zombie.x,
+    homeZ: zombie.z,
     health: zombie.kind === "chubby" ? 155 : zombie.kind === "ribcage" ? 95 : 115,
     maxHealth: zombie.kind === "chubby" ? 155 : zombie.kind === "ribcage" ? 95 : 115,
     alive: true,
     targetId: null,
     lastAttackAt: 0,
+    roamTarget: null,
+    nextRoamAt: 0,
     speedMul: 1
   }));
 }
@@ -398,9 +405,13 @@ function spawnProgressiveZombie(room, now) {
     ...chosen,
     ...stats,
     id: `${room.settings.mapId}-zombie-wave-${wave}-${room.zombieSerial}`,
+    homeX: chosen.x,
+    homeZ: chosen.z,
     alive: true,
     targetId: null,
     lastAttackAt: 0,
+    roamTarget: null,
+    nextRoamAt: 0,
     speedMul: 1 + Math.min(0.45, (wave - 1) * 0.04),
     spawnedAt: now
   });
@@ -735,28 +746,68 @@ function createRoomsModule(io) {
     return { target, distance: best };
   }
 
+  function assignZombieRoamTarget(room, zombie, now) {
+    const mapId = room.settings.mapId;
+    const half = MAP_HALF_SIZES[mapId] || ARENA_HALF;
+    const radius = ZOMBIE_ROAM_RADIUS[mapId] || ZOMBIE_ROAM_RADIUS.default;
+    const homeX = Number.isFinite(Number(zombie.homeX)) ? Number(zombie.homeX) : Number(zombie.x) || 0;
+    const homeZ = Number.isFinite(Number(zombie.homeZ)) ? Number(zombie.homeZ) : Number(zombie.z) || 0;
+    const angle = Math.random() * Math.PI * 2;
+    const distance = radius * (0.35 + Math.random() * 0.65);
+    const point = constrainMapPosition(mapId, {
+      x: clamp(homeX + Math.cos(angle) * distance, -half + 8, half - 8),
+      y: zombie.y,
+      z: clamp(homeZ + Math.sin(angle) * distance, -half + 8, half - 8)
+    });
+    zombie.roamTarget = { x: point.x, z: point.z };
+    zombie.nextRoamAt = now + 3200 + Math.random() * 5600;
+  }
+
+  function updateZombieRoam(room, zombie, delta, now, speedMul) {
+    if (!zombie.roamTarget || now >= (zombie.nextRoamAt || 0)) {
+      assignZombieRoamTarget(room, zombie, now);
+    }
+    const target = zombie.roamTarget;
+    const dx = target.x - zombie.x;
+    const dz = target.z - zombie.z;
+    const distance = Math.hypot(dx, dz);
+    if (distance < 1.2) {
+      assignZombieRoamTarget(room, zombie, now);
+      zombie.moving = false;
+      return;
+    }
+    const length = distance || 1;
+    const speed = (ZOMBIE_ROAM_SPEED[zombie.kind] || ZOMBIE_ROAM_SPEED.basic) * speedMul;
+    zombie.yaw = Math.atan2(-dx, -dz);
+    zombie.x += (dx / length) * speed * delta;
+    zombie.z += (dz / length) * speed * delta;
+    zombie.moving = true;
+  }
+
   function updateZombies(room, delta, now) {
     const zombies = room.zombies || [];
     if (!zombies.length) return;
     const night = room.worldTime?.phase === "night";
     const speedMul = night ? 1.55 : 1;
+    const chaseRadius = ZOMBIE_CHASE_RADIUS[room.settings.mapId] || ZOMBIE_CHASE_RADIUS.default;
     zombies.forEach((zombie) => {
       if (zombie.alive === false) return;
       const { target, distance } = nearestAlivePlayer(room, zombie);
       zombie.speedMul = speedMul;
       zombie.moving = false;
-      if (!target || distance > 86) {
-        zombie.yaw += Math.sin(now * 0.0004 + zombie.id.length) * delta * 0.4;
+      if (!target || distance > chaseRadius) {
         zombie.targetId = null;
+        updateZombieRoam(room, zombie, delta, now, speedMul);
         return;
       }
       zombie.targetId = target.socketId;
+      zombie.roamTarget = null;
       const dx = target.x - zombie.x;
       const dz = target.z - zombie.z;
       const length = Math.hypot(dx, dz) || 1;
       zombie.yaw = Math.atan2(-dx, -dz);
       if (distance > ZOMBIE_ATTACK_RADIUS) {
-        const baseSpeed = zombie.kind === "chubby" ? 1.35 : zombie.kind === "ribcage" ? 2.15 : 1.85;
+        const baseSpeed = zombie.kind === "chubby" ? 1.58 : zombie.kind === "ribcage" ? 2.45 : 2.12;
         zombie.x += (dx / length) * baseSpeed * speedMul * delta;
         zombie.z += (dz / length) * baseSpeed * speedMul * delta;
         zombie.moving = true;
@@ -1203,9 +1254,7 @@ function createRoomsModule(io) {
           activeZombies: room.zombies.filter((zombie) => zombie.alive !== false).length
         });
       }
-      if (room.worldTick % 2 === 0) {
-        io.to(room.roomId).volatile.emit("survival:zombies", room.zombies.map(publicZombie));
-      }
+      io.to(room.roomId).volatile.emit("survival:zombies", room.zombies.map(publicZombie));
     }, WORLD_TICK_MS);
   }
 

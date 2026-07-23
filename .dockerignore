@@ -1,0 +1,54 @@
+# Keep the Railway build context focused on the Node/Express web app.
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.log
+
+.git/
+.github/
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+.env
+.env.*
+!.env.example
+db.json
+backups/
+test-results/
+**/test-results/
+
+# Local smoke-test/browser artifacts.
+.claude/
+.edge-*/
+.tmp-*
+*.tmp
+*.bak
+
+# Installer/archive files are not needed by the production server.
+*.zip
+*.rar
+*.7z
+*.msi
+*.exe
+
+# Unity editor/source projects. Runtime web builds/assets live in other folders.
+ClickJogos-EH/
+ArenaBrawlUnity/
+AventuraMundo3D/
+CasaSombriaUnity/
+
+# Large local Unity/source caches if they appear inside tracked web asset folders.
+**/Library/
+**/Temp/
+**/Logs/
+**/UserSettings/
+**/obj/
+**/UnityPackageManager/
+
+# Heavy generated files intentionally kept local.
+cardwars-unity/Build/cardwars-unity.data.unityweb
+aventura3d/Build/aventura3d.data
+cs16-server/valve.zip

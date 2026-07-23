@@ -23,6 +23,11 @@ const WEAPON_LOOT_ASSETS = {
   mini_shotgun: { file: "Shotgun.gltf", targetHeight: 0.42 },
   knife: { file: "Knife.gltf", targetHeight: 0.32 }
 };
+const ZOMBIE_HEIGHTS = {
+  basic: 1.62,
+  ribcage: 1.62,
+  chubby: 1.68
+};
 
 const lootEntries = new Map();
 const zombieEntries = new Map();
@@ -357,7 +362,7 @@ async function attachQuaterniusZombie(entry, kind) {
     if (!entry.root.parent) return;
     const model = cloneSkeleton(source.scene);
     model.name = `quaternius-${kind || "basic"}-zombie`;
-    normalizeAssetModel(model, kind === "chubby" ? 1.9 : 1.84);
+    normalizeAssetModel(model, ZOMBIE_HEIGHTS[kind] || ZOMBIE_HEIGHTS.basic);
     model.traverse((child) => {
       if (!child.isMesh) return;
       child.castShadow = true;
@@ -371,6 +376,7 @@ async function attachQuaterniusZombie(entry, kind) {
     });
     entry.fallback.visible = false;
     entry.assetModel = model;
+    entry.assetBaseY = model.position.y;
     entry.root.add(model);
   } catch (error) {
     console.warn("Zombie Quaternius nao carregou, usando fallback low-poly:", error);
@@ -381,11 +387,12 @@ function makeZombieEntry(zombie, terrainHeightAt) {
   const root = new THREE.Group();
   root.name = `survival-zombie-${zombie.id}`;
   const fallback = makeFallbackZombie(zombie.kind);
+  fallback.scale.setScalar(zombie.kind === "chubby" ? 0.88 : 0.86);
   root.add(fallback);
-  const bodyHitbox = makeZombieHitbox(zombie.id, zombie.kind === "chubby" ? 0.46 : 0.34, 1.15, false);
-  bodyHitbox.position.y = 0.98;
-  const headHitbox = makeZombieHitbox(zombie.id, 0.24, 0.24, true);
-  headHitbox.position.y = 1.68;
+  const bodyHitbox = makeZombieHitbox(zombie.id, zombie.kind === "chubby" ? 0.42 : 0.31, 1.02, false);
+  bodyHitbox.position.y = 0.86;
+  const headHitbox = makeZombieHitbox(zombie.id, 0.2, 0.22, true);
+  headHitbox.position.y = 1.46;
   root.add(bodyHitbox, headHitbox);
   const y = terrainY(terrainHeightAt, zombie.x, zombie.z, zombie.y);
   root.position.set(zombie.x || 0, y, zombie.z || 0);
@@ -397,6 +404,8 @@ function makeZombieEntry(zombie, terrainHeightAt) {
     target: { ...zombie, y },
     hittable: [bodyHitbox, headHitbox],
     phase: Math.random() * Math.PI * 2,
+    walkPhase: Math.random() * Math.PI * 2,
+    lastFramePosition: new THREE.Vector3(zombie.x || 0, y, zombie.z || 0),
     deadAt: 0
   };
   zombieHittable.push(bodyHitbox, headHitbox);
@@ -477,26 +486,39 @@ export function updateSurvivalWorld(delta, now = performance.now()) {
   zombieEntries.forEach((entry) => {
     const alive = entry.target.alive !== false;
     const targetPosition = new THREE.Vector3(entry.target.x || 0, entry.target.y || 0, entry.target.z || 0);
-    entry.root.position.lerp(targetPosition, Math.min(1, delta * (alive ? 7.5 : 3.5)));
+    const distanceToTarget = entry.root.position.distanceTo(targetPosition);
+    if (distanceToTarget > 7) {
+      entry.root.position.copy(targetPosition);
+    } else {
+      entry.root.position.lerp(targetPosition, Math.min(1, delta * (alive ? (distanceToTarget > 2.2 ? 18 : 12) : 4)));
+    }
     const yaw = Number(entry.target.yaw) || 0;
     let yawDelta = yaw - entry.root.rotation.y;
     while (yawDelta > Math.PI) yawDelta -= Math.PI * 2;
     while (yawDelta < -Math.PI) yawDelta += Math.PI * 2;
     entry.root.rotation.y += yawDelta * Math.min(1, delta * 8);
-    const pulse = now * 0.006 + entry.phase;
+    const frameDistance = entry.root.position.distanceTo(entry.lastFramePosition || entry.root.position);
+    if (entry.lastFramePosition) entry.lastFramePosition.copy(entry.root.position);
+    const isMoving = alive && (Boolean(entry.target.moving) || frameDistance > 0.006 || distanceToTarget > 0.08);
+    entry.walkPhase += (isMoving ? Math.min(11, frameDistance / Math.max(0.001, delta)) * 0.19 + 3.1 : 0.65) * delta * Math.max(0.75, Number(entry.target.speedMul) || 1);
+    const pulse = entry.walkPhase + entry.phase;
     const speed = Math.max(0, Number(entry.target.speedMul) || 1);
+    const bob = isMoving ? Math.abs(Math.sin(pulse * 1.25)) * 0.045 : Math.sin(now * 0.0024 + entry.phase) * 0.012;
+    entry.fallback.position.y = bob;
     if (alive) {
-      entry.root.rotation.z = Math.sin(pulse * speed) * 0.045;
+      entry.root.rotation.z = Math.sin(pulse * speed) * (isMoving ? 0.05 : 0.018);
       const limbs = entry.fallback.userData.limbs;
       if (limbs) {
-        limbs.leftLeg.rotation.x = Math.sin(pulse * 1.4) * 0.42;
-        limbs.rightLeg.rotation.x = -Math.sin(pulse * 1.4) * 0.42;
-        limbs.leftArm.rotation.x = -0.82 + Math.sin(pulse * 1.2) * 0.12;
-        limbs.rightArm.rotation.x = -0.92 - Math.sin(pulse * 1.2) * 0.12;
+        const stride = isMoving ? 0.48 : 0.08;
+        limbs.leftLeg.rotation.x = Math.sin(pulse * 1.55) * stride;
+        limbs.rightLeg.rotation.x = -Math.sin(pulse * 1.55) * stride;
+        limbs.leftArm.rotation.x = -0.82 + Math.sin(pulse * 1.35) * (isMoving ? 0.18 : 0.05);
+        limbs.rightArm.rotation.x = -0.92 - Math.sin(pulse * 1.35) * (isMoving ? 0.18 : 0.05);
         limbs.head.rotation.z = Math.sin(pulse * 0.7) * 0.06;
       }
       if (entry.assetModel) {
-        entry.assetModel.rotation.z = Math.sin(pulse * 1.1) * 0.035;
+        entry.assetModel.position.y = (entry.assetBaseY || 0) + bob;
+        entry.assetModel.rotation.z = Math.sin(pulse * 1.1) * (isMoving ? 0.042 : 0.015);
       }
     } else {
       entry.root.rotation.z = THREE.MathUtils.lerp(entry.root.rotation.z, 1.32, Math.min(1, delta * 4));

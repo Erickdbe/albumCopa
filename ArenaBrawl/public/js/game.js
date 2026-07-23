@@ -14,7 +14,7 @@ import {
   syncSurvivalLoot,
   syncSurvivalZombies,
   updateSurvivalWorld
-} from "./survival-world.js?v=20260722-2";
+} from "./survival-world.js?v=20260723-1";
 import {
   attachAnimatedCharacter,
   playCharacterAction,
@@ -39,6 +39,7 @@ const PLAYER_COLLISION_RADIUS = 0.32;
 const GRENADE_RELEASE_MS = 950;
 const JUMP_HEIGHT_BASE = 1.5; // altura de pulo de referencia (multiplicada por jumpHeightMul)
 const DEFAULT_FOV = 78;
+const VEHICLE_INPUT_SEND_MS = 34;
 const LADDER_SPEED = 4.8;
 const PRONE_SPEED_MUL = 0.3;
 const PRONE_EYE_OFFSET = 1.08;
@@ -902,9 +903,16 @@ function syncVehicles(vehicleStates = []) {
       const model = buildVehicleModel(state);
       model.rotation.order = "YXZ";
       scene.add(model);
-      entry = { model, state: { ...state }, target: { ...state }, destroyedStyled: false };
+      entry = {
+        model,
+        state: { ...state },
+        target: { ...state },
+        lastTargetAt: performance.now(),
+        destroyedStyled: false
+      };
       vehicles.set(state.id, entry);
     }
+    entry.lastTargetAt = performance.now();
     entry.target = { ...state };
   });
   vehicles.forEach((entry, id) => {
@@ -1013,7 +1021,18 @@ function updateVehicleHud() {
 function updateVehiclePresentation(delta) {
   remotePlayers.forEach((avatar) => { avatar.inVehicle = false; });
   vehicles.forEach((entry) => {
-    const t = Math.min(1, delta * 12);
+    const dx = (entry.target.x || 0) - (entry.state.x || 0);
+    const dy = (entry.target.y || 0) - (entry.state.y || 0);
+    const dz = (entry.target.z || 0) - (entry.state.z || 0);
+    const error = Math.hypot(dx, dz);
+    const drivenByLocal = entry.target.driverId === selfId;
+    const smoothing = drivenByLocal ? 24 : 16;
+    const t = Math.min(1, delta * (error > 6 || Math.abs(dy) > 3 ? smoothing * 2.4 : smoothing));
+    if (error > 14 || Math.abs(dy) > 8) {
+      entry.state.x = entry.target.x;
+      entry.state.y = entry.target.y;
+      entry.state.z = entry.target.z;
+    }
     entry.state.x = THREE.MathUtils.lerp(entry.state.x, entry.target.x, t);
     entry.state.y = THREE.MathUtils.lerp(entry.state.y, entry.target.y, t);
     entry.state.z = THREE.MathUtils.lerp(entry.state.z, entry.target.z, t);
@@ -2169,7 +2188,7 @@ function updateVehicleControls() {
   if (!entry) return;
   const now = performance.now();
   if (local.mouseDown && isAirVehicleType(entry.target.type)) fireVehicleWeapon();
-  if (now - lastVehicleInputSent < MOVE_SEND_MS) return;
+  if (now - lastVehicleInputSent < VEHICLE_INPUT_SEND_MS) return;
   lastVehicleInputSent = now;
   const isPlane = isAirVehicleType(entry.target.type);
   const throttle = Number(Boolean(keys.KeyW)) - Number(Boolean(keys.KeyS));
@@ -2866,6 +2885,12 @@ export function attachSocket(activeSocket) {
     removeSurvivalLoot(lootId);
     const picked = room?.survivalLoot?.find((loot) => loot.id === lootId);
     if (picked) picked.active = false;
+  });
+
+  socket.on("survival:loot", (lootList) => {
+    const nextLoot = Array.isArray(lootList) ? lootList : [];
+    if (room) room.survivalLoot = nextLoot;
+    syncSurvivalLoot(scene, nextLoot, terrainSurfaceHeightAt);
   });
 
   socket.on("survival:inventory", (snapshot) => {

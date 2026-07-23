@@ -28,10 +28,16 @@ const EMOTES = {
 };
 const EMPTY_SLOT = "hands";
 const SURVIVAL_PICKUP_RADIUS = 3.2;
-const ZOMBIE_ATTACK_RADIUS = 1.42;
+const ZOMBIE_ATTACK_RADIUS = 1.08;
 const ZOMBIE_ATTACK_MS = 1250;
 const MEDKIT_HEAL = 38;
 const MEDKIT_MAX = 5;
+const SURVIVAL_LOOT_CLEANUP_MS = 45000;
+const SURVIVAL_LOOT_LIMITS = {
+  mundo: { initialExtra: 14, maxActive: 32, maxWeapons: 14, respawnMs: 2400 },
+  alagado: { initialExtra: 26, maxActive: 48, maxWeapons: 22, respawnMs: 1700 },
+  default: { initialExtra: 10, maxActive: 26, maxWeapons: 10, respawnMs: 2800 }
+};
 const PRIMARY_CLASS_BY_WEAPON_ID = Object.fromEntries(Object.values(CLASSES).map((classInfo) => [classInfo.primary.id, classInfo.id]));
 const SURVIVAL_LOOT_SPAWNS = {
   mundo: [
@@ -219,7 +225,8 @@ function publicZombie(zombie) {
     health: zombie.health,
     maxHealth: zombie.maxHealth,
     alive: zombie.alive !== false,
-    speedMul: zombie.speedMul || 1
+    speedMul: zombie.speedMul || 1,
+    moving: Boolean(zombie.moving)
   };
 }
 
@@ -229,6 +236,108 @@ function makeSurvivalLoot(mapId) {
     id: loot.id || `${mapId}-loot-${index}`,
     active: true
   }));
+}
+
+function survivalLootConfig(mapId) {
+  return SURVIVAL_LOOT_LIMITS[mapId] || SURVIVAL_LOOT_LIMITS.default;
+}
+
+function activeSurvivalLoot(room) {
+  return (room.survivalLoot || []).filter((loot) => loot.active !== false);
+}
+
+function pickDynamicLootTemplate(mapId, activeWeaponCount, config, forceWeapon = false) {
+  const templates = SURVIVAL_LOOT_SPAWNS[mapId] || [];
+  if (!templates.length) return null;
+  const weapons = templates.filter((loot) => loot.kind === "weapon");
+  const support = templates.filter((loot) => loot.kind !== "weapon");
+  const shouldSpawnWeapon = weapons.length
+    && activeWeaponCount < config.maxWeapons
+    && (forceWeapon || activeWeaponCount < Math.ceil(config.maxWeapons * 0.55) || Math.random() < 0.52);
+  const pool = shouldSpawnWeapon ? weapons : (support.length ? support : weapons);
+  return pool[Math.floor(Math.random() * pool.length)] || null;
+}
+
+function randomLootPosition(room, template) {
+  const mapId = room.settings.mapId;
+  const anchors = [
+    ...(SURVIVAL_LOOT_SPAWNS[mapId] || []),
+    ...(SURVIVAL_ZOMBIE_SPAWNS[mapId] || [])
+  ];
+  const half = MAP_HALF_SIZES[mapId] || ARENA_HALF;
+  const existing = activeSurvivalLoot(room);
+  const minPlayerDistance = mapId === "alagado" ? 16 : 18;
+  const minLootDistance = mapId === "alagado" ? 5.4 : 6.8;
+
+  for (let attempt = 0; attempt < 16; attempt += 1) {
+    const anchor = anchors[Math.floor(Math.random() * anchors.length)] || template || { x: 0, y: 0.2, z: 0 };
+    const angle = Math.random() * Math.PI * 2;
+    const radius = 5 + Math.random() * (mapId === "alagado" ? 34 : 44);
+    const x = clamp((Number(anchor.x) || 0) + Math.cos(angle) * radius, -half + 8, half - 8);
+    const z = clamp((Number(anchor.z) || 0) + Math.sin(angle) * radius, -half + 8, half - 8);
+    const constrained = constrainMapPosition(mapId, {
+      x,
+      y: Number.isFinite(Number(anchor.y)) ? Number(anchor.y) : Number(template?.y) || 0.2,
+      z
+    });
+    const tooCloseToPlayer = room.players.some((player) => (
+      player.alive && Math.hypot(player.x - constrained.x, player.z - constrained.z) < minPlayerDistance
+    ));
+    if (tooCloseToPlayer) continue;
+    const tooCloseToLoot = existing.some((loot) => Math.hypot(loot.x - constrained.x, loot.z - constrained.z) < minLootDistance);
+    if (tooCloseToLoot) continue;
+    return {
+      x: constrained.x,
+      y: Number.isFinite(Number(constrained.y)) ? Number(constrained.y) : Number(template?.y) || 0.2,
+      z: constrained.z
+    };
+  }
+  return null;
+}
+
+function spawnDynamicSurvivalLoot(room, now, forceWeapon = false) {
+  const config = survivalLootConfig(room.settings.mapId);
+  const activeLoot = activeSurvivalLoot(room);
+  if (activeLoot.length >= config.maxActive) return false;
+  const activeWeaponCount = activeLoot.filter((loot) => loot.kind === "weapon").length;
+  const template = pickDynamicLootTemplate(room.settings.mapId, activeWeaponCount, config, forceWeapon);
+  if (!template) return false;
+  const position = randomLootPosition(room, template);
+  if (!position) return false;
+  room.lootSerial = (room.lootSerial || 0) + 1;
+  room.survivalLoot.push({
+    ...template,
+    id: `${room.settings.mapId}-loot-random-${room.lootSerial}`,
+    x: position.x,
+    y: position.y,
+    z: position.z,
+    active: true,
+    dynamic: true,
+    spawnedAt: now
+  });
+  return true;
+}
+
+function seedExtraSurvivalLoot(room, now) {
+  const config = survivalLootConfig(room.settings.mapId);
+  for (let i = 0; i < config.initialExtra; i += 1) {
+    spawnDynamicSurvivalLoot(room, now, i % 2 === 0);
+  }
+  room.nextLootSpawnAt = now + Math.round(config.respawnMs * 0.75);
+}
+
+function updateSurvivalLootSpawns(room, now) {
+  const config = survivalLootConfig(room.settings.mapId);
+  room.survivalLoot = (room.survivalLoot || []).filter((loot) => (
+    loot.active !== false || now - (loot.pickedAt || now) < SURVIVAL_LOOT_CLEANUP_MS
+  ));
+  if (activeSurvivalLoot(room).length >= config.maxActive) return false;
+  if (!room.nextLootSpawnAt) room.nextLootSpawnAt = now + config.respawnMs;
+  if (now < room.nextLootSpawnAt) return false;
+  const spawned = spawnDynamicSurvivalLoot(room, now);
+  const variance = 0.72 + Math.random() * 0.56;
+  room.nextLootSpawnAt = now + Math.round((spawned ? config.respawnMs : 1200) * variance);
+  return spawned;
 }
 
 function makeZombies(mapId) {
@@ -599,6 +708,7 @@ function createRoomsModule(io) {
 
     if (!consumed) return null;
     loot.active = false;
+    loot.pickedAt = Date.now();
     return {
       picked: publicLoot(loot),
       slot: player.slot,
@@ -633,8 +743,10 @@ function createRoomsModule(io) {
       if (zombie.alive === false) return;
       const { target, distance } = nearestAlivePlayer(room, zombie);
       zombie.speedMul = speedMul;
+      zombie.moving = false;
       if (!target || distance > 86) {
         zombie.yaw += Math.sin(now * 0.0004 + zombie.id.length) * delta * 0.4;
+        zombie.targetId = null;
         return;
       }
       zombie.targetId = target.socketId;
@@ -646,8 +758,10 @@ function createRoomsModule(io) {
         const baseSpeed = zombie.kind === "chubby" ? 1.35 : zombie.kind === "ribcage" ? 2.15 : 1.85;
         zombie.x += (dx / length) * baseSpeed * speedMul * delta;
         zombie.z += (dz / length) * baseSpeed * speedMul * delta;
+        zombie.moving = true;
       }
-      if (distance <= ZOMBIE_ATTACK_RADIUS + 0.15 && now - (zombie.lastAttackAt || 0) > ZOMBIE_ATTACK_MS / speedMul) {
+      const attackDistance = Math.hypot(target.x - zombie.x, target.z - zombie.z);
+      if (attackDistance <= ZOMBIE_ATTACK_RADIUS && now - (zombie.lastAttackAt || 0) > ZOMBIE_ATTACK_MS / speedMul) {
         zombie.lastAttackAt = now;
         applyDamage(room, null, target, night ? 16 : 10, false);
         io.to(room.roomId).emit("survival:zombie-attack", { zombieId: zombie.id, targetSocketId: target.socketId });
@@ -1053,6 +1167,8 @@ function createRoomsModule(io) {
     room.vehicles = makeVehicles(room.settings.mapId);
     room.worldObjects = new Map();
     room.survivalLoot = makeSurvivalLoot(room.settings.mapId);
+    room.lootSerial = room.survivalLoot.length;
+    seedExtraSurvivalLoot(room, room.startedAt);
     room.zombies = makeZombies(room.settings.mapId);
     room.survivalWave = 1;
     room.zombieSerial = room.zombies.length;
@@ -1069,11 +1185,11 @@ function createRoomsModule(io) {
       updateVehicles(room, WORLD_TICK_MS / 1000, now);
       updateZombies(room, WORLD_TICK_MS / 1000, now);
       updateZombieSpawns(room, now);
+      const lootChanged = updateSurvivalLootSpawns(room, now);
       applyWorldEventForces(room, event, now);
       room.worldTick += 1;
-      if (room.worldTick % 2 === 0) {
-        io.to(room.roomId).volatile.emit("vehicle:state", room.vehicles.map(publicVehicle));
-      }
+      io.to(room.roomId).volatile.emit("vehicle:state", room.vehicles.map(publicVehicle));
+      if (lootChanged) io.to(room.roomId).emit("survival:loot", activeSurvivalLoot(room).map(publicLoot));
       if (room.worldTick % 4 === 0) {
         io.to(room.roomId).emit("arena-world:event", event || { type: "none", phase: "idle", progress: 0 });
       }
@@ -1086,7 +1202,7 @@ function createRoomsModule(io) {
           activeZombies: room.zombies.filter((zombie) => zombie.alive !== false).length
         });
       }
-      if (room.worldTick % 4 === 0) {
+      if (room.worldTick % 2 === 0) {
         io.to(room.roomId).volatile.emit("survival:zombies", room.zombies.map(publicZombie));
       }
     }, WORLD_TICK_MS);

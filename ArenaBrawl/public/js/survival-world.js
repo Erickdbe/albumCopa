@@ -54,7 +54,6 @@ const lootEntries = new Map();
 const zombieEntries = new Map();
 const zombieHittable = [];
 const reusableColor = new THREE.Color();
-const reusableZombieTargetPosition = new THREE.Vector3();
 const zombieLoader = new FBXLoader();
 const zombieGltfLoader = new GLTFLoader();
 const zombieSourcePromises = new Map();
@@ -567,8 +566,7 @@ function makeZombieEntry(zombie, terrainHeightAt) {
     lastFramePosition: new THREE.Vector3(zombie.x || 0, y, zombie.z || 0),
     deadAt: 0,
     deathStarted: false,
-    attackUntil: 0,
-    assetMixerCarry: 0
+    attackUntil: 0
   };
   zombieHittable.push(bodyHitbox, headHitbox);
   attachQuaterniusZombie(entry, zombie.kind || "basic");
@@ -700,11 +698,7 @@ export function playSurvivalZombieAttack(zombieId) {
   }
 }
 
-export function updateSurvivalWorld(delta, now = performance.now(), viewerPosition = null) {
-  const hasViewer = Number.isFinite(Number(viewerPosition?.x)) && Number.isFinite(Number(viewerPosition?.z));
-  const viewX = hasViewer ? Number(viewerPosition.x) : 0;
-  const viewZ = hasViewer ? Number(viewerPosition.z) : 0;
-
+export function updateSurvivalWorld(delta, now = performance.now()) {
   lootEntries.forEach((entry) => {
     entry.group.rotation.y += delta * 0.85;
     entry.group.position.y = entry.target.y + Math.sin(now * 0.003 + entry.group.id) * 0.06;
@@ -714,16 +708,9 @@ export function updateSurvivalWorld(delta, now = performance.now(), viewerPositi
 
   zombieEntries.forEach((entry) => {
     const alive = entry.target.alive !== false;
-    const targetPosition = reusableZombieTargetPosition.set(entry.target.x || 0, entry.target.y || 0, entry.target.z || 0);
+    const targetPosition = new THREE.Vector3(entry.target.x || 0, entry.target.y || 0, entry.target.z || 0);
     if (alive && entry.target.moving && entry.targetVelocity && entry.lastSyncAt) {
       targetPosition.addScaledVector(entry.targetVelocity, Math.min(0.12, (now - entry.lastSyncAt) / 1000));
-    }
-    const viewDistance = hasViewer ? Math.hypot(targetPosition.x - viewX, targetPosition.z - viewZ) : 0;
-    if (alive && viewDistance > 210) {
-      entry.root.visible = false;
-      entry.root.position.copy(targetPosition);
-      if (entry.lastFramePosition) entry.lastFramePosition.copy(targetPosition);
-      return;
     }
     entry.root.visible = true;
     const distanceToTarget = entry.root.position.distanceTo(targetPosition);
@@ -775,12 +762,7 @@ export function updateSurvivalWorld(delta, now = performance.now(), viewerPositi
         setZombieAssetAction(entry, isAttacking ? "attack" : isMoving ? "move" : "idle", isAttacking ? 0.06 : 0.14, { once: isAttacking });
         const actionSpeed = (isAttacking ? 1.08 : isMoving ? 0.92 : 0.72) * Math.max(0.75, Number(entry.target.speedMul) || 1);
         if (entry.assetAction) entry.assetAction.timeScale = actionSpeed;
-        const mixerStep = !isAttacking && viewDistance > 105 ? 0.14 : !isAttacking && viewDistance > 68 ? 0.075 : 0;
-        entry.assetMixerCarry = (entry.assetMixerCarry || 0) + delta;
-        if (mixerStep <= 0 || entry.assetMixerCarry >= mixerStep) {
-          entry.assetMixer.update(entry.assetMixerCarry);
-          entry.assetMixerCarry = 0;
-        }
+        entry.assetMixer.update(delta);
       }
       animateZombieAssetRig(entry, isMoving, pulse, bob, now, isAttacking);
     } else {
@@ -789,11 +771,7 @@ export function updateSurvivalWorld(delta, now = performance.now(), viewerPositi
           setZombieAssetAction(entry, "death", 0.08, { forceReset: true, once: true });
           entry.deathStarted = true;
         }
-        entry.assetMixerCarry = (entry.assetMixerCarry || 0) + delta;
-        if (viewDistance <= 80 || entry.assetMixerCarry >= 0.12) {
-          entry.assetMixer.update(entry.assetMixerCarry);
-          entry.assetMixerCarry = 0;
-        }
+        entry.assetMixer.update(delta);
       }
       entry.root.rotation.z = THREE.MathUtils.lerp(entry.root.rotation.z, 1.32, Math.min(1, delta * 4));
       entry.hittable.forEach((mesh) => { mesh.visible = false; });

@@ -1394,7 +1394,7 @@ function createRoomsModule(io) {
         });
       }
       if (room.worldTick % 2 === 0) {
-        io.to(room.roomId).volatile.emit("survival:zombies", room.zombies.map(publicZombie));
+        io.to(room.roomId).emit("survival:zombies", room.zombies.map(publicZombie));
       }
     }, WORLD_TICK_MS);
   }

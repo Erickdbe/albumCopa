@@ -44,9 +44,9 @@ const FREE_GUN_MODELS = {
   assault_rifle: { file: "M16A1.fbx", size: 1.65 },
   smg: { file: "HK_MP5.fbx", size: 1.18 },
   heavy_mg: { file: "Ak47.fbx", size: 1.72 },
-  pistol_common: { file: "FN_Five_Seven.fbx", size: 0.7 },
-  heavy_pistol: { file: "FN_Five_Seven.fbx", size: 0.76 },
-  auto_pistol_weak: { file: "FN_Five_Seven.fbx", size: 0.72 }
+  pistol_common: { file: "FN_Five_Seven.fbx", size: 0.56, rotation: [0, Math.PI, 0] },
+  heavy_pistol: { file: "FN_Five_Seven.fbx", size: 0.6, rotation: [0, Math.PI, 0] },
+  auto_pistol_weak: { file: "FN_Five_Seven.fbx", size: 0.56, rotation: [0, Math.PI, 0] }
 };
 
 const VEHICLE_MODELS = {
@@ -206,7 +206,7 @@ export function attachFreeGunModel(parent, weaponId, options = {}) {
   if (!descriptor) return null;
   return attachUnityPackModel(parent, "guns", descriptor.file, {
     targetSize: options.targetSize || descriptor.size,
-    rotation: options.rotation || [0, Math.PI / 2, 0],
+    rotation: options.rotation || descriptor.rotation || [0, Math.PI / 2, 0],
     anchor: "center",
     roughness: 0.52,
     metalness: 0.28,

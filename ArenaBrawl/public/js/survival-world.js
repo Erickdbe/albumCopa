@@ -356,6 +356,50 @@ function normalizeAssetModel(model, targetHeight = 1.85) {
   model.rotation.y = Math.PI;
 }
 
+function zombieClip(animations = [], candidates = []) {
+  const lookup = new Map(animations.map((clip) => [String(clip.name || "").toLowerCase(), clip]));
+  for (const name of candidates) {
+    const clip = lookup.get(name.toLowerCase());
+    if (clip) return clip;
+  }
+  return animations[0] || null;
+}
+
+function setZombieAssetAction(entry, actionName, fade = 0.14) {
+  const action = entry.assetActions?.[actionName] || entry.assetActions?.idle || entry.assetActions?.move;
+  if (!action || entry.assetAction === action) return;
+  action.enabled = true;
+  action.reset();
+  if (actionName === "death") {
+    action.setLoop(THREE.LoopOnce, 1);
+    action.clampWhenFinished = true;
+  } else {
+    action.setLoop(THREE.LoopRepeat, Infinity);
+    action.clampWhenFinished = false;
+  }
+  if (entry.assetAction) entry.assetAction.fadeOut(fade);
+  action.fadeIn(fade).play();
+  entry.assetAction = action;
+}
+
+function prepareZombieAssetAnimations(entry, model, animations = []) {
+  if (!animations.length) return;
+  const mixer = new THREE.AnimationMixer(model);
+  const makeAction = (clip) => (clip ? mixer.clipAction(clip, model) : null);
+  entry.assetMixer = mixer;
+  entry.assetActions = {
+    idle: makeAction(zombieClip(animations, ["Idle_Attack", "Idle"])),
+    move: makeAction(zombieClip(animations, ["Run_Attack", "Run", "Walk"])),
+    death: makeAction(zombieClip(animations, ["Death"]))
+  };
+  Object.values(entry.assetActions).forEach((action) => {
+    if (!action) return;
+    action.enabled = true;
+    action.weight = 0;
+  });
+  setZombieAssetAction(entry, "idle", 0);
+}
+
 async function attachQuaterniusZombie(entry, kind) {
   try {
     const source = await zombieSource(kind);
@@ -377,6 +421,7 @@ async function attachQuaterniusZombie(entry, kind) {
     entry.fallback.visible = false;
     entry.assetModel = model;
     entry.assetBaseY = model.position.y;
+    prepareZombieAssetAnimations(entry, model, source.animations || []);
     entry.root.add(model);
   } catch (error) {
     console.warn("Zombie Quaternius nao carregou, usando fallback low-poly:", error);
@@ -461,8 +506,22 @@ export function syncSurvivalZombies(scene, zombies = [], terrainHeightAt = null)
       scene.add(entry.root);
     }
     const y = terrainY(terrainHeightAt, zombie.x, zombie.z, zombie.y);
-    entry.target = { ...zombie, y };
-    if (zombie.alive === false && !entry.deadAt) entry.deadAt = performance.now();
+    if (zombie.alive === false) {
+      if (!entry.deadAt) {
+        entry.deadAt = performance.now();
+        entry.target = {
+          ...zombie,
+          x: entry.root.position.x,
+          y: entry.root.position.y,
+          z: entry.root.position.z,
+          yaw: entry.root.rotation.y,
+          moving: false
+        };
+      }
+    } else {
+      entry.deadAt = 0;
+      entry.target = { ...zombie, y };
+    }
   });
   zombieEntries.forEach((entry, id) => {
     if (activeIds.has(id)) return;
@@ -487,16 +546,18 @@ export function updateSurvivalWorld(delta, now = performance.now()) {
     const alive = entry.target.alive !== false;
     const targetPosition = new THREE.Vector3(entry.target.x || 0, entry.target.y || 0, entry.target.z || 0);
     const distanceToTarget = entry.root.position.distanceTo(targetPosition);
-    if (distanceToTarget > 7) {
-      entry.root.position.copy(targetPosition);
-    } else {
-      entry.root.position.lerp(targetPosition, Math.min(1, delta * (alive ? (distanceToTarget > 2.2 ? 18 : 12) : 4)));
+    if (alive) {
+      if (distanceToTarget > 7) {
+        entry.root.position.copy(targetPosition);
+      } else {
+        entry.root.position.lerp(targetPosition, Math.min(1, delta * (distanceToTarget > 2.2 ? 18 : 12)));
+      }
     }
     const yaw = Number(entry.target.yaw) || 0;
     let yawDelta = yaw - entry.root.rotation.y;
     while (yawDelta > Math.PI) yawDelta -= Math.PI * 2;
     while (yawDelta < -Math.PI) yawDelta += Math.PI * 2;
-    entry.root.rotation.y += yawDelta * Math.min(1, delta * 8);
+    if (alive) entry.root.rotation.y += yawDelta * Math.min(1, delta * 8);
     const frameDistance = entry.root.position.distanceTo(entry.lastFramePosition || entry.root.position);
     if (entry.lastFramePosition) entry.lastFramePosition.copy(entry.root.position);
     const isMoving = alive && (Boolean(entry.target.moving) || frameDistance > 0.006 || distanceToTarget > 0.08);
@@ -520,7 +581,17 @@ export function updateSurvivalWorld(delta, now = performance.now()) {
         entry.assetModel.position.y = (entry.assetBaseY || 0) + bob;
         entry.assetModel.rotation.z = Math.sin(pulse * 1.1) * (isMoving ? 0.042 : 0.015);
       }
+      if (entry.assetMixer) {
+        setZombieAssetAction(entry, isMoving ? "move" : "idle");
+        const actionSpeed = (isMoving ? 0.92 : 0.72) * Math.max(0.75, Number(entry.target.speedMul) || 1);
+        if (entry.assetAction) entry.assetAction.timeScale = actionSpeed;
+        entry.assetMixer.update(delta);
+      }
     } else {
+      if (entry.assetMixer) {
+        setZombieAssetAction(entry, "death", 0.08);
+        entry.assetMixer.update(delta);
+      }
       entry.root.rotation.z = THREE.MathUtils.lerp(entry.root.rotation.z, 1.32, Math.min(1, delta * 4));
       entry.hittable.forEach((mesh) => { mesh.visible = false; });
       if (entry.deadAt && now - entry.deadAt > 1800) {

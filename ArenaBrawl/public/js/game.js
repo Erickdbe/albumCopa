@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { PointerLockControls } from "three/addons/controls/PointerLockControls.js";
 import { BloomEffect, EffectComposer, EffectPass, RenderPass, VignetteEffect } from "postprocessing";
 import { buildMap } from "./maps.js?v=20260722-2";
-import { buildWeaponModel, setBowChargeVisual } from "./weapon-models.js?v=20260723-3";
+import { buildWeaponModel, setBowChargeVisual } from "./weapon-models.js?v=20260723-4";
 import { buildVehicleModel, createAirBomb, createCannonProjectile, createExplosion } from "./vehicle-models.js";
 import { emitExplosionFx, emitImpactFx, emitMuzzleFx, emitNapalmExplosionFx, preloadWarFx } from "./war-fx.js";
 import { UNIFIED_RIVER_POINTS } from "./water-world.js";
@@ -14,7 +14,7 @@ import {
   syncSurvivalLoot,
   syncSurvivalZombies,
   updateSurvivalWorld
-} from "./survival-world.js?v=20260723-3";
+} from "./survival-world.js?v=20260723-4";
 import {
   attachAnimatedCharacter,
   playCharacterAction,

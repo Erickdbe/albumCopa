@@ -34,9 +34,9 @@ const MEDKIT_HEAL = 38;
 const MEDKIT_MAX = 5;
 const SURVIVAL_LOOT_CLEANUP_MS = 45000;
 const SURVIVAL_LOOT_LIMITS = {
-  mundo: { initialExtra: 14, maxActive: 32, maxWeapons: 14, respawnMs: 2400 },
-  alagado: { initialExtra: 26, maxActive: 48, maxWeapons: 22, respawnMs: 1700 },
-  default: { initialExtra: 10, maxActive: 26, maxWeapons: 10, respawnMs: 2800 }
+  mundo: { initialExtra: 30, maxActive: 58, maxWeapons: 32, respawnMs: 1150 },
+  alagado: { initialExtra: 42, maxActive: 78, maxWeapons: 44, respawnMs: 950 },
+  default: { initialExtra: 18, maxActive: 42, maxWeapons: 22, respawnMs: 1500 }
 };
 const PRIMARY_CLASS_BY_WEAPON_ID = Object.fromEntries(Object.values(CLASSES).map((classInfo) => [classInfo.primary.id, classInfo.id]));
 const SURVIVAL_LOOT_SPAWNS = {
@@ -251,9 +251,10 @@ function pickDynamicLootTemplate(mapId, activeWeaponCount, config, forceWeapon =
   if (!templates.length) return null;
   const weapons = templates.filter((loot) => loot.kind === "weapon");
   const support = templates.filter((loot) => loot.kind !== "weapon");
+  const weaponFloor = Math.ceil(config.maxWeapons * 0.72);
   const shouldSpawnWeapon = weapons.length
     && activeWeaponCount < config.maxWeapons
-    && (forceWeapon || activeWeaponCount < Math.ceil(config.maxWeapons * 0.55) || Math.random() < 0.52);
+    && (forceWeapon || activeWeaponCount < weaponFloor || Math.random() < 0.72);
   const pool = shouldSpawnWeapon ? weapons : (support.length ? support : weapons);
   return pool[Math.floor(Math.random() * pool.length)] || null;
 }
@@ -269,7 +270,7 @@ function randomLootPosition(room, template) {
   const minPlayerDistance = mapId === "alagado" ? 16 : 18;
   const minLootDistance = mapId === "alagado" ? 5.4 : 6.8;
 
-  for (let attempt = 0; attempt < 16; attempt += 1) {
+  for (let attempt = 0; attempt < 30; attempt += 1) {
     const anchor = anchors[Math.floor(Math.random() * anchors.length)] || template || { x: 0, y: 0.2, z: 0 };
     const angle = Math.random() * Math.PI * 2;
     const radius = 5 + Math.random() * (mapId === "alagado" ? 34 : 44);
@@ -321,7 +322,7 @@ function spawnDynamicSurvivalLoot(room, now, forceWeapon = false) {
 function seedExtraSurvivalLoot(room, now) {
   const config = survivalLootConfig(room.settings.mapId);
   for (let i = 0; i < config.initialExtra; i += 1) {
-    spawnDynamicSurvivalLoot(room, now, i % 2 === 0);
+    spawnDynamicSurvivalLoot(room, now, i % 4 !== 3);
   }
   room.nextLootSpawnAt = now + Math.round(config.respawnMs * 0.75);
 }

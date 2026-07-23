@@ -377,8 +377,13 @@ function setZombieAssetAction(entry, actionName, fade = 0.14) {
     action.setLoop(THREE.LoopRepeat, Infinity);
     action.clampWhenFinished = false;
   }
-  if (entry.assetAction) entry.assetAction.fadeOut(fade);
-  action.fadeIn(fade).play();
+  action.setEffectiveWeight(1);
+  if (entry.assetAction && fade > 0) {
+    entry.assetAction.fadeOut(fade);
+    action.fadeIn(fade).play();
+  } else {
+    action.play();
+  }
   entry.assetAction = action;
 }
 
@@ -398,6 +403,73 @@ function prepareZombieAssetAnimations(entry, model, animations = []) {
     action.weight = 0;
   });
   setZombieAssetAction(entry, "idle", 0);
+}
+
+function collectZombieAssetRig(model) {
+  const bones = new Map();
+  model.traverse((child) => {
+    if (!child.isBone) return;
+    bones.set(child.name, child);
+    child.userData.survivalBaseRotation = child.rotation.clone();
+    child.userData.survivalBasePosition = child.position.clone();
+  });
+  return {
+    hips: bones.get("Hips"),
+    abdomen: bones.get("Abdomen"),
+    torso: bones.get("Torso") || bones.get("Body"),
+    neck: bones.get("Neck"),
+    head: bones.get("Head"),
+    upperArmL: bones.get("UpperArm.L"),
+    upperArmR: bones.get("UpperArm.R"),
+    lowerArmL: bones.get("LowerArm.L"),
+    lowerArmR: bones.get("LowerArm.R"),
+    upperLegL: bones.get("UpperLeg.L"),
+    upperLegR: bones.get("UpperLeg.R"),
+    lowerLegL: bones.get("LowerLeg.L"),
+    lowerLegR: bones.get("LowerLeg.R"),
+    footL: bones.get("Foot.L"),
+    footR: bones.get("Foot.R")
+  };
+}
+
+function poseBone(bone, x = 0, y = 0, z = 0) {
+  if (!bone) return;
+  const base = bone.userData.survivalBaseRotation;
+  if (!base) return;
+  bone.rotation.set(base.x + x, base.y + y, base.z + z);
+}
+
+function poseBonePosition(bone, x = 0, y = 0, z = 0) {
+  if (!bone) return;
+  const base = bone.userData.survivalBasePosition;
+  if (!base) return;
+  bone.position.set(base.x + x, base.y + y, base.z + z);
+}
+
+function animateZombieAssetRig(entry, isMoving, pulse, bob, now) {
+  const rig = entry.assetRig;
+  if (!rig) return;
+  const speed = Math.max(0.75, Number(entry.target.speedMul) || 1);
+  const stride = isMoving ? 0.72 : 0.12;
+  const armStride = isMoving ? 0.46 : 0.08;
+  const leg = Math.sin(pulse * 1.75);
+  const arm = Math.sin(pulse * 1.55 + Math.PI);
+  poseBonePosition(rig.hips, 0, bob * 0.55, 0);
+  poseBone(rig.hips, Math.sin(pulse * 0.9) * (isMoving ? 0.035 : 0.012), 0, Math.sin(pulse) * (isMoving ? 0.08 : 0.025));
+  poseBone(rig.abdomen, Math.sin(pulse * 0.8 + 0.6) * (isMoving ? 0.06 : 0.022), 0, Math.sin(pulse * 0.9) * (isMoving ? -0.055 : -0.018));
+  poseBone(rig.torso, -0.12 + Math.sin(pulse * 1.05) * (isMoving ? 0.08 : 0.03), 0, Math.sin(pulse * 0.95) * (isMoving ? 0.06 : 0.02));
+  poseBone(rig.neck, Math.sin(now * 0.003 + entry.phase) * 0.03, 0, 0);
+  poseBone(rig.head, Math.sin(now * 0.0027 + entry.phase) * 0.045, Math.sin(now * 0.0021 + entry.phase) * 0.045, 0);
+  poseBone(rig.upperLegL, leg * stride, 0, 0);
+  poseBone(rig.upperLegR, -leg * stride, 0, 0);
+  poseBone(rig.lowerLegL, Math.max(0, -leg) * stride * 0.72, 0, 0);
+  poseBone(rig.lowerLegR, Math.max(0, leg) * stride * 0.72, 0, 0);
+  poseBone(rig.footL, Math.max(0, leg) * 0.18 * speed, 0, 0);
+  poseBone(rig.footR, Math.max(0, -leg) * 0.18 * speed, 0, 0);
+  poseBone(rig.upperArmL, -0.74 + arm * armStride, 0, -0.18);
+  poseBone(rig.upperArmR, -0.78 - arm * armStride, 0, 0.18);
+  poseBone(rig.lowerArmL, -0.38 + Math.sin(pulse * 1.7) * (isMoving ? 0.16 : 0.05), 0, 0);
+  poseBone(rig.lowerArmR, -0.42 - Math.sin(pulse * 1.7) * (isMoving ? 0.16 : 0.05), 0, 0);
 }
 
 async function attachQuaterniusZombie(entry, kind) {
@@ -421,6 +493,7 @@ async function attachQuaterniusZombie(entry, kind) {
     entry.fallback.visible = false;
     entry.assetModel = model;
     entry.assetBaseY = model.position.y;
+    entry.assetRig = collectZombieAssetRig(model);
     prepareZombieAssetAnimations(entry, model, source.animations || []);
     entry.root.add(model);
   } catch (error) {
@@ -519,6 +592,20 @@ export function syncSurvivalZombies(scene, zombies = [], terrainHeightAt = null)
         };
       }
     } else {
+      const syncNow = performance.now();
+      const previousTarget = entry.target || {};
+      const syncDt = Math.max(0.001, (syncNow - (entry.lastSyncAt || syncNow)) / 1000);
+      const previousX = Number(previousTarget.x);
+      const previousY = Number(previousTarget.y);
+      const previousZ = Number(previousTarget.z);
+      if (Number.isFinite(previousX) && Number.isFinite(previousY) && Number.isFinite(previousZ)) {
+        entry.targetVelocity = new THREE.Vector3(
+          (Number(zombie.x) - previousX) / syncDt,
+          (y - previousY) / syncDt,
+          (Number(zombie.z) - previousZ) / syncDt
+        ).clampLength(0, 4.2 * Math.max(1, Number(zombie.speedMul) || 1));
+      }
+      entry.lastSyncAt = syncNow;
       entry.deadAt = 0;
       entry.target = { ...zombie, y };
     }
@@ -545,6 +632,9 @@ export function updateSurvivalWorld(delta, now = performance.now()) {
   zombieEntries.forEach((entry) => {
     const alive = entry.target.alive !== false;
     const targetPosition = new THREE.Vector3(entry.target.x || 0, entry.target.y || 0, entry.target.z || 0);
+    if (alive && entry.target.moving && entry.targetVelocity && entry.lastSyncAt) {
+      targetPosition.addScaledVector(entry.targetVelocity, Math.min(0.12, (now - entry.lastSyncAt) / 1000));
+    }
     const distanceToTarget = entry.root.position.distanceTo(targetPosition);
     if (alive) {
       if (distanceToTarget > 7) {
@@ -587,6 +677,7 @@ export function updateSurvivalWorld(delta, now = performance.now()) {
         if (entry.assetAction) entry.assetAction.timeScale = actionSpeed;
         entry.assetMixer.update(delta);
       }
+      animateZombieAssetRig(entry, isMoving, pulse, bob, now);
     } else {
       if (entry.assetMixer) {
         setZombieAssetAction(entry, "death", 0.08);

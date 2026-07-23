@@ -13,7 +13,11 @@ import {
   roundLabel,
   type CompetitionFormat,
 } from "@brfut/db";
-import { importCompetition } from "@brfut/football-data-adapter";
+import {
+  hydrateImportedClubSquads,
+  importCompetition,
+  importCompetitionTeams,
+} from "@brfut/football-data-adapter";
 import { asyncHandler } from "../middleware/asyncHandler.js";
 import { requireAuth } from "../auth/middleware.js";
 import { createRoomRateLimit } from "../middleware/apiRateLimit.js";
@@ -140,6 +144,38 @@ function brazilianSerieAClubs(roomName: string, clubCount: number) {
       players: generateFallbackSquad(externalRef, club.reputation),
     };
   });
+}
+
+async function drawBrazilianSerieAClubs(roomName: string, clubCount: number, apiKey: string | undefined) {
+  if (apiKey) {
+    try {
+      const importedClubs = await importCompetitionTeams({ apiKey }, BRAZILIAN_SERIE_A_CODE);
+      const importedSelection = drawImportedOrReject(importedClubs, clubCount);
+      if (importedSelection) {
+        const detailedSelection = await hydrateImportedClubSquads({ apiKey }, importedSelection);
+        const selected = fillMissingSquads(detailedSelection);
+        return {
+          selected,
+          dataSource: "football-data",
+          squadSource: selected.some((club) => club.players.some((player) => !player.externalRef?.includes("-fallback-")))
+            ? "api"
+            : "generated",
+        };
+      }
+    } catch (err) {
+      console.warn(
+        `[leagues] Could not import ${BRAZILIAN_SERIE_A_CODE} from football-data.org; using local fallback. ${
+          err instanceof Error ? err.message : "Unknown error"
+        }`
+      );
+    }
+  }
+
+  return {
+    selected: brazilianSerieAClubs(roomName, clubCount),
+    dataSource: "local",
+    squadSource: "generated",
+  };
 }
 
 function drawImportedClubs(clubs: ReturnType<typeof fillMissingSquads>, clubCount: number) {
@@ -293,8 +329,13 @@ leaguesRouter.post(
 
     const apiKey = process.env.FOOTBALL_DATA_API_KEY;
     let selected;
+    let dataSource = "local";
+    let squadSource = "generated";
     if (normalizedCompetitionCode === BRAZILIAN_SERIE_A_CODE) {
-      selected = brazilianSerieAClubs(name.trim(), clubCount);
+      const selection = await drawBrazilianSerieAClubs(name.trim(), clubCount, apiKey);
+      selected = selection.selected;
+      dataSource = selection.dataSource;
+      squadSource = selection.squadSource;
     } else if (apiKey) {
       let importedClubs;
       try {
@@ -316,6 +357,10 @@ leaguesRouter.post(
         });
         return;
       }
+      dataSource = "football-data";
+      squadSource = selected.some((club) => club.players.some((player) => !player.externalRef?.includes("-fallback-")))
+        ? "api"
+        : "generated";
     } else {
       selected = fallbackClubsForCompetition(name.trim(), normalizedCompetitionCode, clubCount);
     }
@@ -337,6 +382,8 @@ leaguesRouter.post(
       formatLabel: competitionFormatLabel(league.format),
       clubCount: selected.length,
       selectionMode: "draw",
+      dataSource,
+      squadSource,
       clubs: selected.map((club) => ({ name: club.name, shortName: club.shortName })),
     });
   })

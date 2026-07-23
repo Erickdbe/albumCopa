@@ -12,7 +12,17 @@ const ZOMBIE_ASSETS = {
   basic: "Zombie_Basic.gltf",
   chubby: "Zombie_Chubby.gltf",
   ribcage: "Zombie_Ribcage.gltf",
+  runner: "Zombie_Basic.gltf",
+  stalker: "Zombie_Ribcage.gltf",
+  brute: "Zombie_Chubby.gltf",
+  drowned: "Zombie_Basic.gltf",
   arm: "Zombie_Basic.gltf"
+};
+const ZOMBIE_MODEL_KIND = {
+  runner: "basic",
+  stalker: "ribcage",
+  brute: "chubby",
+  drowned: "basic"
 };
 const WEAPON_LOOT_ASSETS = {
   assault_rifle: { file: "Rifle.gltf", targetHeight: 0.42 },
@@ -26,8 +36,19 @@ const WEAPON_LOOT_ASSETS = {
 const ZOMBIE_HEIGHTS = {
   basic: 1.62,
   ribcage: 1.62,
-  chubby: 1.68
+  chubby: 1.68,
+  runner: 1.58,
+  stalker: 1.64,
+  brute: 1.7,
+  drowned: 1.6
 };
+const ZOMBIE_TINTS = {
+  runner: 0x6b8a5d,
+  stalker: 0x9a907a,
+  brute: 0x59684e,
+  drowned: 0x4d6f73
+};
+const ZOMBIE_CORPSE_CLIENT_MS = 14500;
 
 const lootEntries = new Map();
 const zombieEntries = new Map();
@@ -290,7 +311,8 @@ function zombieTexture() {
 }
 
 function zombieSource(kind) {
-  const file = ZOMBIE_ASSETS[kind] || ZOMBIE_ASSETS.basic;
+  const modelKind = ZOMBIE_MODEL_KIND[kind] || kind || "basic";
+  const file = ZOMBIE_ASSETS[modelKind] || ZOMBIE_ASSETS.basic;
   if (!zombieSourcePromises.has(file)) {
     zombieSourcePromises.set(file, zombieGltfLoader.loadAsync(`${ZOMBIE_ASSET_ROOT}${file}`));
   }
@@ -299,11 +321,12 @@ function zombieSource(kind) {
 
 function makeFallbackZombie(kind = "basic") {
   const group = new THREE.Group();
-  const skin = kind === "ribcage" ? 0x8c947f : kind === "chubby" ? 0x6d8068 : 0x536b58;
-  const cloth = kind === "ribcage" ? 0x473b35 : 0x303833;
+  const modelKind = ZOMBIE_MODEL_KIND[kind] || kind;
+  const skin = ZOMBIE_TINTS[kind] || (modelKind === "ribcage" ? 0x8c947f : modelKind === "chubby" ? 0x6d8068 : 0x536b58);
+  const cloth = modelKind === "ribcage" ? 0x473b35 : kind === "runner" ? 0x273227 : 0x303833;
   const skinMat = new THREE.MeshStandardMaterial({ color: skin, roughness: 0.88 });
   const clothMat = new THREE.MeshStandardMaterial({ color: cloth, roughness: 0.9 });
-  const torso = new THREE.Mesh(new THREE.BoxGeometry(kind === "chubby" ? 0.68 : 0.48, 0.82, 0.3), clothMat);
+  const torso = new THREE.Mesh(new THREE.BoxGeometry(modelKind === "chubby" ? 0.68 : 0.48, 0.82, 0.3), clothMat);
   torso.position.y = 1.08;
   const head = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.34, 0.34), skinMat);
   head.position.y = 1.72;
@@ -365,26 +388,29 @@ function zombieClip(animations = [], candidates = []) {
   return animations[0] || null;
 }
 
-function setZombieAssetAction(entry, actionName, fade = 0.14) {
+function setZombieAssetAction(entry, actionName, fade = 0.14, options = {}) {
   const action = entry.assetActions?.[actionName] || entry.assetActions?.idle || entry.assetActions?.move;
-  if (!action || entry.assetAction === action) return;
+  if (!action || (entry.assetAction === action && !options.forceReset)) return;
   action.enabled = true;
+  if (options.forceReset && entry.assetAction === action) action.stop();
   action.reset();
-  if (actionName === "death") {
+  const once = options.once || actionName === "death" || actionName === "attack";
+  if (once) {
     action.setLoop(THREE.LoopOnce, 1);
-    action.clampWhenFinished = true;
+    action.clampWhenFinished = actionName === "death";
   } else {
     action.setLoop(THREE.LoopRepeat, Infinity);
     action.clampWhenFinished = false;
   }
   action.setEffectiveWeight(1);
-  if (entry.assetAction && fade > 0) {
+  if (entry.assetAction && entry.assetAction !== action && fade > 0) {
     entry.assetAction.fadeOut(fade);
     action.fadeIn(fade).play();
   } else {
     action.play();
   }
   entry.assetAction = action;
+  entry.assetActionName = actionName;
 }
 
 function prepareZombieAssetAnimations(entry, model, animations = []) {
@@ -393,8 +419,9 @@ function prepareZombieAssetAnimations(entry, model, animations = []) {
   const makeAction = (clip) => (clip ? mixer.clipAction(clip, model) : null);
   entry.assetMixer = mixer;
   entry.assetActions = {
-    idle: makeAction(zombieClip(animations, ["Idle_Attack", "Idle"])),
-    move: makeAction(zombieClip(animations, ["Run_Attack", "Run", "Walk"])),
+    idle: makeAction(zombieClip(animations, ["Idle"])),
+    move: makeAction(zombieClip(animations, ["Run_Arms", "Run", "Walk"])),
+    attack: makeAction(zombieClip(animations, ["Punch", "Idle_Attack", "Run_Attack"])),
     death: makeAction(zombieClip(animations, ["Death"]))
   };
   Object.values(entry.assetActions).forEach((action) => {
@@ -446,7 +473,7 @@ function poseBonePosition(bone, x = 0, y = 0, z = 0) {
   bone.position.set(base.x + x, base.y + y, base.z + z);
 }
 
-function animateZombieAssetRig(entry, isMoving, pulse, bob, now) {
+function animateZombieAssetRig(entry, isMoving, pulse, bob, now, isAttacking = false) {
   const rig = entry.assetRig;
   if (!rig) return;
   const speed = Math.max(0.75, Number(entry.target.speedMul) || 1);
@@ -470,6 +497,16 @@ function animateZombieAssetRig(entry, isMoving, pulse, bob, now) {
   poseBone(rig.upperArmR, -0.78 - arm * armStride, 0, 0.18);
   poseBone(rig.lowerArmL, -0.38 + Math.sin(pulse * 1.7) * (isMoving ? 0.16 : 0.05), 0, 0);
   poseBone(rig.lowerArmR, -0.42 - Math.sin(pulse * 1.7) * (isMoving ? 0.16 : 0.05), 0, 0);
+  if (isAttacking) {
+    const progress = THREE.MathUtils.clamp(1 - ((entry.attackUntil || now) - now) / 720, 0, 1);
+    const strike = Math.sin(progress * Math.PI);
+    poseBone(rig.torso, -0.22 - strike * 0.2, 0, Math.sin(pulse) * 0.04);
+    poseBone(rig.head, 0.12 + strike * 0.08, Math.sin(now * 0.01) * 0.08, 0);
+    poseBone(rig.upperArmL, -1.34 + strike * 0.32, 0, -0.26);
+    poseBone(rig.upperArmR, -1.38 + strike * 0.34, 0, 0.26);
+    poseBone(rig.lowerArmL, -0.32 - strike * 0.42, 0, 0);
+    poseBone(rig.lowerArmR, -0.34 - strike * 0.42, 0, 0);
+  }
 }
 
 async function attachQuaterniusZombie(entry, kind) {
@@ -485,6 +522,8 @@ async function attachQuaterniusZombie(entry, kind) {
       child.receiveShadow = true;
       child.userData.zombieId = entry.id;
       const material = child.material?.clone?.() || new THREE.MeshStandardMaterial();
+      const tint = ZOMBIE_TINTS[kind];
+      if (tint && material.color) material.color.lerp(new THREE.Color(tint), 0.36);
       material.roughness = 0.86;
       material.metalness = 0.02;
       material.needsUpdate = true;
@@ -504,10 +543,11 @@ async function attachQuaterniusZombie(entry, kind) {
 function makeZombieEntry(zombie, terrainHeightAt) {
   const root = new THREE.Group();
   root.name = `survival-zombie-${zombie.id}`;
+  const modelKind = ZOMBIE_MODEL_KIND[zombie.kind] || zombie.kind;
   const fallback = makeFallbackZombie(zombie.kind);
-  fallback.scale.setScalar(zombie.kind === "chubby" ? 0.88 : 0.86);
+  fallback.scale.setScalar(modelKind === "chubby" ? 0.88 : 0.86);
   root.add(fallback);
-  const bodyHitbox = makeZombieHitbox(zombie.id, zombie.kind === "chubby" ? 0.42 : 0.31, 1.02, false);
+  const bodyHitbox = makeZombieHitbox(zombie.id, modelKind === "chubby" ? 0.42 : 0.31, 1.02, false);
   bodyHitbox.position.y = 0.86;
   const headHitbox = makeZombieHitbox(zombie.id, 0.2, 0.22, true);
   headHitbox.position.y = 1.46;
@@ -524,7 +564,9 @@ function makeZombieEntry(zombie, terrainHeightAt) {
     phase: Math.random() * Math.PI * 2,
     walkPhase: Math.random() * Math.PI * 2,
     lastFramePosition: new THREE.Vector3(zombie.x || 0, y, zombie.z || 0),
-    deadAt: 0
+    deadAt: 0,
+    deathStarted: false,
+    attackUntil: 0
   };
   zombieHittable.push(bodyHitbox, headHitbox);
   attachQuaterniusZombie(entry, zombie.kind || "basic");
@@ -582,6 +624,8 @@ function syncZombieEntry(scene, zombie, terrainHeightAt = null, options = {}) {
   if (zombie.alive === false) {
     if (!entry.deadAt) {
       entry.deadAt = performance.now();
+      entry.deathStarted = false;
+      entry.attackUntil = 0;
       entry.target = {
         ...zombie,
         x: entry.root.position.x,
@@ -609,6 +653,7 @@ function syncZombieEntry(scene, zombie, terrainHeightAt = null, options = {}) {
   }
   entry.lastSyncAt = syncNow;
   entry.deadAt = 0;
+  entry.deathStarted = false;
   entry.target = { ...zombie, x, y, z };
 
   const visualDistance = entry.root.position.distanceTo(serverPosition);
@@ -642,6 +687,17 @@ export function syncSurvivalZombie(scene, zombie, terrainHeightAt = null, option
   syncZombieEntry(scene, zombie, terrainHeightAt, { snap: true, ...options });
 }
 
+export function playSurvivalZombieAttack(zombieId) {
+  const entry = zombieEntries.get(zombieId);
+  if (!entry || entry.target?.alive === false) return;
+  const now = performance.now();
+  entry.attackUntil = now + 720;
+  if (entry.assetMixer && entry.assetActions?.attack) {
+    setZombieAssetAction(entry, "attack", 0.06, { forceReset: true, once: true });
+    if (entry.assetAction) entry.assetAction.timeScale = 1.08 * Math.max(0.85, Number(entry.target.speedMul) || 1);
+  }
+}
+
 export function updateSurvivalWorld(delta, now = performance.now()) {
   lootEntries.forEach((entry) => {
     entry.group.rotation.y += delta * 0.85;
@@ -671,7 +727,8 @@ export function updateSurvivalWorld(delta, now = performance.now()) {
     if (alive) entry.root.rotation.y += yawDelta * Math.min(1, delta * 8);
     const frameDistance = entry.root.position.distanceTo(entry.lastFramePosition || entry.root.position);
     if (entry.lastFramePosition) entry.lastFramePosition.copy(entry.root.position);
-    const isMoving = alive && (Boolean(entry.target.moving) || frameDistance > 0.006 || distanceToTarget > 0.08);
+    const isAttacking = alive && Number(entry.attackUntil || 0) > now;
+    const isMoving = alive && !isAttacking && (Boolean(entry.target.moving) || frameDistance > 0.006 || distanceToTarget > 0.08);
     entry.walkPhase += (isMoving ? Math.min(11, frameDistance / Math.max(0.001, delta)) * 0.19 + 3.1 : 0.65) * delta * Math.max(0.75, Number(entry.target.speedMul) || 1);
     const pulse = entry.walkPhase + entry.phase;
     const speed = Math.max(0, Number(entry.target.speedMul) || 1);
@@ -684,8 +741,16 @@ export function updateSurvivalWorld(delta, now = performance.now()) {
         const stride = isMoving ? 0.48 : 0.08;
         limbs.leftLeg.rotation.x = Math.sin(pulse * 1.55) * stride;
         limbs.rightLeg.rotation.x = -Math.sin(pulse * 1.55) * stride;
-        limbs.leftArm.rotation.x = -0.82 + Math.sin(pulse * 1.35) * (isMoving ? 0.18 : 0.05);
-        limbs.rightArm.rotation.x = -0.92 - Math.sin(pulse * 1.35) * (isMoving ? 0.18 : 0.05);
+        if (isAttacking) {
+          const strike = Math.sin(THREE.MathUtils.clamp(1 - ((entry.attackUntil || now) - now) / 720, 0, 1) * Math.PI);
+          limbs.leftArm.rotation.x = -1.38 + strike * 0.28;
+          limbs.rightArm.rotation.x = -1.42 + strike * 0.3;
+          limbs.torso.rotation.x = -0.18 - strike * 0.16;
+        } else {
+          limbs.leftArm.rotation.x = -0.82 + Math.sin(pulse * 1.35) * (isMoving ? 0.18 : 0.05);
+          limbs.rightArm.rotation.x = -0.92 - Math.sin(pulse * 1.35) * (isMoving ? 0.18 : 0.05);
+          limbs.torso.rotation.x = 0;
+        }
         limbs.head.rotation.z = Math.sin(pulse * 0.7) * 0.06;
       }
       if (entry.assetModel) {
@@ -693,20 +758,23 @@ export function updateSurvivalWorld(delta, now = performance.now()) {
         entry.assetModel.rotation.z = Math.sin(pulse * 1.1) * (isMoving ? 0.042 : 0.015);
       }
       if (entry.assetMixer) {
-        setZombieAssetAction(entry, isMoving ? "move" : "idle");
-        const actionSpeed = (isMoving ? 0.92 : 0.72) * Math.max(0.75, Number(entry.target.speedMul) || 1);
+        setZombieAssetAction(entry, isAttacking ? "attack" : isMoving ? "move" : "idle", isAttacking ? 0.06 : 0.14, { once: isAttacking });
+        const actionSpeed = (isAttacking ? 1.08 : isMoving ? 0.92 : 0.72) * Math.max(0.75, Number(entry.target.speedMul) || 1);
         if (entry.assetAction) entry.assetAction.timeScale = actionSpeed;
         entry.assetMixer.update(delta);
       }
-      animateZombieAssetRig(entry, isMoving, pulse, bob, now);
+      animateZombieAssetRig(entry, isMoving, pulse, bob, now, isAttacking);
     } else {
       if (entry.assetMixer) {
-        setZombieAssetAction(entry, "death", 0.08);
+        if (!entry.deathStarted) {
+          setZombieAssetAction(entry, "death", 0.08, { forceReset: true, once: true });
+          entry.deathStarted = true;
+        }
         entry.assetMixer.update(delta);
       }
       entry.root.rotation.z = THREE.MathUtils.lerp(entry.root.rotation.z, 1.32, Math.min(1, delta * 4));
       entry.hittable.forEach((mesh) => { mesh.visible = false; });
-      if (entry.deadAt && now - entry.deadAt > 1800) {
+      if (entry.deadAt && now - entry.deadAt > ZOMBIE_CORPSE_CLIENT_MS) {
         entry.root.parent?.remove(entry.root);
         entry.hittable.forEach((mesh) => {
           const index = zombieHittable.indexOf(mesh);

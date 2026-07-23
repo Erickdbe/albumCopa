@@ -28,11 +28,28 @@ const EMOTES = {
 };
 const EMPTY_SLOT = "hands";
 const SURVIVAL_PICKUP_RADIUS = 3.2;
-const ZOMBIE_ATTACK_RADIUS = 1.08;
+const ZOMBIE_ATTACK_RADIUS = 1.12;
 const ZOMBIE_ATTACK_MS = 1250;
 const ZOMBIE_CHASE_RADIUS = { mundo: 170, alagado: 190, default: 145 };
 const ZOMBIE_ROAM_RADIUS = { mundo: 54, alagado: 42, default: 36 };
-const ZOMBIE_ROAM_SPEED = { basic: 0.82, ribcage: 0.98, chubby: 0.68 };
+const ZOMBIE_ROAM_SPEED = {
+  basic: 1.05,
+  ribcage: 1.18,
+  chubby: 0.88,
+  runner: 1.38,
+  stalker: 1.28,
+  brute: 0.94,
+  drowned: 1.08
+};
+const ZOMBIE_KIND_STATS = {
+  basic: { health: 115, waveBoost: 11, chaseSpeed: 2.55 },
+  ribcage: { health: 95, waveBoost: 11, chaseSpeed: 2.9 },
+  chubby: { health: 155, waveBoost: 18, chaseSpeed: 2.0 },
+  runner: { health: 86, waveBoost: 9, chaseSpeed: 3.28 },
+  stalker: { health: 105, waveBoost: 12, chaseSpeed: 3.0 },
+  brute: { health: 188, waveBoost: 20, chaseSpeed: 2.18 },
+  drowned: { health: 126, waveBoost: 12, chaseSpeed: 2.48 }
+};
 const MEDKIT_HEAL = 38;
 const MEDKIT_MAX = 5;
 const SURVIVAL_LOOT_CLEANUP_MS = 45000;
@@ -87,28 +104,48 @@ const SURVIVAL_ZOMBIE_SPAWNS = {
     { id: "zombie-forest-01", kind: "basic", x: 88, y: 1.1, z: -78, yaw: 0.2 },
     { id: "zombie-forest-02", kind: "ribcage", x: 128, y: 1.7, z: -18, yaw: -0.8 },
     { id: "zombie-forest-03", kind: "chubby", x: 214, y: 3.8, z: -112, yaw: 1.4 },
+    { id: "zombie-forest-04", kind: "runner", x: 104, y: 1.2, z: -126, yaw: -0.3 },
+    { id: "zombie-forest-05", kind: "stalker", x: 184, y: 2.4, z: -66, yaw: 0.9 },
     { id: "zombie-lake-01", kind: "basic", x: 154, y: 0.8, z: -42, yaw: -2.1 },
+    { id: "zombie-lake-02", kind: "drowned", x: 112, y: 0.8, z: 12, yaw: 2.1 },
     { id: "zombie-city-01", kind: "ribcage", x: -143, y: 0.2, z: -198, yaw: 0.4 },
     { id: "zombie-city-02", kind: "basic", x: -231, y: 0.2, z: -105, yaw: -1.2 },
+    { id: "zombie-city-03", kind: "runner", x: -182, y: 0.2, z: -156, yaw: 1.9 },
+    { id: "zombie-city-04", kind: "brute", x: -264, y: 0.2, z: -162, yaw: -2.4 },
     { id: "zombie-road-01", kind: "chubby", x: -54, y: 0.2, z: -112, yaw: 2.4 },
-    { id: "zombie-beach-01", kind: "basic", x: 43, y: 0.4, z: 154, yaw: Math.PI }
+    { id: "zombie-road-02", kind: "stalker", x: -12, y: 0.2, z: -68, yaw: -0.7 },
+    { id: "zombie-beach-01", kind: "basic", x: 43, y: 0.4, z: 154, yaw: Math.PI },
+    { id: "zombie-beach-02", kind: "drowned", x: -28, y: 0.4, z: 188, yaw: 2.6 },
+    { id: "zombie-beach-03", kind: "runner", x: 96, y: 0.4, z: 206, yaw: -2.2 }
   ],
   alagado: [
     { id: "flooded-zombie-road-01", kind: "basic", x: -20, y: 0.2, z: -124, yaw: 0.4 },
     { id: "flooded-zombie-road-02", kind: "ribcage", x: 22, y: 0.2, z: -116, yaw: -0.6 },
+    { id: "flooded-zombie-road-03", kind: "runner", x: -44, y: 0.2, z: -146, yaw: 0.9 },
+    { id: "flooded-zombie-road-04", kind: "drowned", x: 46, y: 0.2, z: -142, yaw: -1.3 },
     { id: "flooded-zombie-village-01", kind: "basic", x: -58, y: 0.2, z: -92, yaw: 1.2 },
     { id: "flooded-zombie-village-02", kind: "chubby", x: 28, y: 0.2, z: -86, yaw: -1.8 },
     { id: "flooded-zombie-village-03", kind: "ribcage", x: 78, y: 0.2, z: -98, yaw: 0.8 },
+    { id: "flooded-zombie-village-04", kind: "runner", x: -84, y: 0.2, z: -54, yaw: 2.2 },
+    { id: "flooded-zombie-village-05", kind: "stalker", x: 8, y: 0.2, z: -42, yaw: -2.5 },
     { id: "flooded-zombie-mansion-01", kind: "basic", x: 42, y: 0.2, z: 18, yaw: 2.4 },
     { id: "flooded-zombie-mansion-02", kind: "chubby", x: 82, y: 0.2, z: 64, yaw: -2.2 },
+    { id: "flooded-zombie-mansion-03", kind: "brute", x: 18, y: 0.2, z: 54, yaw: 1.1 },
+    { id: "flooded-zombie-mansion-04", kind: "stalker", x: 104, y: 0.2, z: 22, yaw: -0.9 },
     { id: "flooded-zombie-church-01", kind: "ribcage", x: -106, y: 0.2, z: 66, yaw: 1.7 },
     { id: "flooded-zombie-church-02", kind: "basic", x: -146, y: 0.2, z: 112, yaw: -2.8 },
+    { id: "flooded-zombie-church-03", kind: "stalker", x: -118, y: 0.2, z: 134, yaw: 0.6 },
     { id: "flooded-zombie-greenhouse-01", kind: "basic", x: 128, y: 0.2, z: -58, yaw: -0.3 },
     { id: "flooded-zombie-greenhouse-02", kind: "basic", x: 156, y: 0.2, z: -88, yaw: 0.7 },
+    { id: "flooded-zombie-greenhouse-03", kind: "runner", x: 176, y: 0.2, z: -38, yaw: -1.6 },
     { id: "flooded-zombie-swamp-01", kind: "basic", x: 112, y: 0.2, z: 88, yaw: -2.5 },
     { id: "flooded-zombie-swamp-02", kind: "chubby", x: 162, y: 0.2, z: 44, yaw: 2.2 },
+    { id: "flooded-zombie-swamp-03", kind: "drowned", x: 146, y: 0.2, z: 112, yaw: -0.4 },
+    { id: "flooded-zombie-swamp-04", kind: "drowned", x: 94, y: 0.2, z: 132, yaw: 2.8 },
     { id: "flooded-zombie-forest-01", kind: "basic", x: -176, y: 0.2, z: 22, yaw: 1.1 },
-    { id: "flooded-zombie-forest-02", kind: "ribcage", x: -162, y: 0.2, z: 152, yaw: -1.4 }
+    { id: "flooded-zombie-forest-02", kind: "ribcage", x: -162, y: 0.2, z: 152, yaw: -1.4 },
+    { id: "flooded-zombie-forest-03", kind: "runner", x: -196, y: 0.2, z: 92, yaw: 0.2 },
+    { id: "flooded-zombie-forest-04", kind: "brute", x: -132, y: 0.2, z: 18, yaw: -2.1 }
   ]
 };
 
@@ -345,30 +382,34 @@ function updateSurvivalLootSpawns(room, now) {
 }
 
 function makeZombies(mapId) {
-  const initialLimit = mapId === "alagado" ? 13 : 8;
+  const initialLimit = mapId === "alagado" ? 22 : 14;
   return (SURVIVAL_ZOMBIE_SPAWNS[mapId] || []).slice(0, initialLimit).map((zombie, index) => ({
     ...zombie,
     id: zombie.id || `${mapId}-zombie-${index}`,
     homeX: zombie.x,
     homeZ: zombie.z,
-    health: zombie.kind === "chubby" ? 155 : zombie.kind === "ribcage" ? 95 : 115,
-    maxHealth: zombie.kind === "chubby" ? 155 : zombie.kind === "ribcage" ? 95 : 115,
+    ...zombieStats(zombie.kind, 1),
     alive: true,
     targetId: null,
     lastAttackAt: 0,
     roamTarget: null,
     nextRoamAt: 0,
+    spawnSpeedMul: 1,
     speedMul: 1
   }));
 }
 
 function zombieStats(kind, wave = 1) {
-  const healthBase = kind === "chubby" ? 155 : kind === "ribcage" ? 95 : 115;
+  const stats = ZOMBIE_KIND_STATS[kind] || ZOMBIE_KIND_STATS.basic;
   const waveBoost = Math.max(0, wave - 1);
   return {
-    health: Math.round(healthBase + waveBoost * (kind === "chubby" ? 18 : 11)),
-    maxHealth: Math.round(healthBase + waveBoost * (kind === "chubby" ? 18 : 11))
+    health: Math.round(stats.health + waveBoost * stats.waveBoost),
+    maxHealth: Math.round(stats.health + waveBoost * stats.waveBoost)
   };
+}
+
+function zombieKindStats(kind) {
+  return ZOMBIE_KIND_STATS[kind] || ZOMBIE_KIND_STATS.basic;
 }
 
 function canSpawnZombieAt(room, spawn) {
@@ -412,7 +453,8 @@ function spawnProgressiveZombie(room, now) {
     lastAttackAt: 0,
     roamTarget: null,
     nextRoamAt: 0,
-    speedMul: 1 + Math.min(0.45, (wave - 1) * 0.04),
+    spawnSpeedMul: 1 + Math.min(0.48, (wave - 1) * 0.045),
+    speedMul: 1,
     spawnedAt: now
   });
   return true;
@@ -425,13 +467,15 @@ function updateZombieSpawns(room, now) {
   const elapsed = Math.max(0, now - (room.startedAt || now));
   const wave = 1 + Math.floor(elapsed / 45000);
   room.survivalWave = Math.max(room.survivalWave || 1, wave);
-  const maxActive = room.settings.mapId === "alagado" ? Math.min(30, 15 + room.survivalWave * 2) : Math.min(16, 8 + room.survivalWave);
+  const maxActive = room.settings.mapId === "alagado"
+    ? Math.min(42, 22 + room.survivalWave * 3)
+    : Math.min(24, 14 + room.survivalWave * 2);
   const active = room.zombies.filter((zombie) => zombie.alive !== false).length;
   if (active >= maxActive) return;
   if (!room.nextZombieSpawnAt || now >= room.nextZombieSpawnAt) {
     const spawned = spawnProgressiveZombie(room, now);
-    const baseInterval = room.settings.mapId === "alagado" ? 4300 : 6500;
-    const interval = Math.max(1500, baseInterval - room.survivalWave * 280);
+    const baseInterval = room.settings.mapId === "alagado" ? 3600 : 5200;
+    const interval = Math.max(1200, baseInterval - room.survivalWave * 300);
     room.nextZombieSpawnAt = now + (spawned ? interval : 1400);
   }
 }
@@ -788,11 +832,12 @@ function createRoomsModule(io) {
     const zombies = room.zombies || [];
     if (!zombies.length) return;
     const night = room.worldTime?.phase === "night";
-    const speedMul = night ? 1.55 : 1;
+    const phaseSpeedMul = night ? 1.62 : 1;
     const chaseRadius = ZOMBIE_CHASE_RADIUS[room.settings.mapId] || ZOMBIE_CHASE_RADIUS.default;
     zombies.forEach((zombie) => {
       if (zombie.alive === false) return;
       const { target, distance } = nearestAlivePlayer(room, zombie);
+      const speedMul = phaseSpeedMul * (Number(zombie.spawnSpeedMul) || 1);
       zombie.speedMul = speedMul;
       zombie.moving = false;
       if (!target || distance > chaseRadius) {
@@ -807,13 +852,13 @@ function createRoomsModule(io) {
       const length = Math.hypot(dx, dz) || 1;
       zombie.yaw = Math.atan2(-dx, -dz);
       if (distance > ZOMBIE_ATTACK_RADIUS) {
-        const baseSpeed = zombie.kind === "chubby" ? 1.58 : zombie.kind === "ribcage" ? 2.45 : 2.12;
+        const baseSpeed = zombieKindStats(zombie.kind).chaseSpeed;
         zombie.x += (dx / length) * baseSpeed * speedMul * delta;
         zombie.z += (dz / length) * baseSpeed * speedMul * delta;
         zombie.moving = true;
       }
       const attackDistance = Math.hypot(target.x - zombie.x, target.z - zombie.z);
-      if (attackDistance <= ZOMBIE_ATTACK_RADIUS && now - (zombie.lastAttackAt || 0) > ZOMBIE_ATTACK_MS / speedMul) {
+      if (attackDistance <= ZOMBIE_ATTACK_RADIUS && now - (zombie.lastAttackAt || 0) > ZOMBIE_ATTACK_MS / Math.max(1, speedMul)) {
         zombie.lastAttackAt = now;
         applyDamage(room, null, target, night ? 16 : 10, false);
         io.to(room.roomId).emit("survival:zombie-attack", {

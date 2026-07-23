@@ -10,12 +10,13 @@ import {
   clearSurvivalWorld,
   gatherSurvivalZombieHittable,
   nearestSurvivalLoot,
+  playSurvivalZombieAttack,
   removeSurvivalLoot,
   syncSurvivalLoot,
   syncSurvivalZombie,
   syncSurvivalZombies,
   updateSurvivalWorld
-} from "./survival-world.js?v=20260723-5";
+} from "./survival-world.js?v=20260723-6";
 import {
   attachAnimatedCharacter,
   playCharacterAction,
@@ -2956,6 +2957,7 @@ export function attachSocket(activeSocket) {
         room.zombies = zombies;
       }
       syncSurvivalZombie(scene, zombie, terrainSurfaceHeightAt, { snap: true });
+      playSurvivalZombieAttack(zombie.id);
     }
     if (targetSocketId === selfId) playCharacterAction(localViewAvatar, "damage", 1.15);
   });

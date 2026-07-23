@@ -25,6 +25,32 @@ app.use(helmet());
 app.use(cors({ origin: allowedOrigins }));
 app.use(express.json());
 
+app.get("/", (_req, res) => {
+  res.type("html").send(`<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>BrFut API</title>
+    <style>
+      body { margin: 0; min-height: 100vh; display: grid; place-items: center; font-family: Arial, sans-serif; background: #0f172a; color: #e5e7eb; }
+      main { width: min(560px, calc(100vw - 32px)); padding: 28px; border: 1px solid #334155; border-radius: 12px; background: #111827; }
+      h1 { margin: 0 0 12px; font-size: 28px; }
+      p { margin: 0 0 16px; color: #cbd5e1; line-height: 1.5; }
+      a { color: #86efac; }
+      code { color: #fde68a; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>BrFut API online</h1>
+      <p>Esse dominio e a API do Brasfoot. Use ele como <code>VITE_API_URL</code> no frontend.</p>
+      <p>Checks rapidos: <a href="/health">/health</a> e <a href="/leagues">/leagues</a>.</p>
+    </main>
+  </body>
+</html>`);
+});
+
 app.get("/health", (_req, res) => res.json({ status: "ok" }));
 
 // Applied after /health so orchestrator health checks (which poll
